@@ -27,6 +27,8 @@ export interface TemplateSummary {
   documentation?: string;
   tags: string[];
   category?: string;
+  /** Public path to the service logo, e.g. `/svgs/n8n.png`. */
+  logo?: string;
   port?: string;
   amdOnly?: boolean;
   armOnly?: boolean;
@@ -48,6 +50,11 @@ function titleFromSlug(slug: string): string {
     .join(' ');
 }
 
+function logoPath(logo?: string): string | undefined {
+  if (!logo) return undefined;
+  return logo.startsWith('/') ? logo : `/${logo}`;
+}
+
 function toSummary(slug: string, raw: RawTemplate): TemplateSummary {
   return {
     slug,
@@ -56,6 +63,7 @@ function toSummary(slug: string, raw: RawTemplate): TemplateSummary {
     documentation: raw.documentation,
     tags: raw.tags ?? [],
     category: raw.category,
+    logo: logoPath(raw.logo),
     port: raw.port,
     amdOnly: raw.amd_only,
     armOnly: raw.arm_only,

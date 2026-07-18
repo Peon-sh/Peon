@@ -437,6 +437,8 @@ export interface TemplateSummary {
   documentation?: string;
   tags: string[];
   category?: string;
+  /** Public path to the service logo, e.g. `/svgs/n8n.png`. */
+  logo?: string;
   port?: string;
   amdOnly?: boolean;
   armOnly?: boolean;

@@ -3162,7 +3162,7 @@
             "service"
         ],
         "category": "media",
-        "logo": "peon-logo.svg",
+        "logo": "svgs/peon-logo.svg",
         "minversion": "0.0.0",
         "port": "3000"
     },
@@ -3573,7 +3573,7 @@
             "embeddable"
         ],
         "category": "productivity",
-        "logo": "svg/opnform.svg",
+        "logo": "svgs/opnform.svg",
         "minversion": "0.0.0",
         "port": "80"
     },
@@ -3772,7 +3772,7 @@
             "web-interface"
         ],
         "category": "devtools",
-        "logo": "svgs/pgbackweb.svg",
+        "logo": "svgs/pgbackweb.png",
         "minversion": "0.0.0",
         "port": "8085"
     },

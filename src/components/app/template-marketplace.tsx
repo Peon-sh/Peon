@@ -109,18 +109,32 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
           {selected ? (
             <div className="space-y-3">
               <div className="border-border-bright rounded-lg border p-4">
-                <div className="font-heading text-[13px] font-semibold">{selected.name}</div>
-                <p className="text-muted-foreground mt-1 text-[12px]">{selected.slogan}</p>
-                {selected.documentation && (
-                  <a
-                    href={selected.documentation}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-phosphor mt-2 inline-flex items-center gap-1 text-[11px] hover:underline"
-                  >
-                    documentation <ExternalLink className="size-3" />
-                  </a>
-                )}
+                <div className="flex items-start gap-3">
+                  {selected.logo ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- vendored local SVG/PNG assets
+                    <img
+                      src={selected.logo}
+                      alt=""
+                      width={36}
+                      height={36}
+                      className="size-9 shrink-0 rounded-md bg-white object-contain p-1"
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-heading text-[13px] font-semibold">{selected.name}</div>
+                    <p className="text-muted-foreground mt-1 text-[12px]">{selected.slogan}</p>
+                    {selected.documentation && (
+                      <a
+                        href={selected.documentation}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-phosphor mt-2 inline-flex items-center gap-1 text-[11px] hover:underline"
+                      >
+                        documentation <ExternalLink className="size-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="tpl-name">Service name</Label>
@@ -188,19 +202,38 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                           'rounded-lg border p-3 text-left transition-colors',
                         )}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-heading truncate text-[12.5px] font-semibold">
-                            {t.name}
-                          </span>
-                          {t.category && (
-                            <span className="text-muted-foreground shrink-0 text-[10px]">
-                              {t.category}
-                            </span>
+                        <div className="flex items-start gap-2.5">
+                          {t.logo ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- vendored local SVG/PNG assets
+                            <img
+                              src={t.logo}
+                              alt=""
+                              width={28}
+                              height={28}
+                              className="size-7 shrink-0 rounded-md bg-white object-contain p-0.5"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="bg-secondary text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold">
+                              {t.name.charAt(0)}
+                            </div>
                           )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-heading truncate text-[12.5px] font-semibold">
+                                {t.name}
+                              </span>
+                              {t.category && (
+                                <span className="text-muted-foreground shrink-0 text-[10px]">
+                                  {t.category}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-muted-foreground mt-1 line-clamp-2 text-[11px]">
+                              {t.slogan}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-muted-foreground mt-1 line-clamp-2 text-[11px]">
-                          {t.slogan}
-                        </p>
                       </button>
                     ))}
                     {filtered.length === 0 && (

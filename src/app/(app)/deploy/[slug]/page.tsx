@@ -130,20 +130,34 @@ export default function OneClickDeployPage({
       <p className="text-phosphor font-mono text-xs uppercase tracking-widest">
         One-click deploy
       </p>
-      <h1 className="mt-2 text-2xl font-800">{template?.name ?? slug}</h1>
-      {template?.slogan && (
-        <p className="text-muted-foreground mt-2 text-sm">{template.slogan}</p>
-      )}
-      {template?.documentation && (
-        <a
-          href={template.documentation}
-          target="_blank"
-          rel="noreferrer"
-          className="text-phosphor mt-2 inline-flex items-center gap-1 text-xs hover:underline"
-        >
-          documentation <ExternalLink className="size-3" />
-        </a>
-      )}
+      <div className="mt-2 flex items-start gap-3">
+        {template?.logo ? (
+          // eslint-disable-next-line @next/next/no-img-element -- vendored local SVG/PNG assets
+          <img
+            src={template.logo}
+            alt=""
+            width={44}
+            height={44}
+            className="size-11 shrink-0 rounded-md bg-white object-contain p-1"
+          />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-800">{template?.name ?? slug}</h1>
+          {template?.slogan && (
+            <p className="text-muted-foreground mt-2 text-sm">{template.slogan}</p>
+          )}
+          {template?.documentation && (
+            <a
+              href={template.documentation}
+              target="_blank"
+              rel="noreferrer"
+              className="text-phosphor mt-2 inline-flex items-center gap-1 text-xs hover:underline"
+            >
+              documentation <ExternalLink className="size-3" />
+            </a>
+          )}
+        </div>
+      </div>
 
       <div className="border-border bg-card mt-8 space-y-4 rounded-lg border p-5">
         <div className="space-y-1.5">
