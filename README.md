@@ -127,5 +127,5 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup details, PR guidelines, and h
 
 ## License
 
-See the repository for license terms.
+[MIT](./LICENSE)
 

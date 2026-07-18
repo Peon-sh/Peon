@@ -1,6 +1,7 @@
 {
   "name": "peon",
   "version": "0.0.1",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "packageManager": "pnpm@10.8.0",
