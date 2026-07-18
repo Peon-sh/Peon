@@ -1,0 +1,236 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-archivo);
+    --font-sans: var(--font-inter);
+    --font-mono: var(--font-plex-mono);
+    --font-display: var(--font-archivo);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-border-bright: var(--border-bright);
+    --color-destructive: var(--destructive);
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-info: var(--info);
+    --color-violet: var(--violet);
+    --color-phosphor: var(--phosphor);
+    --color-phosphor-dim: var(--phosphor-dim);
+    --color-faint: var(--faint);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --radius-2xl: 14px;
+    --radius-3xl: 16px;
+    --radius-4xl: 20px;
+}
+
+/*
+ * PEON - phosphor terminal design tokens.
+ * Light theme: paper variant of the same green-cast monochrome system.
+ */
+:root {
+    --background: #F5F7F6;          /* void */
+    --foreground: #17211C;          /* text */
+    --card: #FFFFFF;                /* panel */
+    --card-foreground: #17211C;
+    --popover: #FFFFFF;
+    --popover-foreground: #17211C;
+    --primary: #0C9268;             /* phosphor */
+    --primary-foreground: #FFFFFF;
+    --secondary: #EFF3F1;           /* panel-2 */
+    --secondary-foreground: #17211C;
+    --muted: #EFF3F1;               /* panel-2 */
+    --muted-foreground: #5B6B62;    /* muted */
+    --accent: #E5EBE8;              /* panel-3 */
+    --accent-foreground: #17211C;
+    --destructive: #CE3B41;         /* alert */
+    --success: #0C9268;
+    --warning: #A96D08;             /* amber */
+    --info: #1B76B6;                /* signal */
+    --violet: #6455BD;
+    --phosphor: #0C9268;
+    --phosphor-dim: #A9DCC6;
+    --faint: #98A69E;
+    --border: #DEE5E1;              /* line */
+    --border-bright: #C4CFC9;       /* line-bright */
+    --input: #DEE5E1;
+    --ring: #0C9268;
+    --chart-1: #0C9268;
+    --chart-2: #1B76B6;
+    --chart-3: #A96D08;
+    --chart-4: #6455BD;
+    --chart-5: #5B6B62;
+    --radius: 10px;
+    --sidebar: #FFFFFF;
+    --sidebar-foreground: #17211C;
+    --sidebar-primary: #0C9268;
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: #E5EBE8;
+    --sidebar-accent-foreground: #17211C;
+    --sidebar-border: #DEE5E1;
+    --sidebar-ring: #0C9268;
+}
+
+/* Dark theme - the default. Near-black with a green cast; phosphor accent. */
+.dark {
+    --background: #050807;          /* void */
+    --foreground: #E8F0EC;          /* text */
+    --card: #0A100D;                /* panel */
+    --card-foreground: #E8F0EC;
+    --popover: #0E1612;             /* panel-2 */
+    --popover-foreground: #E8F0EC;
+    --primary: #3ECF8E;             /* phosphor */
+    --primary-foreground: #050807;
+    --secondary: #0E1612;           /* panel-2 */
+    --secondary-foreground: #E8F0EC;
+    --muted: #0E1612;               /* panel-2 */
+    --muted-foreground: #94A89D;    /* muted */
+    --accent: #121C17;              /* panel-3 */
+    --accent-foreground: #E8F0EC;
+    --destructive: #E5484D;         /* alert */
+    --success: #3ECF8E;
+    --warning: #E8A33D;             /* amber */
+    --info: #52A9DF;                /* signal */
+    --violet: #9B8AE6;
+    --phosphor: #3ECF8E;
+    --phosphor-dim: #1E5C41;
+    --faint: #55685E;
+    --border: #1B2822;              /* line */
+    --border-bright: #2A3E34;       /* line-bright */
+    --input: #1B2822;
+    --ring: #3ECF8E;
+    --chart-1: #3ECF8E;
+    --chart-2: #52A9DF;
+    --chart-3: #E8A33D;
+    --chart-4: #9B8AE6;
+    --chart-5: #62766B;
+    --sidebar: #0A100D;             /* panel */
+    --sidebar-foreground: #E8F0EC;
+    --sidebar-primary: #3ECF8E;
+    --sidebar-primary-foreground: #050807;
+    --sidebar-accent: #121C17;      /* panel-3 */
+    --sidebar-accent-foreground: #3ECF8E;
+    --sidebar-border: #1B2822;
+    --sidebar-ring: #3ECF8E;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior: none;
+    background-color: var(--background);
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 14px;
+    overscroll-behavior: none;
+    background-color: var(--background);
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading tracking-tight;
+    text-wrap: balance;
+  }
+  ::selection {
+    /* Semi-transparent so selection stays visible on phosphor user bubbles and dark chat text. */
+    background: color-mix(in oklab, var(--phosphor) 45%, transparent);
+    color: inherit;
+  }
+  ::-moz-selection {
+    background: color-mix(in oklab, var(--phosphor) 45%, transparent);
+    color: inherit;
+  }
+  /* Slim, unobtrusive scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+  /* Prevent rubber-band overscroll in nested app scroll regions. */
+  [data-slot="sidebar-wrapper"],
+  [data-slot="sidebar-content"],
+  [data-slot="sidebar-inset"] {
+    overscroll-behavior: none;
+  }
+}
+
+/* Pulse used by live status dots. */
+@keyframes status-pulse {
+  50% { opacity: 0.45; }
+}
+@utility animate-status-pulse {
+  animation: status-pulse 2s infinite;
+}
+@utility animate-status-pulse-fast {
+  animation: status-pulse 1s infinite;
+}
+
+/* Terminal-style page label, e.g. section titles prefixed with "// ". */
+@utility panel-title-slashes {
+  &::before {
+    content: "// ";
+    color: var(--faint);
+    font-weight: 400;
+  }
+}
+
+/* Subtle grid backdrop utility for hero / auth panels. */
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+}

@@ -1,0 +1,62 @@
+# Multi-stage build for Peon background processes (worker / schedule / socket).
+# Debian-based so Playwright Chromium (deployment previews) can install cleanly.
+# Skips the Next.js app build — use docker/Dockerfile for the web app.
+# Default CMD is the SQS worker; override for schedule or socket:
+#   command: ["node", "--import", "tsx", "worker/schedule.ts"]
+#   command: ["node", "--import", "tsx", "worker/socket.ts"]
+FROM node:22-bookworm-slim AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+WORKDIR /app
+
+FROM base AS deps
+# node-gyp toolchain for optional ssh2/cpu-features native bindings.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# postinstall runs `prisma generate` — schema must be present during install.
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+# Honor packageManager from package.json (avoids Corepack pulling pnpm 11+
+# with supply-chain age gates that break frozen-lockfile installs).
+RUN corepack prepare --activate
+# Skip browser download during install — installed explicitly in the runner.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# --prod=false: hosts often inject NODE_ENV=production and would skip
+# prisma/tsx (needed to generate + run the worker).
+# Dummy URL so prisma.config.ts can load during generate (no DB needed).
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/peon?schema=public"
+RUN pnpm install --frozen-lockfile --prod=false
+
+FROM base AS build
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tsconfig.json ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+COPY worker ./worker
+COPY src ./src
+RUN pnpm exec prisma generate
+
+FROM base AS runner
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build /app/src ./src
+COPY --from=build /app/worker ./worker
+COPY docker/worker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Chromium + OS deps for deployment preview screenshots.
+RUN pnpm exec playwright install --with-deps chromium
+
+# Replace the node image entrypoint so a custom start command
+# "pnpm worker" (often a single arg) does not become `node "pnpm worker"`.
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "--import", "tsx", "worker/index.ts"]

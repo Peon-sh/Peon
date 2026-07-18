@@ -1,0 +1,90 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - "docker/Dockerfile.worker"
+      - "docker/worker-entrypoint.sh"
+      - "src/**"
+      - "prisma/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'peon-prod-worker' }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'peon-prod-worker' }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE || 'peon-prod-worker' }}
+  ECS_TASK_FAMILY: ${{ vars.ECS_TASK_FAMILY || 'peon-prod-worker' }}
+
+jobs:
+  deploy:
+    name: Build & deploy peon-worker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tags
+        id: meta
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "image=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        run: |
+          docker build \
+            -f docker/Dockerfile.worker \
+            -t "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}" \
+            -t "${{ steps.meta.outputs.image }}:latest" \
+            .
+          docker push "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}"
+          docker push "${{ steps.meta.outputs.image }}:latest"
+
+      - name: Register new task definition and deploy
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "${{ env.ECS_TASK_FAMILY }}" \
+            --query 'taskDefinition' \
+            --output json)
+
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$IMAGE" \
+            'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy) |
+             .containerDefinitions[0].image = $IMAGE')
+
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          aws ecs update-service \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service "${{ env.ECS_SERVICE }}" \
+            --task-definition "$NEW_ARN" \
+            --force-new-deployment
+
+          echo "Deployed $NEW_ARN with image $IMAGE"

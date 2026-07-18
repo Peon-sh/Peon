@@ -1,0 +1,1221 @@
+// Peon - data model
+// Deployment platform data model with a workspace-based tenancy model,
+// Vercel-style project-level access control, and a unified `Service` entity.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/lib/prisma/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// Identity & tenancy
+// ============================================================
+
+enum WorkspaceRole {
+  OWNER
+  BILLING_ADMIN
+  ADMIN
+  MEMBER
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  WEBHOOK
+  TOKEN
+}
+
+enum ProjectRole {
+  ADMIN
+  MEMBER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum OtpPurpose {
+  SIGNUP
+  LOGIN
+  RESET_PASSWORD
+  EMAIL_CHANGE
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String?
+  passwordHash      String?
+  googleId          String?  @unique
+  profilePicture    String?
+  emailVerifiedAt   DateTime?
+  isInstanceAdmin         Boolean   @default(false)
+  isOnboarded             Boolean   @default(false)
+  onboardingCompletedAt   DateTime?
+  lastSeenAt              DateTime?
+
+  // 2FA
+  twoFactorSecret        String?
+  twoFactorRecoveryCodes String?
+  twoFactorConfirmedAt   DateTime?
+
+  // email change flow
+  pendingEmail          String?
+  forcePasswordReset    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships         WorkspaceMembership[]
+  projectMemberships  ProjectMembership[]
+  accessTokens        PersonalAccessToken[]
+  sentInvitations     ProjectInvitation[]   @relation("InvitedBy")
+  ownedWorkspaces     Workspace[]           @relation("WorkspaceOwner")
+  chatThreads         ChatThread[]
+  authSessions        AuthSession[]
+  workspaceAuditLogs  WorkspaceAuditLog[]   @relation("WorkspaceAuditActor")
+
+  @@index([email])
+}
+
+/** Browser login session — JWT `sid` maps to this row for revoke / device list. */
+model AuthSession {
+  id             String    @id @default(cuid())
+  userId         String
+
+  ip             String?
+  userAgent      String?
+  acceptLanguage String?
+
+  browser        String?
+  browserEngine  String?
+  os             String?
+  deviceType     String?
+  deviceName     String?
+  platform       String?
+  country        String?
+
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, revokedAt])
+}
+
+model EmailOtp {
+  id        String     @id @default(cuid())
+  email     String
+  codeHash  String
+  purpose   OtpPurpose
+  expiresAt DateTime
+  consumedAt DateTime?
+  attempts  Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  @@index([email, purpose])
+}
+
+model Workspace {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  personal    Boolean @default(false)
+  isSystem    Boolean @default(false)
+
+  ownerId String
+  owner   User   @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+
+  showOnboarding Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships          WorkspaceMembership[]
+  workspaceInvitations WorkspaceInvitation[]
+  projects             Project[]
+  servers              Server[]
+  privateKeys          PrivateKey[]
+  githubApps           GithubApp[]
+  gitlabApps           GitlabApp[]
+  s3Storages           S3Storage[]
+  notificationChannels NotificationChannel[]
+  sharedVariables      SharedEnvironmentVariable[]
+  tags                 Tag[]
+  invitations          ProjectInvitation[]
+  accessTokens         PersonalAccessToken[]
+  subscription         Subscription?
+  cloudProviderTokens  CloudProviderToken[]
+  cloudInitScripts     CloudInitScript[]
+  chatThreads          ChatThread[]
+  llmCredentials       WorkspaceLlmCredential[]
+  auditLogs            WorkspaceAuditLog[]
+
+  @@index([ownerId])
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model PersonalAccessToken {
+  id          String    @id @default(cuid())
+  name        String
+  tokenHash   String    @unique
+  abilities   String[]  @default([])
+  userId      String
+  workspaceId String
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+// ============================================================
+// Projects & project-level access
+// ============================================================
+
+model Project {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(cuid())
+  name        String
+  description String?
+  workspaceId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  settings    ProjectSetting?
+  memberships ProjectMembership[]
+  invitations ProjectInvitation[]
+  services    Service[]
+
+  @@index([workspaceId])
+}
+
+model ProjectSetting {
+  id             String  @id @default(cuid())
+  projectId      String  @unique
+  wildcardDomain String?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectMembership {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+// Workspace-level invitation: invite a person (by email) to join a workspace
+// with a given role. Accepting creates a WorkspaceMembership.
+model WorkspaceInvitation {
+  id          String           @id @default(cuid())
+  uuid        String           @unique @default(cuid())
+  email       String
+  role        WorkspaceRole    @default(MEMBER)
+  status      InvitationStatus @default(PENDING)
+  token       String           @unique
+  workspaceId String
+  invitedById String
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, email])
+  @@index([email])
+}
+
+// Project-level invitation (Vercel-style). Invitee must be a workspace member.
+model ProjectInvitation {
+  id          String           @id @default(cuid())
+  uuid        String           @unique @default(cuid())
+  email       String
+  role        ProjectRole      @default(MEMBER)
+  status      InvitationStatus @default(PENDING)
+  token       String           @unique
+  projectId   String
+  workspaceId String
+  invitedById String
+  expiresAt   DateTime
+  createdAt   DateTime         @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@unique([projectId, email])
+  @@index([email])
+}
+
+// ============================================================
+// Servers & infrastructure
+// ============================================================
+
+enum ProxyType {
+  TRAEFIK
+  CADDY
+  NONE
+}
+
+model PrivateKey {
+  id           String  @id @default(cuid())
+  uuid         String  @unique @default(cuid())
+  workspaceId  String
+  name         String
+  description  String?
+  privateKey   String // encrypted at app layer
+  publicKey    String?
+  fingerprint  String?
+  isGitRelated Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  servers    Server[]
+  githubApps GithubApp[]
+  gitlabApps GitlabApp[]
+  services   Service[]
+
+  @@index([workspaceId])
+}
+
+model Server {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  ip          String
+  port        Int     @default(22)
+  user        String  @default("root")
+  privateKeyId String?
+
+  // proxy configuration
+  proxyType   ProxyType @default(TRAEFIK)
+  proxyStatus String    @default("exited")
+  proxyConfig Json?
+
+  isBuildServer     Boolean @default(false)
+  isSwarmManager    Boolean @default(false)
+  isSwarmWorker     Boolean @default(false)
+  isReachable       Boolean @default(false)
+  isUsable          Boolean @default(false)
+  highDiskUsage     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace       Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  privateKey      PrivateKey?                 @relation(fields: [privateKeyId], references: [id])
+  settings        ServerSetting?
+  destinations    DockerDestination[]
+  services        Service[]
+  sharedVariables SharedEnvironmentVariable[]
+  operationLogs   ServerOperationLog[]
+
+  @@index([workspaceId])
+}
+
+model ServerOperationLog {
+  id        String   @id @default(cuid())
+  serverId  String
+  sessionId String?
+  operation String
+  level     String   @default("info")
+  message   String
+  createdAt DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
+  @@index([serverId, sessionId, createdAt])
+}
+
+model ServerSetting {
+  id                     String  @id @default(cuid())
+  serverId               String  @unique
+  wildcardDomain         String?
+  isReachable            Boolean @default(false)
+  isUsable               Boolean @default(false)
+  forceDisabled          Boolean @default(false)
+  concurrentBuilds       Int     @default(2)
+  deploymentQueueLimit   Int     @default(25)
+  connectionTimeout      Int     @default(30)
+  isMetricsEnabled       Boolean @default(false)
+  isSentinelEnabled      Boolean @default(false)
+  sentinelToken          String?
+  /** Last successful peon-ping-pong push (heartbeat). */
+  agentLastSeenAt        DateTime?
+  agentVersion           String?
+  /** Latest host metrics from peon-ping-pong (cpu/mem/disk/uptime). */
+  agentHostMetrics       Json?
+  /** Latest container snapshot from peon-ping-pong. */
+  agentContainers        Json?
+  isTerminalEnabled      Boolean @default(true)
+  isCloudflareTunnel     Boolean @default(false)
+  isJumpServer           Boolean @default(false)
+  forceDockerCleanup     Boolean @default(false)
+  dockerCleanupFrequency String  @default("0 0 * * *")
+  dockerCleanupThreshold Int     @default(80)
+  deleteUnusedVolumes    Boolean @default(false)
+  deleteUnusedNetworks   Boolean @default(false)
+  diskUsageNotificationThreshold Int @default(80)
+  logDrainConfig         Json?
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// Docker network destination on a server (StandaloneDocker / SwarmDocker).
+model DockerDestination {
+  id        String  @id @default(cuid())
+  uuid      String  @unique @default(cuid())
+  serverId  String
+  name      String
+  network   String  @default("peon")
+  isSwarm   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  server   Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  services Service[]
+
+  @@index([serverId])
+}
+
+// ============================================================
+// Git sources
+// ============================================================
+
+enum GithubAppKind {
+  CUSTOM
+  PLATFORM
+}
+
+enum GithubAppStatus {
+  CONNECTED
+  SUSPENDED
+  DISCONNECTED
+}
+
+model GithubApp {
+  id             String          @id @default(cuid())
+  uuid           String          @unique @default(cuid())
+  workspaceId    String
+  name           String
+  organization   String?
+  /** GitHub installation account type: Organization | User */
+  accountType    String?
+  apiUrl         String          @default("https://api.github.com")
+  htmlUrl        String          @default("https://github.com")
+  customUser     String          @default("git")
+  customPort     Int             @default(22)
+  appId          String?
+  installationId String?         @unique
+  clientId       String?
+  clientSecret   String? // encrypted
+  webhookSecret  String? // encrypted
+  privateKeyId   String?
+  kind           GithubAppKind   @default(CUSTOM)
+  status         GithubAppStatus @default(CONNECTED)
+  isSystemWide   Boolean         @default(false)
+  isPublic       Boolean         @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  privateKey PrivateKey? @relation(fields: [privateKeyId], references: [id])
+  services   Service[]
+
+  @@index([workspaceId])
+  @@index([appId])
+}
+
+model GitlabApp {
+  id           String  @id @default(cuid())
+  uuid         String  @unique @default(cuid())
+  workspaceId  String
+  name         String
+  organization String?
+  apiUrl       String  @default("https://gitlab.com/api/v4")
+  htmlUrl      String  @default("https://gitlab.com")
+  customUser   String  @default("git")
+  customPort   Int     @default(22)
+  appId        String?
+  appSecret    String? // encrypted
+  oauthId      Int?
+  groupName    String?
+  webhookToken String? // encrypted
+  privateKeyId String?
+  isSystemWide Boolean @default(false)
+  isPublic     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  privateKey PrivateKey? @relation(fields: [privateKeyId], references: [id])
+  services   Service[]
+
+  @@index([workspaceId])
+}
+
+// ============================================================
+// Unified Service model (the deployable unit)
+// ============================================================
+
+enum ServiceKind {
+  GIT_APP
+  DOCKERFILE
+  DOCKER_IMAGE
+  STATIC
+  NIXPACKS
+  DATABASE
+  COMPOSE
+}
+
+enum BuildPack {
+  NIXPACKS
+  STATIC
+  DOCKERFILE
+  DOCKERCOMPOSE
+  DOCKERIMAGE
+  RAILPACK
+}
+
+enum DatabaseEngine {
+  POSTGRESQL
+  MYSQL
+  MARIADB
+  MONGODB
+  REDIS
+  KEYDB
+  DRAGONFLY
+  CLICKHOUSE
+}
+
+enum ServiceStatus {
+  RUNNING
+  STARTING
+  STOPPED
+  DEGRADED
+  EXITED
+  UNKNOWN
+}
+
+enum GitSourceType {
+  PUBLIC
+  GITHUB_APP
+  DEPLOY_KEY
+  GITLAB_APP
+}
+
+model Service {
+  id          String      @id @default(cuid())
+  uuid        String      @unique @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  kind        ServiceKind
+  status      ServiceStatus @default(UNKNOWN)
+
+  // placement
+  serverId      String?
+  destinationId String?
+
+  // domains
+  fqdn         String?
+  ports        String? // exposed/mappings, comma-separated
+
+  // ---- app-style build config ----
+  buildPack       BuildPack?
+  gitRepository   String?
+  /** GitHub numeric repository id — used to match App webhook pushes. */
+  repositoryProjectId Int?
+  gitBranch       String?
+  gitCommitSha    String?
+  gitSourceType   GitSourceType?
+  baseDirectory   String  @default("/")
+  publishDirectory String?
+  installCommand  String?
+  buildCommand    String?
+  startCommand    String?
+  dockerfileContent String?
+  dockerfilePath  String  @default("/Dockerfile")
+  dockerComposeRaw String?
+  templateSlug     String?
+  dockerComposeParsed String?
+  dockerRegistryImage String?
+  dockerRegistryTag   String?
+  healthCheckEnabled      Boolean @default(false)
+  healthCheckPath         String?
+  healthCheckPort         String?
+  healthCheckMethod       String  @default("GET")
+  healthCheckScheme       String  @default("http")
+  healthCheckHost         String  @default("localhost")
+  healthCheckReturnCode   Int     @default(200)
+  healthCheckResponseText String?
+  healthCheckInterval     Int     @default(5)
+  healthCheckTimeout      Int     @default(5)
+  healthCheckRetries      Int     @default(10)
+  healthCheckStartPeriod  Int     @default(5)
+
+  /// Live Docker container name after the latest successful deploy (rolling updates).
+  activeContainerName String?
+
+  // source links
+  githubAppId  String?
+  gitlabAppId  String?
+  privateKeyId String?
+
+  // ---- database config (kind = DATABASE) ----
+  databaseEngine    DatabaseEngine?
+  databaseImage     String?
+  databasePublic    Boolean @default(false)
+  databasePublicPort Int?
+  dbUsername        String?
+  dbPassword        String? // encrypted
+  dbName            String?
+  dbRootPassword    String? // encrypted
+  dbInitScript      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  project       Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  server        Server?            @relation(fields: [serverId], references: [id])
+  destination   DockerDestination? @relation(fields: [destinationId], references: [id])
+  githubApp     GithubApp?         @relation(fields: [githubAppId], references: [id])
+  gitlabApp     GitlabApp?         @relation(fields: [gitlabAppId], references: [id])
+  privateKey    PrivateKey?        @relation(fields: [privateKeyId], references: [id])
+
+  settings         ServiceSetting?
+  environmentVars  EnvironmentVariable[]
+  deployments      Deployment[]
+  previews         ServicePreview[]
+  persistentVolumes PersistentVolume[]
+  scheduledTasks   ScheduledTask[]
+  scheduledBackups ScheduledBackup[]
+  webhooks         ServiceWebhook[]
+  tags             TagsOnServices[]
+
+  @@index([projectId])
+  @@index([serverId])
+  @@index([githubAppId, repositoryProjectId])
+}
+
+model ServiceSetting {
+  id        String  @id @default(cuid())
+  serviceId String  @unique
+
+  isAutoDeployEnabled       Boolean @default(true)
+  isPreviewDeploymentsEnabled Boolean @default(false)
+  isForceHttpsEnabled       Boolean @default(true)
+  isGzipEnabled             Boolean @default(true)
+  isStripprefixEnabled      Boolean @default(false)
+  isStatic                  Boolean @default(false)
+  isSpa                     Boolean @default(false)
+  isBuildServerEnabled      Boolean @default(false)
+  disableBuildCache         Boolean @default(false)
+  isGitSubmodulesEnabled    Boolean @default(false)
+  isGitLfsEnabled           Boolean @default(false)
+  isConsistentContainerNameEnabled Boolean @default(false)
+  isRawComposeDeploymentEnabled Boolean @default(false)
+  connectToDockerNetwork    Boolean @default(false)
+  /// Coolify-style rolling update: start new → healthy → stop old (default on).
+  rollingUpdate             Boolean @default(true)
+  customDockerRunOptions    String?
+  preDeployCommand          String?
+  postDeployCommand         String?
+  customLabels              String?
+  watchPaths                String?
+  dockerImagesToKeep        Int     @default(3)
+  stopGracePeriod           Int     @default(30)
+  cpuLimit                  String?
+  memoryLimit               String?
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// Environment variables (polymorphic to Service)
+// ============================================================
+
+model EnvironmentVariable {
+  id          String  @id @default(cuid())
+  serviceId   String
+  key         String
+  value       String  // encrypted
+  isPreview   Boolean @default(false)
+  isBuildtime Boolean @default(true)
+  isRuntime   Boolean @default(true)
+  isMultiline Boolean @default(false)
+  isLiteral   Boolean @default(false)
+  isShownOnce Boolean @default(false)
+  isShared    Boolean @default(false)
+  comment     String?
+  order       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, key, isPreview])
+  @@index([serviceId])
+}
+
+enum SharedVariableScope {
+  WORKSPACE
+  PROJECT
+  SERVER
+}
+
+model SharedEnvironmentVariable {
+  id          String              @id @default(cuid())
+  scope       SharedVariableScope
+  key         String
+  value       String // encrypted
+  comment     String?
+  isMultiline Boolean             @default(false)
+  isLiteral   Boolean             @default(false)
+
+  workspaceId String
+  projectId   String?
+  serverId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  server    Server?   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, scope])
+}
+
+// ============================================================
+// Persistent storage
+// ============================================================
+
+model PersistentVolume {
+  id         String  @id @default(cuid())
+  serviceId  String
+  name       String
+  mountPath  String
+  hostPath   String?
+  isBindMount Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+}
+
+// ============================================================
+// Deployments
+// ============================================================
+
+enum DeploymentStatus {
+  QUEUED
+  IN_PROGRESS
+  FINISHED
+  FAILED
+  CANCELLED
+}
+
+model Deployment {
+  id          String           @id @default(cuid())
+  uuid        String           @unique @default(cuid())
+  serviceId   String
+  status      DeploymentStatus @default(QUEUED)
+  commitSha   String?
+  commitMessage String?
+  isPreview   Boolean          @default(false)
+  pullRequestId Int?
+  forceRebuild Boolean         @default(false)
+  restartOnly Boolean          @default(false)
+  logs        Json?            // streamed log lines
+  previewImagePath String?     // lifetime public S3 URL (or legacy local path) for deployment screenshot
+  triggeredBy String?          // userId or "webhook"/"api"
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@index([status])
+}
+
+model ServicePreview {
+  id              String        @id @default(cuid())
+  uuid            String        @unique @default(cuid())
+  serviceId       String
+  pullRequestId   Int
+  fqdn            String?
+  status          ServiceStatus @default(UNKNOWN)
+  headBranch      String?
+  commitSha         String?
+  githubCommentId     BigInt?
+  githubCheckRunId    BigInt?
+  githubDeploymentId  BigInt?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, pullRequestId])
+}
+
+model ServiceWebhook {
+  id         String  @id @default(cuid())
+  serviceId  String
+  token      String  @unique
+  provider   String  @default("generic") // generic | github | gitlab
+  createdAt  DateTime @default(now())
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+}
+
+// ============================================================
+// Scheduled tasks & backups
+// ============================================================
+
+enum ExecutionStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model ScheduledTask {
+  id        String  @id @default(cuid())
+  uuid      String  @unique @default(cuid())
+  serviceId String
+  name      String
+  command   String
+  frequency String // cron
+  container String?
+  timeout   Int     @default(300)
+  enabled   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service    Service                  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  executions ScheduledTaskExecution[]
+
+  @@index([serviceId])
+}
+
+model ScheduledTaskExecution {
+  id        String          @id @default(cuid())
+  taskId    String
+  status    ExecutionStatus @default(RUNNING)
+  message   String?
+  duration  Int?
+  startedAt DateTime        @default(now())
+  finishedAt DateTime?
+
+  task ScheduledTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model S3Storage {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  region      String  @default("us-east-1")
+  endpoint    String?
+  bucket      String
+  accessKey   String // encrypted
+  secretKey   String // encrypted
+  isUsable    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  backups   ScheduledBackup[]
+
+  @@index([workspaceId])
+}
+
+model ScheduledBackup {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(cuid())
+  serviceId   String
+  enabled     Boolean @default(true)
+  frequency   String  // cron
+  description String?
+  saveS3      Boolean @default(false)
+  s3StorageId String?
+  disableLocal Boolean @default(false)
+  dumpAll     Boolean @default(false)
+  databasesToBackup String?
+  timeout     Int     @default(3600)
+  retentionAmountLocal Int @default(7)
+  retentionDaysLocal   Int @default(0)
+  retentionAmountS3    Int @default(0)
+  retentionDaysS3      Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service    Service                    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  s3Storage  S3Storage?                 @relation(fields: [s3StorageId], references: [id])
+  executions ScheduledBackupExecution[]
+
+  @@index([serviceId])
+}
+
+model ScheduledBackupExecution {
+  id        String          @id @default(cuid())
+  backupId  String
+  status    ExecutionStatus @default(RUNNING)
+  message   String?
+  size      String?
+  filename  String?
+  databaseName String?
+  s3Uploaded Boolean        @default(false)
+  startedAt DateTime        @default(now())
+  finishedAt DateTime?
+
+  backup ScheduledBackup @relation(fields: [backupId], references: [id], onDelete: Cascade)
+
+  @@index([backupId])
+}
+
+// ============================================================
+// Notifications
+// ============================================================
+
+enum NotificationChannelType {
+  EMAIL
+  DISCORD
+  SLACK
+  TELEGRAM
+  PUSHOVER
+  WEBHOOK
+}
+
+model NotificationChannel {
+  id          String                  @id @default(cuid())
+  workspaceId String
+  channel     NotificationChannelType
+  enabled     Boolean                 @default(false)
+  // channel credentials (smtp, webhook url, tokens...) - secrets encrypted at app layer
+  config      Json
+  // per-event toggles: { deployment_success: true, deployment_failure: true, ... }
+  events      Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, channel])
+}
+
+// ============================================================
+// Tags
+// ============================================================
+
+model Tag {
+  id          String  @id @default(cuid())
+  workspaceId String
+  name        String
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  services  TagsOnServices[]
+
+  @@unique([workspaceId, name])
+}
+
+model TagsOnServices {
+  tagId     String
+  serviceId String
+
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([tagId, serviceId])
+}
+
+// ============================================================
+// Cloud provider integrations, SSL, settings
+// ============================================================
+
+model CloudProviderToken {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(cuid())
+  workspaceId String
+  provider    String  @default("hetzner")
+  name        String
+  token       String // encrypted
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model CloudInitScript {
+  id          String @id @default(cuid())
+  uuid        String @unique @default(cuid())
+  workspaceId String
+  name        String
+  content     String
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model SslCertificate {
+  id          String  @id @default(cuid())
+  uuid        String  @unique @default(cuid())
+  serverId    String?
+  commonName  String?
+  certificate String
+  privateKey  String // encrypted
+  isCaCertificate Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+}
+
+model Subscription {
+  id          String  @id @default(cuid())
+  workspaceId String  @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripePlanId         String?
+  status               String  @default("inactive")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// Singleton instance-wide settings (id = "instance").
+model InstanceSettings {
+  id                    String  @id @default("instance")
+  instanceName          String  @default("Peon")
+  fqdn                  String?
+  publicIpv4            String?
+  publicIpv6            String?
+  isRegistrationEnabled Boolean @default(true)
+  isApiEnabled          Boolean @default(true)
+  isDnsValidationEnabled Boolean @default(true)
+  customDnsServers      String  @default("1.1.1.1,8.8.8.8")
+  publicPortMin         Int     @default(9000)
+  publicPortMax         Int     @default(9100)
+  instanceTimezone      String  @default("UTC")
+
+  // instance-wide email (fallback for notifications/OTP)
+  emailConfig Json?
+
+  updatedAt DateTime @updatedAt
+}
+
+// OAuth provider configuration (Google, GitHub, etc.) at instance level.
+model OauthSetting {
+  id           String  @id @default(cuid())
+  provider     String  @unique
+  enabled      Boolean @default(false)
+  clientId     String?
+  clientSecret String? // encrypted
+  redirectUri  String?
+  tenant       String?
+  baseUrl      String?
+
+  updatedAt DateTime @updatedAt
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum ChatMessageStatus {
+  STREAMING
+  COMPLETE
+  ERROR
+  CANCELLED
+}
+
+enum ChatToolApprovalStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+enum LlmProvider {
+  OPENAI
+  ANTHROPIC
+}
+
+model WorkspaceLlmCredential {
+  id          String      @id @default(cuid())
+  workspaceId String
+  provider    LlmProvider
+  apiKey      String // encrypted at app layer
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model ChatSupportedModel {
+  id                String      @id @default(cuid())
+  provider          LlmProvider
+  modelId           String
+  displayName       String
+  enabled           Boolean     @default(true)
+  sortOrder         Int         @default(0)
+  supportsReasoning Boolean     @default(false)
+
+  @@unique([provider, modelId])
+  @@index([provider, enabled, sortOrder])
+}
+
+model ChatThread {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  userId        String
+  title         String?
+  modelProvider String?
+  modelId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  toolCalls ChatToolCall[]
+
+  @@index([workspaceId, userId, updatedAt])
+}
+
+model ChatMessage {
+  id        String            @id @default(cuid())
+  threadId  String
+  role      ChatMessageRole
+  parts     Json
+  status    ChatMessageStatus @default(COMPLETE)
+  createdAt DateTime          @default(now())
+
+  thread    ChatThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  toolCalls ChatToolCall[]
+
+  @@index([threadId, createdAt])
+}
+
+model ChatToolCall {
+  id             String                 @id @default(cuid())
+  threadId       String
+  messageId      String?
+  toolName       String
+  toolCallId     String                 @unique
+  approvalId     String?                @unique
+  kind           String
+  inputRedacted  Json
+  outputRedacted Json?
+  isError        Boolean                @default(false)
+  approvalStatus ChatToolApprovalStatus @default(PENDING)
+  decidedAt      DateTime?
+  createdAt      DateTime               @default(now())
+
+  thread  ChatThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  message ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+  @@index([approvalStatus])
+}
+
+// ============================================================
+// Workspace audit log
+// ============================================================
+
+model WorkspaceAuditLog {
+  id           String         @id @default(cuid())
+  workspaceId  String?
+  actorUserId  String?
+  actorType    AuditActorType @default(USER)
+  actorRole    WorkspaceRole?
+  action       String
+  resourceType String
+  resourceId   String?
+  resourceName String?
+  summary      String
+  metadata     Json?
+  createdAt    DateTime       @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor     User?      @relation("WorkspaceAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, action])
+  @@index([workspaceId, actorUserId])
+  @@index([workspaceId, resourceType])
+}

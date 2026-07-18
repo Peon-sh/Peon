@@ -1,0 +1,32 @@
+packages: []
+
+# Packages allowed to run install/build scripts (pnpm 10+).
+# Without this, Docker installs skip prisma/ssh2/sharp native binaries.
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma
+  - esbuild
+  - sharp
+  - ssh2
+  - cpu-features
+  - protobufjs
+  - unrs-resolver
+
+# pnpm 11 allowBuilds map (ignored on 10.x; kept for forward compat).
+allowBuilds:
+  '@prisma/engines': true
+  prisma: true
+  esbuild: true
+  sharp: true
+  ssh2: true
+  cpu-features: true
+  protobufjs: true
+  unrs-resolver: true
+  msw: false
+
+# pnpm 11 defaults minimumReleaseAge to 24h and still enforces it on
+# --frozen-lockfile installs. High-churn packages break Docker builds when
+# bumped inside that window — exclude them so image builds stay deterministic.
+minimumReleaseAgeExclude:
+  - '@aws-sdk/*'
+  - openai

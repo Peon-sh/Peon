@@ -1,0 +1,83 @@
+# Optional self-host / production-like stack for Peon.
+# Local development does NOT require this file — run Postgres yourself and use
+# real AWS SQS (leave SQS_ENDPOINT empty). App + processes run on the host:
+#
+#   pnpm dev
+#   pnpm worker     # SQS job consumer (scale freely)
+#   pnpm schedule   # cron → enqueue (run exactly one)
+#   pnpm socket     # terminal WebSocket
+#
+# Full containerized deploy still needs DATABASE_URL and AWS credentials in
+# `.env` (SQS, SES, S3).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: peon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: peon
+    ports:
+      - "5432:5432"
+    volumes:
+      - peon_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles: ["db"]
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: peon-app
+    restart: unless-stopped
+    command: ["pnpm", "start"]
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    profiles: ["full"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: peon-worker
+    restart: unless-stopped
+    command: ["node", "--import", "tsx", "worker/index.ts"]
+    env_file:
+      - .env
+    profiles: ["full"]
+
+  schedule:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: peon-schedule
+    restart: unless-stopped
+    command: ["node", "--import", "tsx", "worker/schedule.ts"]
+    env_file:
+      - .env
+    profiles: ["full"]
+
+  socket:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: peon-socket
+    restart: unless-stopped
+    command: ["node", "--import", "tsx", "worker/socket.ts"]
+    env_file:
+      - .env
+    ports:
+      - "${TERMINAL_WS_PORT:-8081}:${TERMINAL_WS_PORT:-8081}"
+    profiles: ["full"]
+
+volumes:
+  peon_pgdata:

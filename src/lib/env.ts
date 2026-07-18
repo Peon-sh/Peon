@@ -1,0 +1,123 @@
+import { z } from 'zod';
+
+/**
+ * Centralized, validated environment access.
+ *
+ * `serverEnv()` is lazily evaluated so importing this module never throws in
+ * the browser bundle. Only call it from server components, route handlers,
+ * services, or the worker.
+ */
+
+const serverSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  APP_URL: z.string().url().default('http://localhost:3000'),
+  PORT: z.coerce.number().default(3000),
+
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+
+  JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 chars'),
+  JWT_KEY: z.string().default('peon-auth-token'),
+
+  /** Email of the Peon instance owner — only this user can edit global instance settings. */
+  INSTANCE_OWNER_EMAIL: z.string().email().optional(),
+
+  ENCRYPTION_KEY: z.string().min(1, 'ENCRYPTION_KEY is required'),
+
+  /** Google Identity Services client ID (no client secret needed for token login). */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+
+  /** Email: `test` logs to console; `aws-ses` sends via Amazon SES. */
+  EMAIL_DRIVER: z.enum(['test', 'aws-ses']).default('test'),
+  EMAIL_FROM: z.string().default('no-reply@peon.local'),
+  EMAIL_FROM_NAME: z.string().default('Peon'),
+
+  /** Shared AWS region / credentials (SES, SQS, S3). */
+  AWS_REGION: z.string().default('us-east-1'),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+
+  SQS_ENDPOINT: z.string().optional(),
+  SQS_REGION: z.string().optional(),
+  SQS_DEPLOYMENT_QUEUE_URL: z.string().optional(),
+  SQS_TASKS_QUEUE_URL: z.string().optional(),
+
+  WORKER_POLL_WAIT_SECONDS: z.coerce.number().default(20),
+  WORKER_MAX_CONCURRENCY: z.coerce.number().default(5),
+
+  S3_BUCKET: z.string().optional(),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+
+  GITHUB_APP_CLIENT_ID: z.string().optional(),
+  GITHUB_APP_CLIENT_SECRET: z.string().optional(),
+
+  /** Platform-managed GitHub App (Connect with Peon). */
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_SLUG: z.string().optional(),
+  GITHUB_APP_WEBHOOK_SECRET: z.string().optional(),
+  /** PEM contents; `\n` may be escaped as `\\n` in env. */
+  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+
+  /** WebSocket terminal sidecar (worker/terminal-server.ts). */
+  TERMINAL_WS_PORT: z.coerce.number().default(8081),
+  TERMINAL_SESSION_MAX_SECONDS: z.coerce.number().default(3600),
+
+  SENTRY_DSN: z.string().optional(),
+});
+
+export type ServerEnv = z.infer<typeof serverSchema>;
+
+let cached: ServerEnv | null = null;
+
+export function serverEnv(): ServerEnv {
+  if (cached) return cached;
+  const parsed = serverSchema.safeParse(process.env);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    throw new Error(`Invalid environment configuration:\n${issues}`);
+  }
+  cached = parsed.data;
+  return cached;
+}
+
+/** Clear cached env (tests). */
+export function resetServerEnvCache(): void {
+  cached = null;
+}
+
+export function platformGithubPrivateKeyPem(env: ServerEnv): string {
+  return (env.GITHUB_APP_PRIVATE_KEY ?? '').replace(/\\n/g, '\n');
+}
+
+/** True when the instance-level Peon GitHub App is fully configured. */
+export function isPlatformGithubConfigured(env?: ServerEnv): boolean {
+  const e = env ?? serverEnv();
+  return !!(
+    e.GITHUB_APP_ID?.trim() &&
+    e.GITHUB_APP_SLUG?.trim() &&
+    e.GITHUB_APP_WEBHOOK_SECRET?.trim() &&
+    e.GITHUB_APP_PRIVATE_KEY?.trim()
+  );
+}
+
+/** Public (browser-safe) config. */
+export const publicEnv = {
+  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+  marketingUrl: (process.env.NEXT_PUBLIC_MARKETING_URL ?? 'https://peon.sh').replace(/\/$/, ''),
+  googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '',
+  /** DigitalOcean referral link shown during onboarding. */
+  doReferralUrl:
+    process.env.NEXT_PUBLIC_DO_REFERRAL_URL ?? 'https://www.digitalocean.com/products/droplets',
+  /** Optional full WebSocket URL for SSH terminal (e.g. wss://app.example.com/terminal/ws). */
+  terminalWsUrl: process.env.NEXT_PUBLIC_TERMINAL_WS_URL ?? '',
+};
+
+/** Absolute URL into the marketing site (peon.sh). */
+export function marketingHref(path = '/'): string {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${publicEnv.marketingUrl}${p}`;
+}

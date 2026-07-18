@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:unit
+
+  integration:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: peon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      PEON_E2E: '1'
+      PEON_TEST_PORT: '3100'
+      PEON_TEST_BASE_URL: http://127.0.0.1:3100
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/peon_test?schema=public
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/peon_test?schema=public
+      JWT_SECRET: test-jwt-secret-at-least-32-chars!!
+      JWT_KEY: peon-auth-token
+      ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      APP_URL: http://127.0.0.1:3100
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      EMAIL_DRIVER: test
+      INSTANCE_OWNER_EMAIL: owner@peon.test
+      SQS_DEPLOYMENT_QUEUE_URL: http://localhost:9324/000000000000/peon-deployments
+      SQS_TASKS_QUEUE_URL: http://localhost:9324/000000000000/peon-tasks
+      S3_BUCKET: peon-test-bucket
+      GITHUB_APP_ID: '12345'
+      GITHUB_APP_SLUG: peon-test
+      GITHUB_APP_WEBHOOK_SECRET: whsec-test
+      GITHUB_APP_PRIVATE_KEY: |
+        -----BEGIN RSA PRIVATE KEY-----
+        MIIBOgIBAAJBAKtest
+        -----END RSA PRIVATE KEY-----
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm build
+      - run: pnpm test:integration
+        env:
+          PEON_TEST_SKIP_BUILD: '1'

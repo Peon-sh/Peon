@@ -1,0 +1,11 @@
+import { ok, route } from '@/lib/http/response';
+import { requireSession } from '@/lib/auth/context';
+import { clearAuthCookie } from '@/lib/auth/cookies';
+import { AuthSessionService } from '@/services/internal/auth/sessions';
+
+export const POST = route(async () => {
+  const session = await requireSession();
+  const count = await AuthSessionService.revokeAll(session.userId);
+  await clearAuthCookie();
+  return ok({ revoked: count });
+});

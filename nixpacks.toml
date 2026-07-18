@@ -1,0 +1,15 @@
+# Nixpacks setup already installs pnpm via nix (pnpm-10_x).
+# Do NOT run `corepack enable` (re-downloads packageManager pnpm from npmjs;
+# fails on flaky TLS) or `corepack disable` (deletes the pnpm shim/binary).
+[phases.install]
+cmds = [
+  "pnpm i --frozen-lockfile",
+]
+
+[phases.build]
+cmds = [
+  "pnpm exec prisma generate && pnpm build",
+]
+
+[start]
+cmd = "pnpm exec prisma migrate deploy && pnpm start"
