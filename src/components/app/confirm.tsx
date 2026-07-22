@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,28 +29,68 @@ export function ConfirmButton({
   description = 'This action cannot be undone.',
   confirmLabel = 'Delete',
   disabled,
+  confirmDisabled,
+  confirmPending,
+  loading,
   children,
   variant = 'destructive',
   size = 'sm',
   className,
   confirmVariant = 'destructive',
+  open: openProp,
+  onOpenChange,
 }: {
   onConfirm: () => void;
   title?: React.ReactNode;
   description?: React.ReactNode;
   confirmLabel?: string;
   disabled?: boolean;
+  /** Disables the dialog confirm action (e.g. until a reason is selected). */
+  confirmDisabled?: boolean;
+  /** Shows spinner on confirm and blocks closing while the action runs. */
+  confirmPending?: boolean;
+  /** Shows spinner on the trigger button. */
+  loading?: boolean;
   children: React.ReactNode;
   variant?: React.ComponentProps<typeof Button>['variant'];
   size?: React.ComponentProps<typeof Button>['size'];
   className?: string;
   /** Dialog confirm button style. Defaults to destructive for delete/remove. */
   confirmVariant?: 'default' | 'destructive';
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : uncontrolledOpen;
+  const wasPending = React.useRef(false);
+
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!next && confirmPending) return;
+      if (!isControlled) setUncontrolledOpen(next);
+      onOpenChange?.(next);
+    },
+    [confirmPending, isControlled, onOpenChange],
+  );
+
+  React.useEffect(() => {
+    if (wasPending.current && !confirmPending) {
+      setOpen(false);
+    }
+    wasPending.current = !!confirmPending;
+  }, [confirmPending, setOpen]);
+
   return (
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button variant={variant} size={size} className={className} disabled={disabled}>
+        <Button
+          variant={variant}
+          size={size}
+          className={className}
+          disabled={disabled || loading || confirmPending}
+        >
+          {loading || confirmPending ? <Loader2 className="size-4 animate-spin" /> : null}
           {children}
         </Button>
       </AlertDialogTrigger>
@@ -67,23 +108,38 @@ export function ConfirmButton({
           </AlertDialogHeader>
         </div>
         <div data-slot="confirm-body" className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm">
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          {typeof description === 'string' ? (
+            <AlertDialogDescription>{description}</AlertDialogDescription>
+          ) : (
+            <>
+              <AlertDialogDescription className="sr-only">
+                Confirm this action
+              </AlertDialogDescription>
+              <div className="text-muted-foreground space-y-3">{description}</div>
+            </>
+          )}
         </div>
         <AlertDialogFooter
           data-slot="confirm-footer"
           className="shrink-0 gap-2 border-t border-border/70 px-4 py-3 sm:justify-end"
         >
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={confirmPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             variant={confirmVariant === 'destructive' ? 'destructive' : 'default'}
+            disabled={confirmDisabled || confirmPending}
             className={
               confirmVariant === 'destructive'
                 ? 'bg-destructive text-white hover:bg-destructive/90 dark:bg-destructive dark:text-white dark:hover:bg-destructive/90'
                 : undefined
             }
-            onClick={onConfirm}
+            onClick={(e) => {
+              e.preventDefault();
+              if (confirmDisabled || confirmPending) return;
+              onConfirm();
+            }}
           >
-            {confirmLabel}
+            {confirmPending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {confirmPending ? 'Working…' : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

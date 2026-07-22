@@ -63,6 +63,15 @@ export async function requireWorkspaceRole(
   return ctx;
 }
 
+/** Require OWNER or BILLING_ADMIN (not plain ADMIN) for billing mutations. */
+export async function requireBillingManage(workspaceId: string): Promise<WorkspaceContext> {
+  const ctx = await requireWorkspaceMember(workspaceId);
+  if (ctx.role !== 'OWNER' && ctx.role !== 'BILLING_ADMIN') {
+    throw new ForbiddenError('Only workspace owners and billing admins can manage billing.');
+  }
+  return ctx;
+}
+
 /** Require infrastructure-management rights (OWNER/ADMIN). */
 export async function requireInfraAccess(workspaceId: string): Promise<WorkspaceContext> {
   const ctx = await requireWorkspaceMember(workspaceId);
@@ -124,8 +133,20 @@ export async function requireProjectAccess(projectId: string): Promise<ProjectAc
   return projectAccessFor(user, projectId);
 }
 
-/** Require the ability to modify a project (throws if read-only). */
+/** Require the ability to modify a project (throws if read-only or billing inactive). */
 export async function requireProjectManage(projectId: string): Promise<ProjectAccess> {
+  const access = await requireProjectAccess(projectId);
+  if (!access.canManage) throw new ForbiddenError('You cannot modify this project.');
+  const { BillingService } = await import('@/services/internal/billing/billing');
+  await BillingService.assertProjectWritable(access.workspaceId);
+  return access;
+}
+
+/**
+ * Allow project/service deletion even when subscription is inactive
+ * (read/delete-only mode after cancel).
+ */
+export async function requireProjectDelete(projectId: string): Promise<ProjectAccess> {
   const access = await requireProjectAccess(projectId);
   if (!access.canManage) throw new ForbiddenError('You cannot modify this project.');
   return access;

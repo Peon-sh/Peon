@@ -1039,12 +1039,22 @@ model SslCertificate {
 }
 
 model Subscription {
-  id          String  @id @default(cuid())
-  workspaceId String  @unique
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
-  stripePlanId         String?
-  status               String  @default("inactive")
+  id                       String    @id @default(cuid())
+  workspaceId              String    @unique
+  stripeCustomerId         String?
+  stripeSubscriptionId     String?
+  stripePriceId            String?
+  stripeSubscriptionItemId String?
+  status                   String    @default("inactive")
+  quantity                 Int       @default(0)
+  /// Paid project capacity for the current period after a mid-cycle decrease (no refunds).
+  /// Cleared when the billing period rolls or billed quantity catches up.
+  periodPaidQuantity       Int?
+  /// month | year
+  interval                 String?
+  cancelAtPeriodEnd        Boolean   @default(false)
+  currentPeriodEnd         DateTime?
+  canceledAt               DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

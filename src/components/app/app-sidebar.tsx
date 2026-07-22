@@ -17,6 +17,7 @@ import {
   Users,
   Settings,
   MessageSquare,
+  CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTheme } from '@teispace/next-themes';
@@ -43,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { WorkspaceSwitcher } from '@/components/app/workspace-switcher';
+import { SidebarUpgradePro } from '@/components/billing/sidebar-upgrade-pro';
 import { useAuthStore } from '@/store/auth';
 import { logout } from '@/services/api/auth';
 import { sectionsForService } from '@/lib/service-sections';
@@ -240,7 +242,9 @@ export function AppSidebar() {
         ))}
       </SidebarContent>
 
-      <SidebarFooter className="border-t">
+      <SidebarUpgradePro />
+
+      <SidebarFooter className="gap-2 border-t">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -264,6 +268,11 @@ export function AppSidebar() {
                 <DropdownMenuItem asChild>
                   <Link href="/profile">
                     <Boxes className="size-4" /> Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/settings/subscription">
+                    <CreditCard className="size-4" /> Subscription
                   </Link>
                 </DropdownMenuItem>
                 {user?.isInstanceOwner && (

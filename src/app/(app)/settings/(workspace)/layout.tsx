@@ -14,6 +14,7 @@ const TABS_TRIGGER_CLASS =
 const BASE_TABS = [
   { value: 'general', href: '/settings/general', label: 'General', ownerOnly: false },
   { value: 'members', href: '/settings/members', label: 'Members', ownerOnly: false },
+  { value: 'subscription', href: '/settings/subscription', label: 'Subscription', ownerOnly: false },
   { value: 'llm', href: '/settings/llm', label: 'LLMs', ownerOnly: false },
   { value: 'audit', href: '/settings/audit', label: 'Audit', ownerOnly: true },
   { value: 'danger', href: '/settings/danger', label: 'Danger', ownerOnly: false },

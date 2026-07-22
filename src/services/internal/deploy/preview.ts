@@ -12,11 +12,13 @@ import {
 import { upsertPreviewDeployment } from '@/lib/github/deployments';
 import { githubIdsEqual } from '@/lib/github/ids';
 import type { GithubPullRequestInfo } from '@/lib/webhooks/github';
+import { ForbiddenError } from '@/lib/errors';
 import {
   assertServerCanAcceptQueuedDeployment,
   scheduleQueuedDeployment,
   ServerDeployQueueFullError,
 } from '@/services/internal/deploy/server-queue';
+import { BillingService } from '@/services/internal/billing/billing';
 import { sshPool, sshTargetForServer } from '@/lib/ssh';
 import type { GithubAppForAuth } from '@/lib/github/app';
 
@@ -247,6 +249,24 @@ export async function handlePreviewPullRequest(opts: {
     if (pr.draft) {
       skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: 'draft PR' });
       continue;
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: svc.projectId },
+      select: { workspaceId: true },
+    });
+    if (!project) {
+      skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: 'project not found' });
+      continue;
+    }
+    try {
+      await BillingService.assertProjectWritable(project.workspaceId);
+    } catch (err) {
+      if (err instanceof ForbiddenError) {
+        skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: err.message });
+        continue;
+      }
+      throw err;
     }
 
     const wildcard = svc.server?.settings?.wildcardDomain;

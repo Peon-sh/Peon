@@ -54,9 +54,16 @@ vi.mock('@/services/internal/tags/tags', () => ({
   },
 }));
 
+vi.mock('@/services/internal/billing/billing', () => ({
+  BillingService: {
+    assertProjectWritable: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { workspaceContextFor, projectAccessFor } from '@/lib/auth/access';
 import { ServiceModule } from '@/services/internal/service/service';
 import { ServerService } from '@/services/internal/server/server';
+import { BillingService } from '@/services/internal/billing/billing';
 import { createMcpAccess } from '../access';
 
 const user = { id: 'u1', email: 'a@b.com', name: 'A' } as User;
@@ -90,6 +97,23 @@ describe('createMcpAccess', () => {
     const access = createMcpAccess(ctx);
     await expect(access.projectAccess('p1')).resolves.toMatchObject({ projectId: 'p1' });
     await expect(access.projectAccess('p1', true)).rejects.toBeInstanceOf(ForbiddenError);
+    expect(BillingService.assertProjectWritable).not.toHaveBeenCalled();
+  });
+
+  it('checks billing writability on manage', async () => {
+    vi.mocked(projectAccessFor).mockResolvedValue({
+      user,
+      workspaceId: 'ws-token',
+      role: 'ADMIN',
+      projectId: 'p1',
+      canManage: true,
+    });
+    vi.mocked(BillingService.assertProjectWritable).mockRejectedValueOnce(
+      new ForbiddenError('read-only', 'BILLING_READ_ONLY'),
+    );
+    const access = createMcpAccess(ctx);
+    await expect(access.projectAccess('p1', true)).rejects.toBeInstanceOf(ForbiddenError);
+    expect(BillingService.assertProjectWritable).toHaveBeenCalledWith('ws-token');
   });
 
   it('resolves service access via project', async () => {

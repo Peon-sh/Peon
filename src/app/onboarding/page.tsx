@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowRight, Check, FolderKanban, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, CreditCard, FolderKanban, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,13 +13,18 @@ import { useAuthStore } from '@/store/auth';
 import { completeOnboarding } from '@/services/api/auth';
 import { updateWorkspace } from '@/services/api/workspace';
 import { createProject } from '@/services/api/project';
+import { getBillingSummary } from '@/services/api/billing';
+import { publicEnv } from '@/lib/env';
+import { InAppSubscribeForm } from '@/components/billing/in-app-subscribe-form';
+import { yearlyDiscountPercent } from '@/lib/billing/pricing';
 
-const STEPS = [
+const BASE_STEPS = [
   { id: 'workspace', label: 'Workspace', icon: Sparkles },
+  { id: 'plan', label: 'Plan', icon: CreditCard },
   { id: 'project', label: 'Project', icon: FolderKanban },
 ] as const;
 
-type StepId = (typeof STEPS)[number]['id'];
+type StepId = (typeof BASE_STEPS)[number]['id'];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -27,11 +32,25 @@ export default function OnboardingPage() {
   const { user, workspaces, currentWorkspaceId } = useAuthStore();
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) ?? workspaces[0] ?? null;
   const wsId = workspace?.id ?? '';
+  const billingOn = publicEnv.billingEnabled;
+
+  const steps = billingOn
+    ? BASE_STEPS
+    : BASE_STEPS.filter((s) => s.id !== 'plan');
 
   const [step, setStep] = useState<StepId>('workspace');
   const [done, setDone] = useState<Partial<Record<StepId, boolean>>>({});
+  const [planSkipped, setPlanSkipped] = useState(false);
 
-  const stepIndex = STEPS.findIndex((s) => s.id === step);
+  const { data: billing } = useQuery({
+    queryKey: ['billing', wsId],
+    queryFn: () => getBillingSummary(wsId),
+    enabled: !!wsId && billingOn,
+  });
+
+  const entitled = !billingOn || !!billing?.entitled;
+
+  const stepIndex = steps.findIndex((s) => s.id === step);
 
   const finishMut = useMutation({
     mutationFn: completeOnboarding,
@@ -68,14 +87,14 @@ export default function OnboardingPage() {
               Let&apos;s get you deploying
             </h1>
             <p className="text-muted-foreground text-sm">
-              Name your workspace, then optionally create your first project.
+              Name your workspace
+              {billingOn ? ', optionally start Peon Pro,' : ''} then create your first project.
             </p>
           </div>
         </div>
 
-        {/* Stepper */}
         <ol className="flex items-center gap-1">
-          {STEPS.map((s, i) => {
+          {steps.map((s, i) => {
             const Icon = s.icon;
             const state = done[s.id] ? 'done' : i === stepIndex ? 'current' : 'todo';
             return (
@@ -104,13 +123,12 @@ export default function OnboardingPage() {
                   </span>
                   {s.label}
                 </button>
-                {i < STEPS.length - 1 && <span className="bg-border h-px w-4 shrink-0" />}
+                {i < steps.length - 1 && <span className="bg-border h-px w-4 shrink-0" />}
               </li>
             );
           })}
         </ol>
 
-        {/* Step body */}
         <div className="bg-card rounded-lg border p-6">
           {step === 'workspace' && (
             <WorkspaceStep
@@ -118,11 +136,27 @@ export default function OnboardingPage() {
               initialName={workspace.name}
               onDone={() => {
                 setDone((d) => ({ ...d, workspace: true }));
-                setStep('project');
+                setStep(billingOn ? 'plan' : 'project');
               }}
             />
           )}
-          {step === 'project' && (
+          {step === 'plan' && billingOn && (
+            <PlanStep
+              workspaceId={wsId}
+              entitled={entitled}
+              onSubscribed={() => {
+                setDone((d) => ({ ...d, plan: true }));
+                setPlanSkipped(false);
+                setStep('project');
+              }}
+              onSkip={() => {
+                setPlanSkipped(true);
+                setDone((d) => ({ ...d, plan: true }));
+                finish();
+              }}
+            />
+          )}
+          {step === 'project' && entitled && !planSkipped && (
             <ProjectStep
               workspaceId={wsId}
               finishing={finishMut.isPending}
@@ -138,8 +172,6 @@ export default function OnboardingPage() {
     </div>
   );
 }
-
-/* ---------------------------------- Steps --------------------------------- */
 
 function StepHeading({ title, description }: { title: string; description: string }) {
   return (
@@ -191,6 +223,53 @@ function WorkspaceStep({
       <div className="mt-6 flex justify-end">
         <Button onClick={() => saveMut.mutate()} disabled={!name.trim() || saveMut.isPending}>
           Continue <ArrowRight className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PlanStep({
+  workspaceId,
+  entitled,
+  onSubscribed,
+  onSkip,
+}: {
+  workspaceId: string;
+  entitled: boolean;
+  onSubscribed: () => void;
+  onSkip: () => void;
+}) {
+  const discount = yearlyDiscountPercent();
+
+  if (entitled) {
+    return (
+      <div className="space-y-4 text-center">
+        <StepHeading
+          title="You're on Peon Pro"
+          description="Your workspace already has an active subscription. Continue to create a project."
+        />
+        <Button onClick={onSubscribed}>
+          Continue <ArrowRight className="size-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <StepHeading
+        title="Start Peon Pro"
+        description={`Project seats power your servers. Monthly $3 or yearly $30 (save ~${discount}%).`}
+      />
+      <InAppSubscribeForm
+        workspaceId={workspaceId}
+        onSuccess={onSubscribed}
+        returnPath="/onboarding"
+      />
+      <div className="mt-4 flex justify-center">
+        <Button variant="ghost" onClick={onSkip}>
+          Skip for now
         </Button>
       </div>
     </div>
