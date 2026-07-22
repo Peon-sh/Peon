@@ -23,6 +23,7 @@ import { cancelDeployment, getDeployment } from '@/services/api/deployment';
 import { deployService, rollbackService } from '@/services/api/service';
 import { invalidateServiceQueries } from '@/lib/queries/service';
 import { buildLogsDownloadFilename, buildLogsDownloadText } from '@/lib/deployment-logs';
+import { LocalDateTime } from '@/components/app/local-datetime';
 
 function downloadBuildLogs(opts: { uuid: string; logs: Parameters<typeof buildLogsDownloadText>[0] }) {
   const blob = new Blob([buildLogsDownloadText(opts.logs)], { type: 'text/plain;charset=utf-8' });
@@ -229,10 +230,7 @@ export default function DeploymentDetailPage({
         <div>
           <p className="text-muted-foreground mb-1 text-[11px]">Created</p>
           <p className="text-[12.5px]">
-            {new Date(d.createdAt).toLocaleString(undefined, {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-            })}
+            <LocalDateTime value={d.createdAt} />
           </p>
         </div>
         {duration && (

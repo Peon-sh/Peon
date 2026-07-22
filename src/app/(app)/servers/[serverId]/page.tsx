@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { SshTerminal } from '@/components/terminal/ssh-terminal';
 import { ConfirmButton } from '@/components/app/confirm';
+import { LocalDateTime } from '@/components/app/local-datetime';
 
 const TABS_LIST_CLASS =
   'h-auto w-full justify-start gap-5 rounded-none border-b bg-transparent p-0';
@@ -303,9 +304,11 @@ function GeneralTab({ server, onSaved }: { server: ServerDetail; onSaved: () => 
           <span>
             Last heartbeat{' '}
             <span className="text-foreground/85 font-medium tabular-nums">
-              {server.settings?.agentLastSeenAt
-                ? new Date(server.settings.agentLastSeenAt).toLocaleString()
-                : '—'}
+              {server.settings?.agentLastSeenAt ? (
+                <LocalDateTime value={server.settings.agentLastSeenAt} />
+              ) : (
+                '—'
+              )}
             </span>
           </span>
         </div>
@@ -1041,12 +1044,7 @@ function ServerActivityPanel({ serverId }: { serverId: string }) {
           </div>
           {runStartedAt ? (
             <div className="text-muted-foreground mt-0.5 text-[11px]">
-              Latest run started{' '}
-              {new Date(runStartedAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              })}
+              Latest run started <LocalDateTime value={runStartedAt} style="time" />
               <span className="text-muted-foreground/70"> · newest first</span>
             </div>
           ) : null}
@@ -1114,11 +1112,7 @@ function StepLine({ log, isLatest }: { log: ServerOperationLog; isLatest: boolea
           {log.message}
         </div>
         <div className="text-muted-foreground mt-0.5 text-[10px]">
-          {new Date(log.createdAt).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          })}
+          <LocalDateTime value={log.createdAt} style="time" />
         </div>
       </div>
     </div>

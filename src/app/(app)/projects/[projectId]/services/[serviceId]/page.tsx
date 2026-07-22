@@ -99,6 +99,8 @@ import { PageContainer, Panel } from '@/components/app/page';
 import { ConfirmButton } from '@/components/app/confirm';
 import { StatusBadge } from '@/components/app/status-badge';
 import { KindChip } from '@/components/app/kind-chip';
+import { LocalDateTime } from '@/components/app/local-datetime';
+import { formatLocalDateTime } from '@/lib/datetime';
 import { SshTerminal } from '@/components/terminal/ssh-terminal';
 import { useAuthStore } from '@/store/auth';
 import { publicEnv } from '@/lib/env';
@@ -433,12 +435,11 @@ function OverviewTab({
             </DetailField>
             <DetailField label="Created">
               <p>
-                {productionDeployment
-                  ? new Date(productionDeployment.createdAt).toLocaleString(undefined, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })
-                  : '—'}
+                {productionDeployment ? (
+                  <LocalDateTime value={productionDeployment.createdAt} />
+                ) : (
+                  '—'
+                )}
                 {productionDeployment?.triggeredBy ? ` by ${productionDeployment.triggeredBy}` : ''}
               </p>
             </DetailField>
@@ -538,10 +539,7 @@ function OverviewTab({
                     </a>
                   )}
                   <span className="text-muted-foreground text-[11px]">
-                    {new Date(d.createdAt).toLocaleString(undefined, {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    })}
+                    <LocalDateTime value={d.createdAt} />
                   </span>
                 </div>
               </div>
@@ -2358,7 +2356,7 @@ function DeploymentsTab({
                     </span>
                   )}
                   <span className="text-muted-foreground text-xs">
-                    {new Date(d.createdAt).toLocaleString()}
+                    <LocalDateTime value={d.createdAt} />
                   </span>
                 </Link>
                 <div className="flex shrink-0 gap-2">
@@ -2812,7 +2810,7 @@ function TaskExecutions({ serviceId, task }: { serviceId: string; task: Schedule
     <div className="text-[11px]">
       <button onClick={() => setOpen(!open)} className="text-muted-foreground hover:text-foreground transition-colors">
         {task._count.executions} execution{task._count.executions === 1 ? '' : 's'}
-        {last ? ` · last: ${last.status.toLowerCase()} ${new Date(last.startedAt).toLocaleString()}` : ''}
+        {last ? ` · last: ${last.status.toLowerCase()} ${formatLocalDateTime(last.startedAt)}` : ''}
         {open ? ' ▲' : ' ▼'}
       </button>
       {open && (
@@ -2825,7 +2823,7 @@ function TaskExecutions({ serviceId, task }: { serviceId: string; task: Schedule
                     {e.status.toLowerCase()}
                   </span>
                   <span className="text-muted-foreground">
-                    {new Date(e.startedAt).toLocaleString()}
+                    <LocalDateTime value={e.startedAt} />
                     {e.duration != null ? ` · ${(e.duration / 1000).toFixed(1)}s` : ''}
                   </span>
                 </div>
@@ -3072,7 +3070,9 @@ function BackupExecutions({ serviceId, backup }: { serviceId: string; backup: Sc
                     {e.status.toLowerCase()}
                     {e.s3Uploaded ? ' · s3' : ''}
                   </span>
-                  <span className="text-muted-foreground">{new Date(e.startedAt).toLocaleString()}</span>
+                  <span className="text-muted-foreground">
+                    <LocalDateTime value={e.startedAt} />
+                  </span>
                 </div>
                 {e.filename && (
                   <div className="mt-1 flex items-center justify-between gap-2">

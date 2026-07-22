@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { parseChatVisual, type ChatVisual } from '@/services/internal/chat/visuals';
+import { formatLocalDateTime, parseApiDate } from '@/lib/datetime';
 import { cn } from '@/lib/utils';
 
 type PeonMessageMeta = { createdAt?: string };
@@ -43,15 +44,8 @@ function visualFromPart(part: UIMessagePart<Record<string, unknown>, Record<stri
 }
 
 function formatChatTime(iso?: string): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  if (!iso || !parseApiDate(iso)) return null;
+  return formatLocalDateTime(iso, 'datetime');
 }
 
 function plainTextFromMessage(message: UIMessage): string {

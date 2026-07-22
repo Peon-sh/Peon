@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Panel } from '@/components/app/page';
 import { EmptyState } from '@/components/app/empty-state';
+import { LocalDateTime } from '@/components/app/local-datetime';
 import {
   Modal,
   ModalBody,
@@ -169,7 +170,7 @@ export default function SettingsAuditPage() {
               className="hover:bg-secondary grid min-w-[640px] w-full cursor-pointer grid-cols-[140px_minmax(0,1.4fr)_minmax(120px,0.8fr)_minmax(160px,1fr)] gap-3 px-4 py-3 text-left text-[12px] transition-colors"
             >
               <span className="text-muted-foreground">
-                {new Date(row.createdAt).toLocaleString()}
+                <LocalDateTime value={row.createdAt} />
               </span>
               <div className="min-w-0">
                 <p className="truncate font-medium">{row.summary}</p>
@@ -216,7 +217,9 @@ export default function SettingsAuditPage() {
                     <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
                       When
                     </dt>
-                    <dd>{new Date(selected.createdAt).toLocaleString()}</dd>
+                    <dd>
+                      <LocalDateTime value={selected.createdAt} />
+                    </dd>
                   </div>
                   <div className="space-y-1">
                     <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">

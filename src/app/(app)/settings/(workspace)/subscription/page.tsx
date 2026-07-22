@@ -15,7 +15,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { ConfirmButton } from '@/components/app/confirm';
+import { LocalDateTime } from '@/components/app/local-datetime';
 import { Section } from '@/components/app/page';
+import { formatLocalDateTime } from '@/lib/datetime';
 import { currentWorkspace, useAuthStore } from '@/store/auth';
 import {
   cancelBilling,
@@ -386,7 +388,7 @@ export default function SubscriptionSettingsPage() {
                 {sub.currentPeriodEnd && (
                   <PlanStat
                     label={cancelScheduled ? 'Ends' : 'Renews'}
-                    value={new Date(sub.currentPeriodEnd).toLocaleDateString()}
+                    value={<LocalDateTime value={sub.currentPeriodEnd} style="date" />}
                   />
                 )}
               </div>
@@ -457,7 +459,7 @@ export default function SubscriptionSettingsPage() {
                           <p>
                             Access continues until{' '}
                             {sub.currentPeriodEnd
-                              ? new Date(sub.currentPeriodEnd).toLocaleDateString()
+                              ? formatLocalDateTime(sub.currentPeriodEnd, 'date')
                               : 'the end of the billing period'}
                             . You won’t be charged again.
                           </p>
@@ -699,7 +701,7 @@ export default function SubscriptionSettingsPage() {
                             {' · '}
                             {formatUsdFromCents(inv.amountPaid)} {inv.currency.toUpperCase()}
                             {' · '}
-                            {new Date(inv.created * 1000).toLocaleDateString()}
+                            <LocalDateTime value={inv.created * 1000} style="date" />
                           </div>
                         </div>
                       </div>
