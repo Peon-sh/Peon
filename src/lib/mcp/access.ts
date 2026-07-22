@@ -7,6 +7,7 @@ import {
   type ProjectAccess,
 } from '@/lib/auth/access';
 import { ForbiddenError } from '@/lib/errors';
+import { BillingService } from '@/services/internal/billing/billing';
 import { ServiceModule } from '@/services/internal/service/service';
 import { ServerService } from '@/services/internal/server/server';
 import { SourceService } from '@/services/internal/sources/sources';
@@ -29,6 +30,9 @@ export function createMcpAccess(ctx: McpContext) {
     }
     if (manage && !access.canManage) {
       throw new ForbiddenError('This action requires manage access to the project.');
+    }
+    if (manage) {
+      await BillingService.assertProjectWritable(access.workspaceId);
     }
     return access;
   };

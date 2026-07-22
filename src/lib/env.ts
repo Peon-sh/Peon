@@ -65,6 +65,12 @@ const serverSchema = z.object({
   TERMINAL_SESSION_MAX_SECONDS: z.coerce.number().default(3600),
 
   SENTRY_DSN: z.string().optional(),
+
+  /** Stripe Billing (optional — absent key disables paywalls for self-host). */
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_LOOKUP_MONTHLY: z.string().default('peon_pro_monthly'),
+  STRIPE_PRICE_LOOKUP_YEARLY: z.string().default('peon_pro_yearly'),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
@@ -104,6 +110,12 @@ export function isPlatformGithubConfigured(env?: ServerEnv): boolean {
   );
 }
 
+/** True when Stripe secret is configured (Cloud billing / paywalls on). */
+export function isBillingEnabled(env?: ServerEnv): boolean {
+  const e = env ?? serverEnv();
+  return !!(e.STRIPE_SECRET_KEY && e.STRIPE_SECRET_KEY.trim().length > 0);
+}
+
 /** Public (browser-safe) config. */
 export const publicEnv = {
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
@@ -114,6 +126,9 @@ export const publicEnv = {
     process.env.NEXT_PUBLIC_DO_REFERRAL_URL ?? 'https://www.digitalocean.com/products/droplets',
   /** Optional full WebSocket URL for SSH terminal (e.g. wss://app.example.com/terminal/ws). */
   terminalWsUrl: process.env.NEXT_PUBLIC_TERMINAL_WS_URL ?? '',
+  stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+  /** Mirrors server `isBillingEnabled` for UI (publishable key present). */
+  billingEnabled: !!(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '').trim(),
 };
 
 /** Absolute URL into the marketing site (peon.sh). */

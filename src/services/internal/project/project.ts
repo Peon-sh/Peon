@@ -23,6 +23,9 @@ export const ProjectService = {
   },
 
   async create(workspaceId: string, creatorId: string, input: { name: string; description?: string }) {
+    const { BillingService } = await import('@/services/internal/billing/billing');
+    await BillingService.assertCanCreateProject(workspaceId);
+
     const project = await prisma.project.create({
       data: {
         name: input.name,

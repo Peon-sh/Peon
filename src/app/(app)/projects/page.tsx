@@ -19,17 +19,31 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PageContainer } from '@/components/app/page';
 import { EmptyState } from '@/components/app/empty-state';
+import { PlanPaywallDialog } from '@/components/billing/plan-paywall-dialog';
 import { currentWorkspace, useAuthStore } from '@/store/auth';
 import { listProjects, createProject } from '@/services/api/project';
+import { getBillingSummary } from '@/services/api/billing';
+import { publicEnv } from '@/lib/env';
 
 export default function ProjectsPage() {
   const { currentWorkspaceId } = useAuthStore();
   const workspace = currentWorkspace();
-  const canCreateProject = workspace?.role === 'OWNER' || workspace?.role === 'ADMIN';
+  const roleCanCreate = workspace?.role === 'OWNER' || workspace?.role === 'ADMIN';
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+
+  const { data: billing } = useQuery({
+    queryKey: ['billing', currentWorkspaceId],
+    queryFn: () => getBillingSummary(currentWorkspaceId!),
+    enabled: !!currentWorkspaceId && publicEnv.billingEnabled,
+  });
+
+  const billingBlocksCreate =
+    publicEnv.billingEnabled && billing && !billing.canCreateProject;
+  const showPaywallInstead = roleCanCreate && !!billingBlocksCreate;
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects', currentWorkspaceId],
@@ -41,13 +55,29 @@ export default function ProjectsPage() {
     mutationFn: () => createProject(currentWorkspaceId!, { name, description }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['projects', currentWorkspaceId] });
+      await qc.invalidateQueries({ queryKey: ['billing', currentWorkspaceId] });
       setOpen(false);
       setName('');
       setDescription('');
       toast.success('Project created');
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+    onError: (e) => {
+      const msg = e instanceof Error ? e.message : 'Failed';
+      toast.error(msg);
+      if (msg.toLowerCase().includes('peon pro') || msg.toLowerCase().includes('seat')) {
+        setOpen(false);
+        setPaywallOpen(true);
+      }
+    },
   });
+
+  const onNewProject = () => {
+    if (showPaywallInstead) {
+      setPaywallOpen(true);
+      return;
+    }
+    setOpen(true);
+  };
 
   const createDialog = (
     <Modal open={open} onOpenChange={setOpen}>
@@ -58,7 +88,12 @@ export default function ProjectsPage() {
         <ModalBody className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="p-name">Name</Label>
-            <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="my-awesome-app" />
+            <Input
+              id="p-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="my-awesome-app"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="p-desc">Description</Label>
@@ -82,6 +117,14 @@ export default function ProjectsPage() {
   return (
     <PageContainer>
       {createDialog}
+      {currentWorkspaceId && (
+        <PlanPaywallDialog
+          open={paywallOpen}
+          onOpenChange={setPaywallOpen}
+          workspaceId={currentWorkspaceId}
+          reason={billing?.entitled ? 'seats' : 'subscribe'}
+        />
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -95,9 +138,10 @@ export default function ProjectsPage() {
           title="No projects yet"
           description="projects group your apps, databases, and services. create your first one to get started."
           action={
-            canCreateProject ? (
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="size-4" /> New project
+            roleCanCreate ? (
+              <Button onClick={onNewProject}>
+                <Plus className="size-4" />{' '}
+                {showPaywallInstead ? 'Subscribe to create' : 'New project'}
               </Button>
             ) : undefined
           }
@@ -129,14 +173,15 @@ export default function ProjectsPage() {
               </div>
             </Link>
           ))}
-          {canCreateProject ? (
+          {roleCanCreate ? (
             <button
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={onNewProject}
               className="border-border-bright text-muted-foreground hover:text-phosphor hover:border-phosphor-dim grid min-h-40 place-items-center rounded-lg border border-dashed transition-colors"
             >
               <span className="flex flex-col items-center gap-2 text-[12.5px]">
-                <Plus className="size-4" /> new project
+                <Plus className="size-4" />{' '}
+                {showPaywallInstead ? 'subscribe for seats' : 'new project'}
               </span>
             </button>
           ) : null}

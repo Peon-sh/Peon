@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { decrypt } from '@/lib/crypto/encryption';
-import { UnauthorizedError } from '@/lib/errors';
+import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { isPlatformGithubConfigured, serverEnv } from '@/lib/env';
 import {
   isWatchPathsTriggered,
@@ -20,6 +20,7 @@ import {
 } from '@/services/internal/deploy/server-queue';
 import { SourceService } from '@/services/internal/sources/sources';
 import { setAuditActor } from '@/services/internal/audit/context';
+import { BillingService } from '@/services/internal/billing/billing';
 
 function decryptSecret(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -227,6 +228,24 @@ async function handlePushEvent(opts: {
     if (!isWatchPathsTriggered(svc.settings?.watchPaths, push.changedFiles)) {
       skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: 'watch paths not matched' });
       continue;
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: svc.projectId },
+      select: { workspaceId: true },
+    });
+    if (!project) {
+      skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: 'project not found' });
+      continue;
+    }
+    try {
+      await BillingService.assertProjectWritable(project.workspaceId);
+    } catch (err) {
+      if (err instanceof ForbiddenError) {
+        skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: err.message });
+        continue;
+      }
+      throw err;
     }
 
     // Respect server concurrentBuilds / queue limit (same path as UI deploy).

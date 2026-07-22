@@ -1,13 +1,14 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { NotFoundError, UnauthorizedError } from '@/lib/errors';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '@/lib/errors';
 import {
   assertServerCanAcceptQueuedDeployment,
   scheduleQueuedDeployment,
 } from '@/services/internal/deploy/server-queue';
 import { setAuditActor } from '@/services/internal/audit/context';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
+import { BillingService } from '@/services/internal/billing/billing';
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -98,6 +99,20 @@ export async function handleTokenDeployWebhook(opts: {
 
   if (svc.settings && svc.settings.isAutoDeployEnabled === false) {
     return { triggered: false, reason: 'auto-deploy disabled' };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: svc.projectId },
+    select: { workspaceId: true },
+  });
+  if (!project) throw new NotFoundError('Project not found.');
+  try {
+    await BillingService.assertProjectWritable(project.workspaceId);
+  } catch (err) {
+    if (err instanceof ForbiddenError) {
+      return { triggered: false, reason: err.message };
+    }
+    throw err;
   }
 
   const push = parseTokenWebhookPush(webhook.provider, payload);

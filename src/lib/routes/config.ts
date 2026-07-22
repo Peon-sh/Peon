@@ -30,6 +30,8 @@ export const PUBLIC_PATHS: string[] = [
   '/site.webmanifest',
   // service deploy webhooks are authenticated by token / GitHub HMAC, not session
   '/api/webhooks',
+  // Stripe Billing webhooks (signature-verified)
+  '/api/stripe/webhook',
   // GitHub App webhook path (no /api prefix)
   '/webhooks',
   // MCP server authenticates with workspace API tokens (Bearer)

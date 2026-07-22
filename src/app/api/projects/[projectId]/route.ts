@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { ok, route } from '@/lib/http/response';
-import { requireProjectAccess, requireProjectManage } from '@/lib/auth/access';
+import { requireProjectAccess, requireProjectManage, requireProjectDelete } from '@/lib/auth/access';
 import { ProjectService } from '@/services/internal/project/project';
 import { updateProjectSchema } from '@/schemas/workspace.schema';
 
@@ -22,7 +22,7 @@ export const PATCH = route(async (request: NextRequest, { params }: Ctx) => {
 
 export const DELETE = route(async (_req: NextRequest, { params }: Ctx) => {
   const { projectId } = await params;
-  await requireProjectManage(projectId);
+  await requireProjectDelete(projectId);
   await ProjectService.remove(projectId);
   return ok({ deleted: true });
 });

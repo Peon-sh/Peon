@@ -17,8 +17,8 @@ export class UnauthorizedError extends AppError {
 }
 
 export class ForbiddenError extends AppError {
-  constructor(message = 'Forbidden') {
-    super(message, 403, 'FORBIDDEN');
+  constructor(message = 'Forbidden', code = 'FORBIDDEN') {
+    super(message, 403, code);
   }
 }
 
@@ -39,5 +39,11 @@ export class ValidationError extends AppError {
   constructor(message = 'Validation failed', details?: unknown) {
     super(message, 422, 'VALIDATION_ERROR');
     this.details = details;
+  }
+}
+
+export class PaymentRequiredError extends AppError {
+  constructor(message = 'Payment required', code = 'BILLING_REQUIRED') {
+    super(message, 402, code);
   }
 }
