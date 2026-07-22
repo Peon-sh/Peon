@@ -219,6 +219,11 @@ function PayForm({ onSuccess }: { onSuccess: () => void }) {
               },
             }}
           />
+          {checkout.savedPaymentMethods && checkout.savedPaymentMethods.length > 0 ? (
+            <p className="text-muted-foreground text-xs">
+              Saved cards for this workspace are listed above. Choose one or add a new card.
+            </p>
+          ) : null}
           {error ? (
             <p className="text-destructive rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm">
               {error}
@@ -418,6 +423,10 @@ export function InAppSubscribeForm({
                   ? { billingAddress: { name: user.name, address: { country: 'US' } } }
                   : undefined,
                 elementsOptions: {
+                  savedPaymentMethod: {
+                    enableSave: 'auto',
+                    enableRedisplay: 'auto',
+                  },
                   appearance: {
                     theme: 'night',
                     variables: {

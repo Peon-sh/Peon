@@ -12,6 +12,9 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
       updateMany: vi.fn(),
     },
+    project: {
+      findUnique: vi.fn(),
+    },
     deployment: {
       create: vi.fn(),
     },
@@ -25,6 +28,12 @@ vi.mock('@/services/internal/deploy/server-queue', () => ({
   assertServerCanAcceptQueuedDeployment: vi.fn(),
   scheduleQueuedDeployment: vi.fn(),
   ServerDeployQueueFullError: class extends Error {},
+}));
+
+vi.mock('@/services/internal/billing/billing', () => ({
+  BillingService: {
+    assertProjectWritable: vi.fn().mockResolvedValue(undefined),
+  },
 }));
 
 vi.mock('@/lib/env', async () => {
@@ -46,6 +55,7 @@ import {
   assertServerCanAcceptQueuedDeployment,
   scheduleQueuedDeployment,
 } from '@/services/internal/deploy/server-queue';
+import { BillingService } from '@/services/internal/billing/billing';
 import { handleGithubAppEvents } from '@/services/internal/webhooks/github-app';
 import { SourceService } from '@/services/internal/sources/sources';
 
@@ -54,6 +64,8 @@ describe('github app installation webhooks', () => {
     vi.clearAllMocks();
     vi.mocked(prisma.githubApp.findMany).mockResolvedValue([]);
     vi.mocked(prisma.githubApp.updateMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.project.findUnique).mockResolvedValue({ workspaceId: 'ws1' } as never);
+    vi.mocked(BillingService.assertProjectWritable).mockResolvedValue(undefined);
     vi.mocked(prisma.service.findUnique).mockImplementation(async ({ where }) =>
       ({
         id: where.id,
@@ -78,6 +90,7 @@ describe('github app installation webhooks', () => {
         id: 'svc-web',
         name: 'webapp',
         kind: 'APPLICATION',
+        projectId: 'proj1',
         serverId: 'srv1',
         settings: { isAutoDeployEnabled: true, watchPaths: null },
       },
@@ -85,6 +98,7 @@ describe('github app installation webhooks', () => {
         id: 'svc-worker',
         name: 'worker',
         kind: 'APPLICATION',
+        projectId: 'proj1',
         serverId: 'srv1',
         settings: { isAutoDeployEnabled: true, watchPaths: null },
       },
@@ -113,6 +127,7 @@ describe('github app installation webhooks', () => {
     });
 
     expect(result.triggered).toBe(true);
+    expect(BillingService.assertProjectWritable).toHaveBeenCalledWith('ws1');
     expect(assertServerCanAcceptQueuedDeployment).toHaveBeenCalledTimes(2);
     expect(scheduleQueuedDeployment).toHaveBeenCalledTimes(2);
     expect(scheduleQueuedDeployment).toHaveBeenCalledWith(

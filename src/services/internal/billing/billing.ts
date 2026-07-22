@@ -119,6 +119,10 @@ export async function upsertSubscriptionFromStripe(
       canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null,
     },
   });
+
+  if (stripeSub.status === 'active' || stripeSub.status === 'trialing' || stripeSub.status === 'past_due') {
+    await ensureCustomerDefaultPaymentMethod(stripeSub).catch(() => undefined);
+  }
 }
 
 async function workspaceProjectCount(workspaceId: string): Promise<number> {
@@ -128,6 +132,54 @@ async function workspaceProjectCount(workspaceId: string): Promise<number> {
 /** Stripe Dashboard customer list label — includes workspace id for disambiguation. */
 function stripeCustomerName(workspaceName: string, workspaceId: string): string {
   return `${workspaceName} (${workspaceId})`;
+}
+
+/**
+ * Subscription-mode Checkout saves cards with allow_redisplay=limited by default,
+ * so they won't show on the next subscribe. Promote attached cards to `always`
+ * (workspace owners already manage these cards in Settings → Subscription).
+ */
+async function ensureCustomerCardsRedisplayable(customerId: string): Promise<void> {
+  const stripe = getStripe();
+  const methods = await stripe.paymentMethods.list({
+    customer: customerId,
+    type: 'card',
+    limit: 50,
+  });
+  await Promise.all(
+    methods.data
+      .filter((pm) => pm.allow_redisplay !== 'always')
+      .map((pm) =>
+        stripe.paymentMethods.update(pm.id, { allow_redisplay: 'always' }).catch(() => {
+          // Best-effort — Checkout can still fall back to allow_redisplay_filters.
+        }),
+      ),
+  );
+}
+
+/** Keep Customer.invoice_settings.default_payment_method in sync with the subscription. */
+async function ensureCustomerDefaultPaymentMethod(stripeSub: Stripe.Subscription): Promise<void> {
+  const customerId =
+    typeof stripeSub.customer === 'string' ? stripeSub.customer : stripeSub.customer?.id;
+  const defaultPm = stripeSub.default_payment_method;
+  if (!customerId || !defaultPm) return;
+
+  const pmId = typeof defaultPm === 'string' ? defaultPm : defaultPm.id;
+  const stripe = getStripe();
+  const customer = await stripe.customers.retrieve(customerId);
+  if (customer.deleted) return;
+
+  const existing =
+    typeof customer.invoice_settings?.default_payment_method === 'string'
+      ? customer.invoice_settings.default_payment_method
+      : customer.invoice_settings?.default_payment_method?.id ?? null;
+
+  if (existing === pmId) return;
+
+  await stripe.customers.update(customerId, {
+    invoice_settings: { default_payment_method: pmId },
+  });
+  await stripe.paymentMethods.update(pmId, { allow_redisplay: 'always' }).catch(() => undefined);
 }
 
 export const BillingService = {
@@ -263,6 +315,10 @@ export const BillingService = {
       });
     }
 
+    // Existing cards from prior subscriptions are often allow_redisplay=limited;
+    // promote + filter so Checkout Payment Element can list/select them.
+    await ensureCustomerCardsRedisplayable(customerId);
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       ui_mode: 'elements',
@@ -271,6 +327,12 @@ export const BillingService = {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: input.quantity }],
       allow_promotion_codes: true,
+      // Show saved cards + let the customer opt into redisplay on future checkouts.
+      saved_payment_method_options: {
+        allow_redisplay_filters: ['always', 'limited', 'unspecified'],
+        payment_method_save: 'enabled',
+        payment_method_remove: 'disabled',
+      },
       return_url: input.returnUrl,
       client_reference_id: input.workspaceId,
       metadata: {
@@ -573,9 +635,21 @@ export const BillingService = {
       throw new AppError('No Stripe customer for this workspace.', 400, 'NO_CUSTOMER');
     }
     const stripe = getStripe();
+    const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+    if (pm.customer !== sub.stripeCustomerId) {
+      throw new NotFoundError('Payment method not found for this workspace.');
+    }
     await stripe.customers.update(sub.stripeCustomerId, {
       invoice_settings: { default_payment_method: paymentMethodId },
     });
+    if (pm.allow_redisplay !== 'always') {
+      await stripe.paymentMethods.update(paymentMethodId, { allow_redisplay: 'always' });
+    }
+    if (sub.stripeSubscriptionId && isBillingEntitled(sub)) {
+      await stripe.subscriptions.update(sub.stripeSubscriptionId, {
+        default_payment_method: paymentMethodId,
+      });
+    }
     return this.listPaymentMethods(workspaceId);
   },
 
