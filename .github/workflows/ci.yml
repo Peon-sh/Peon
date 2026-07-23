@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.8.0
       - uses: actions/setup-node@v7
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.8.0
       - uses: actions/setup-node@v7
@@ -100,7 +100,7 @@ jobs:
         -----END RSA PRIVATE KEY-----
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.8.0
       - uses: actions/setup-node@v7
