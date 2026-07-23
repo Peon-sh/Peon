@@ -4,6 +4,7 @@ import { clearAuthCookie } from '@/lib/auth/cookies';
 import { resolveProfilePictureUrl } from '@/lib/auth/profile-picture';
 import { isInstanceOwnerEmail } from '@/lib/auth/instance-owner';
 import { UnauthorizedError } from '@/lib/errors';
+import { isBillingEnabled } from '@/lib/env';
 import { prisma } from '@/lib/prisma';
 import { getUserById } from '@/services/internal/auth/users';
 
@@ -23,9 +24,17 @@ export const GET = route(async () => {
     });
   }
 
+  const billingOn = isBillingEnabled();
   const memberships = await prisma.workspaceMembership.findMany({
     where: { userId: user.id },
-    include: { workspace: true },
+    include: {
+      workspace: {
+        include: {
+          subscription: true,
+          _count: { select: { projects: true } },
+        },
+      },
+    },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -40,12 +49,24 @@ export const GET = route(async () => {
       isInstanceOwner: isInstanceOwnerEmail(user.email),
       isOnboarded: user.isOnboarded,
     },
-    workspaces: memberships.map((m) => ({
-      id: m.workspace.id,
-      name: m.workspace.name,
-      slug: m.workspace.slug,
-      role: m.role,
-      personal: m.workspace.personal,
-    })),
+    workspaces: memberships.map((m) => {
+      const sub = m.workspace.subscription;
+      return {
+        id: m.workspace.id,
+        name: m.workspace.name,
+        slug: m.workspace.slug,
+        role: m.role,
+        personal: m.workspace.personal,
+        billing: {
+          enabled: billingOn,
+          status: sub?.status ?? 'inactive',
+          quantity: sub?.quantity ?? 0,
+          periodPaidQuantity: sub?.periodPaidQuantity ?? null,
+          cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
+          currentPeriodEnd: sub?.currentPeriodEnd?.toISOString() ?? null,
+          projectCount: m.workspace._count.projects,
+        },
+      };
+    }),
   });
 });

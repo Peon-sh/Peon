@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ApiRequestError } from '@/lib/http/api-error';
 
 export const api = axios.create({
   baseURL: '/api',
@@ -18,16 +19,30 @@ export interface ApiError {
   details?: unknown;
 }
 
+function toApiRequestError(err: unknown): Error {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data as Partial<ApiError> | undefined;
+    if (data?.message) {
+      return new ApiRequestError(
+        data.message,
+        typeof data.code === 'string' ? data.code : 'HTTP_ERROR',
+        err.response?.status,
+      );
+    }
+    return new ApiRequestError(err.message || 'Request failed', 'HTTP_ERROR', err.response?.status);
+  }
+  if (err instanceof Error) return err;
+  return new ApiRequestError('Request failed');
+}
+
 /** Unwrap the `data` envelope, throwing a readable error on failure. */
 export async function unwrap<T>(promise: Promise<{ data: ApiSuccess<T> | ApiError }>): Promise<T> {
   try {
     const res = await promise;
     if (res.data.success) return res.data.data;
-    throw new Error(res.data.message);
+    throw new ApiRequestError(res.data.message, res.data.code);
   } catch (err) {
-    if (axios.isAxiosError(err) && err.response?.data?.message) {
-      throw new Error(err.response.data.message);
-    }
-    throw err;
+    if (err instanceof ApiRequestError) throw err;
+    throw toApiRequestError(err);
   }
 }

@@ -305,9 +305,18 @@ export function InAppSubscribeForm({
         // webhook may still sync
       }
     }
-    await qc.invalidateQueries({ queryKey: ['billing', workspaceId] });
+    useAuthStore.getState().patchWorkspaceBilling(workspaceId, {
+      enabled: true,
+      status: 'active',
+      quantity,
+      projectCount: quantity,
+    });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['billing', workspaceId] }),
+      qc.invalidateQueries({ queryKey: ['auth', 'me'] }),
+    ]);
     onSuccess?.();
-  }, [sessionId, workspaceId, qc, onSuccess]);
+  }, [sessionId, workspaceId, quantity, qc, onSuccess]);
 
   if (!publicEnv.billingEnabled || !stripePromise) {
     return (

@@ -145,11 +145,19 @@ export default function SubscriptionSettingsPage() {
     staleTime: 15_000,
   });
 
+  const invalidateBilling = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['billing', wsId] }),
+      qc.invalidateQueries({ queryKey: ['auth', 'me'] }),
+    ]);
+  };
+
   const qtyMut = useMutation({
     mutationFn: () => updateBillingQuantity(wsId, seatQty),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['billing', wsId] });
+      useAuthStore.getState().patchWorkspaceBilling(wsId, { quantity: seatQty });
       await qc.invalidateQueries({ queryKey: ['billing-quantity-preview', wsId] });
+      await invalidateBilling();
       toast.success('Projects updated');
       setSeatsOpen(false);
     },
@@ -159,8 +167,8 @@ export default function SubscriptionSettingsPage() {
   const yearlyMut = useMutation({
     mutationFn: () => changeBillingInterval(wsId, 'year'),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['billing', wsId] });
       await qc.invalidateQueries({ queryKey: ['billing-interval-preview', wsId] });
+      await invalidateBilling();
       toast.success('Upgraded to yearly');
       setYearlyOpen(false);
     },
@@ -174,7 +182,12 @@ export default function SubscriptionSettingsPage() {
       reasonDetail?: string;
     }) => cancelBilling(wsId, input),
     onSuccess: async (_data, vars) => {
-      await qc.invalidateQueries({ queryKey: ['billing', wsId] });
+      if (vars.when === 'immediately') {
+        useAuthStore.getState().patchWorkspaceBilling(wsId, { status: 'canceled' });
+      } else {
+        useAuthStore.getState().patchWorkspaceBilling(wsId, { cancelAtPeriodEnd: true });
+      }
+      await invalidateBilling();
       toast.success('Subscription cancellation scheduled');
       periodEndCancel.reset();
       immediateCancel.reset();
@@ -187,7 +200,8 @@ export default function SubscriptionSettingsPage() {
   const resumeMut = useMutation({
     mutationFn: () => resumeBilling(wsId),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['billing', wsId] });
+      useAuthStore.getState().patchWorkspaceBilling(wsId, { cancelAtPeriodEnd: false });
+      await invalidateBilling();
       toast.success('Subscription resumed');
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),

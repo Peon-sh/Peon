@@ -26,6 +26,7 @@ import {
   updateBillingQuantity,
 } from '@/services/api/billing';
 import { formatUsdFromCents, yearlyDiscountPercent } from '@/lib/billing/pricing';
+import { useAuthStore } from '@/store/auth';
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -84,8 +85,14 @@ export function PlanPaywallDialog({
   const qtyMut = useMutation({
     mutationFn: () => updateBillingQuantity(workspaceId, seats),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['billing', workspaceId] });
-      await qc.invalidateQueries({ queryKey: ['billing-quantity-preview', workspaceId] });
+      useAuthStore.getState().patchWorkspaceBilling(workspaceId, {
+        quantity: seats,
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['billing', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['billing-quantity-preview', workspaceId] }),
+        qc.invalidateQueries({ queryKey: ['auth', 'me'] }),
+      ]);
       toast.success('Seats updated');
       setConfirmOpen(false);
       onOpenChange(false);

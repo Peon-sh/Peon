@@ -100,7 +100,10 @@ import { ConfirmButton } from '@/components/app/confirm';
 import { StatusBadge } from '@/components/app/status-badge';
 import { KindChip } from '@/components/app/kind-chip';
 import { LocalDateTime } from '@/components/app/local-datetime';
+import { AccessGateBanner } from '@/components/billing/access-gate-banner';
 import { formatLocalDateTime } from '@/lib/datetime';
+import { useCurrentWorkspaceAccess } from '@/lib/billing/workspace-access';
+import { getProject } from '@/services/api/project';
 import { SshTerminal } from '@/components/terminal/ssh-terminal';
 import { useAuthStore } from '@/store/auth';
 import { publicEnv } from '@/lib/env';
@@ -218,7 +221,11 @@ function ServiceDetail_({ params }: { params: Promise<{ projectId: string; servi
           <ConfigurationTab svc={svc} onSaved={invalidate} onSettingsChanged={promptRedeploy} />
         )}
         {section === 'environment' && (
-          <EnvironmentTab serviceId={serviceId} onSettingsChanged={promptRedeploy} />
+          <EnvironmentTab
+            serviceId={serviceId}
+            projectId={projectId}
+            onSettingsChanged={promptRedeploy}
+          />
         )}
         {section === 'domains' && svc.kind !== 'DATABASE' && (
           <DomainsTab svc={svc} onSaved={invalidate} onSettingsChanged={promptRedeploy} />
@@ -1761,13 +1768,24 @@ function DomainsTab({
 
 function EnvironmentTab({
   serviceId,
+  projectId,
   onSettingsChanged,
 }: {
   serviceId: string;
+  projectId: string;
   onSettingsChanged: () => void;
 }) {
   const qc = useQueryClient();
   const { data: vars } = useQuery({ queryKey: ['env', serviceId], queryFn: () => listEnv(serviceId) });
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => getProject(projectId),
+  });
+  const access = useCurrentWorkspaceAccess({
+    projectCanManage: project?.canManage,
+  });
+  // Manage requires project role + active plan. Gate before reveal/write API calls.
+  const canWrite = !access.blocked && project?.canManage === true;
 
   const invalidate = () =>
     Promise.all([
@@ -1807,12 +1825,14 @@ function EnvironmentTab({
 
   return (
     <div className="space-y-4">
+      {access.blocked ? <AccessGateBanner reason={access.block} /> : null}
       <EnvSection
         title="production"
         description="Used only by production deploys. The same key can exist in Preview with a different value."
         serviceId={serviceId}
         isPreview={false}
         vars={productionVars}
+        canWrite={canWrite}
         onChanged={onChanged}
         onDelete={(id) => delMut.mutate(id)}
       />
@@ -1823,6 +1843,7 @@ function EnvironmentTab({
         serviceId={serviceId}
         isPreview
         vars={previewVars}
+        canWrite={canWrite}
         onChanged={onChanged}
         onDelete={(id) => delMut.mutate(id)}
         headerExtra={
@@ -1833,7 +1854,7 @@ function EnvironmentTab({
             confirmLabel="Import"
             variant="outline"
             confirmVariant="default"
-            disabled={importMut.isPending || productionVars.length === 0}
+            disabled={!canWrite || importMut.isPending || productionVars.length === 0}
           >
             Import from production
           </ConfirmButton>
@@ -1849,6 +1870,7 @@ function EnvSection({
   serviceId,
   isPreview,
   vars,
+  canWrite,
   onChanged,
   onDelete,
   headerExtra,
@@ -1865,6 +1887,7 @@ function EnvSection({
     isBuildtime: boolean;
     isRuntime: boolean;
   }>;
+  canWrite: boolean;
   onChanged: () => void;
   onDelete: (id: string) => void;
   headerExtra?: ReactNode;
@@ -1881,7 +1904,15 @@ function EnvSection({
       <Label htmlFor={switchId} className="text-muted-foreground text-[12px] font-normal tracking-normal">
         Developer mode
       </Label>
-      <Switch id={switchId} checked={devMode} onCheckedChange={setDevMode} />
+      <Switch
+        id={switchId}
+        checked={devMode && canWrite}
+        disabled={!canWrite}
+        onCheckedChange={(checked) => {
+          if (!canWrite) return;
+          setDevMode(checked);
+        }}
+      />
     </div>
   );
 
@@ -1904,12 +1935,13 @@ function EnvSection({
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
 
-  if (devMode) {
+  if (devMode && canWrite) {
     return (
       <EnvDeveloperEditor
         title={title}
         serviceId={serviceId}
         isPreview={isPreview}
+        canWrite={canWrite}
         actions={headerActions}
         onSaved={onChanged}
       />
@@ -1923,22 +1955,36 @@ function EnvSection({
         actions={headerActions}
         contentClassName="space-y-3 p-4"
         footer={
-          <Button size="sm" onClick={() => addMut.mutate()} disabled={!key || addMut.isPending}>
+          <Button
+            size="sm"
+            onClick={() => addMut.mutate()}
+            disabled={!canWrite || !key || addMut.isPending}
+          >
             Add {isPreview ? 'preview' : 'production'} variable
           </Button>
         }
       >
         <p className="text-muted-foreground text-[12px]">{description}</p>
         <div className="flex gap-2">
-          <Input placeholder="KEY" value={key} onChange={(e) => setKey(e.target.value)} />
-          <Input placeholder="value" value={value} onChange={(e) => setValue(e.target.value)} />
+          <Input
+            placeholder="KEY"
+            value={key}
+            disabled={!canWrite}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <Input
+            placeholder="value"
+            value={value}
+            disabled={!canWrite}
+            onChange={(e) => setValue(e.target.value)}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <label className="flex items-center gap-2">
-            <Switch checked={isBuildtime} onCheckedChange={setIsBuildtime} /> Build
+            <Switch checked={isBuildtime} disabled={!canWrite} onCheckedChange={setIsBuildtime} /> Build
           </label>
           <label className="flex items-center gap-2">
-            <Switch checked={isRuntime} onCheckedChange={setIsRuntime} /> Runtime
+            <Switch checked={isRuntime} disabled={!canWrite} onCheckedChange={setIsRuntime} /> Runtime
           </label>
         </div>
       </Panel>
@@ -1950,6 +1996,7 @@ function EnvSection({
               key={v.id}
               serviceId={serviceId}
               env={v}
+              canWrite={canWrite}
               showPreviewBadge={false}
               onChanged={onChanged}
               onDelete={() => onDelete(v.id)}
@@ -1969,12 +2016,14 @@ function EnvSection({
 function EnvRow({
   serviceId,
   env,
+  canWrite,
   onChanged,
   onDelete,
   showPreviewBadge = true,
 }: {
   serviceId: string;
   env: { id: string; key: string; value: string; isPreview: boolean; isBuildtime: boolean; isRuntime: boolean };
+  canWrite: boolean;
   onChanged: () => void;
   onDelete: () => void;
   showPreviewBadge?: boolean;
@@ -1982,11 +2031,14 @@ function EnvRow({
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<{ value: string; isBuildtime: boolean; isRuntime: boolean } | null>(null);
 
-  // Fetch decrypted values only while a row is being edited.
-  const { data: revealed } = useQuery({
+  // Fetch decrypted values only while a row is being edited (and writes are allowed).
+  const {
+    data: revealed,
+    isLoading: revealLoading,
+  } = useQuery({
     queryKey: ['env-revealed', serviceId],
     queryFn: () => listEnv(serviceId, true),
-    enabled: editing,
+    enabled: editing && canWrite,
   });
   const revealedValue = revealed?.find((r) => r.id === env.id)?.value;
   // Derive the edit state lazily from the revealed value; `form` only holds
@@ -2015,7 +2067,7 @@ function EnvRow({
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
 
-  if (editing) {
+  if (editing && canWrite) {
     return (
       <div className="space-y-3 px-4 py-3">
         <div className="flex items-center gap-2">
@@ -2025,8 +2077,8 @@ function EnvRow({
         <Input
           className="font-mono"
           value={effective?.value ?? ''}
-          placeholder={effective === null ? 'loading value…' : ''}
-          disabled={effective === null}
+          placeholder={revealLoading || effective === null ? 'loading value…' : ''}
+          disabled={revealLoading || effective === null}
           onChange={(e) => effective && setForm({ ...effective, value: e.target.value })}
         />
         <div className="flex flex-wrap items-center gap-4 text-[12px]">
@@ -2066,18 +2118,20 @@ function EnvRow({
         {env.isBuildtime && <Badge variant="secondary">build</Badge>}
         {env.isRuntime && <Badge variant="secondary">runtime</Badge>}
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-          Edit
-        </Button>
-        <ConfirmButton
-          onConfirm={onDelete}
-          title={`Delete ${env.key}?`}
-          description="The variable will be removed from this service. A redeploy is required to apply."
-        >
-          <Trash2 className="size-4" /> Delete
-        </ConfirmButton>
-      </div>
+      {canWrite ? (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+          <ConfirmButton
+            onConfirm={onDelete}
+            title={`Delete ${env.key}?`}
+            description="The variable will be removed from this service. A redeploy is required to apply."
+          >
+            <Trash2 className="size-4" /> Delete
+          </ConfirmButton>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2090,12 +2144,14 @@ function EnvDeveloperEditor({
   title,
   serviceId,
   isPreview,
+  canWrite,
   onSaved,
   actions,
 }: {
   title: string;
   serviceId: string;
   isPreview: boolean;
+  canWrite: boolean;
   onSaved: () => void;
   actions?: ReactNode;
 }) {
@@ -2103,6 +2159,7 @@ function EnvDeveloperEditor({
   const { data: revealed } = useQuery({
     queryKey: ['env-revealed', serviceId],
     queryFn: () => listEnv(serviceId, true),
+    enabled: canWrite,
   });
 
   // Derive the initial document from the revealed vars; `raw` only holds
@@ -2132,7 +2189,11 @@ function EnvDeveloperEditor({
       actions={actions}
       contentClassName="space-y-2 p-4"
       footer={
-        <Button size="sm" onClick={() => saveMut.mutate()} disabled={doc === null || saveMut.isPending}>
+        <Button
+          size="sm"
+          onClick={() => saveMut.mutate()}
+          disabled={!canWrite || doc === null || saveMut.isPending}
+        >
           Save all
         </Button>
       }
@@ -2145,7 +2206,7 @@ function EnvDeveloperEditor({
         className="max-h-[60vh] min-h-72 overflow-y-auto font-mono text-[12px] break-all [field-sizing:fixed]"
         value={doc ?? ''}
         placeholder={doc === null ? 'loading variables…' : 'KEY=value'}
-        disabled={doc === null}
+        disabled={!canWrite || doc === null}
         onChange={(e) => setRaw(e.target.value)}
         spellCheck={false}
       />
