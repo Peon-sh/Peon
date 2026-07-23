@@ -11,6 +11,7 @@ We have a few guidelines to follow when contributing to this project:
 - [Development](#development)
 - [Build](#build)
 - [Pull Request](#pull-request)
+- [Security](#security)
 - [Important Considerations](#important-considerations-for-pull-requests)
 - [Templates](#templates)
 - [Docs & Website](#docs--website)
@@ -176,6 +177,10 @@ docker compose --profile full up -d    # containerized app + worker + schedule +
 - Provide a clear, concise PR description. Screenshots or a short video for UI changes are awesome.
 - If your PR fixes an open issue, reference it (e.g. `Fixes #123`).
 - Schema changes must include a Prisma migration (`pnpm db:migrate` / `prisma migrate dev --name your_change`).
+
+## Security
+
+Report vulnerabilities privately — see [SECURITY.md](./SECURITY.md). Never commit `.env`, API keys, or production credentials. Open PRs against **`staging`** only; `main` is maintainer-managed.
 
 ## Important Considerations for Pull Requests
 
