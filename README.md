@@ -6,6 +6,8 @@ Peon is the open alternative to Vercel, Heroku, and managed PaaS: git push to de
 
 **Website:** [peon.sh](https://peon.sh) · **App:** [app.peon.sh](https://app.peon.sh)
 
+Security reports: see [SECURITY.md](./SECURITY.md).
+
 ## Author
 
 **[Hiren Kavad (hironate)](https://github.com/hironate)**

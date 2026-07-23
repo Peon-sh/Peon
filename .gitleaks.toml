@@ -1,0 +1,20 @@
+# Gitleaks config — allow known test/fixture false positives only.
+# https://github.com/gitleaks/gitleaks
+
+title = "peon-app"
+
+[allowlist]
+description = "Deterministic test keys and marketplace template noise (not production secrets)"
+paths = [
+  '''(^|/)src/lib/templates/service-templates\.json$''',
+  '''(^|/)src/lib/github/__tests__/''',
+  '''(^|/)src/services/internal/server/agent\.test\.ts$''',
+  '''(^|/)src/lib/aws/__tests__/''',
+]
+regexTarget = "match"
+regexes = [
+  '''0123456789abcdef0123456789abcdef''',
+  '''MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=''',
+  '''ZGV2LW9ubHktMzJieXRlLWtleS1jaGFuZ2UtbWUtMDEyMzQ1Ng==''',
+  '''test-jwt-secret-at-least-32-chars!!''',
+]

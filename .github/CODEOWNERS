@@ -1,0 +1,15 @@
+# Default owners for critical paths. Reviews are requested on matching PRs.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*       @hironate
+
+/.github/          @hironate
+/.env.example      @hironate
+/SECURITY.md       @hironate
+/scripts/          @hironate
+
+/src/lib/auth/     @hironate
+/src/lib/billing/  @hironate
+/src/lib/stripe/   @hironate
+/src/app/api/      @hironate
+/prisma/           @hironate
