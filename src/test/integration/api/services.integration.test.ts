@@ -125,17 +125,40 @@ describe('service API', () => {
       ).status,
     ).toBe(200);
     expect((await http.post(`${backupPath}/run`)).status).toBe(200);
-    expect((await http.get(`${backupPath}/executions`)).status).toBe(200);
+    const executions = await http.get(`${backupPath}/executions`);
+    expect(executions.status).toBe(200);
+    expect(executions.body.data.items).toBeDefined();
+    expect(executions.body.data.nextCursor).toBeNull();
+
+    await prisma.scheduledBackupExecution.create({
+      data: {
+        backupId: backup.body.data.id as string,
+        status: 'SUCCESS',
+        filename: 'backup.sql',
+        dumpAll: false,
+        finishedAt: new Date(),
+      },
+    });
+    const restore = await http.post(`${path}/backups/restore`, {
+      body: { filename: 'backup.sql' },
+    });
+    expect(restore.status).toBe(200);
+    expect(restore.body.data.queued).toBe(true);
+
     expect(
-      (await http.post(`${path}/backups/restore`, { body: { filename: 'backup.sql' } })).status,
-    ).toBe(200);
+      (
+        await http.get(`${path}/backups/download`, {
+          searchParams: { filename: 'missing.sql' },
+        })
+      ).status,
+    ).toBe(404);
     expect(
       (
         await http.get(`${path}/backups/download`, {
           searchParams: { filename: 'backup.sql' },
         })
       ).status,
-    ).toBe(404);
+    ).toBe(200);
     expect((await http.delete(backupPath)).status).toBe(200);
 
     expect((await http.get(`${path}/previews`)).status).toBe(200);
