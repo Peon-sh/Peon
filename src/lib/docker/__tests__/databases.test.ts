@@ -4,6 +4,7 @@ import {
   resolveDatabaseDataPath,
   POSTGRES_DATA_PATH_LEGACY,
   POSTGRES_DATA_PATH_V18,
+  DATABASE_ENGINES,
 } from '../databases';
 
 describe('parsePostgresMajorVersion', () => {
@@ -50,5 +51,36 @@ describe('resolveDatabaseDataPath', () => {
   it('leaves non-Postgres engines unchanged', () => {
     expect(resolveDatabaseDataPath('MYSQL', 'mysql:8')).toBe('/var/lib/mysql');
     expect(resolveDatabaseDataPath('REDIS', 'redis:7-alpine')).toBe('/data');
+  });
+});
+
+describe('dumpCommand dumpAll', () => {
+  const creds = {
+    username: 'peon',
+    password: 'secret',
+    database: 'appdb',
+    rootPassword: 'rootsecret',
+  };
+
+  it('defaults Postgres to single-DB dump when dumpAll is unset', () => {
+    expect(DATABASE_ENGINES.POSTGRESQL.dumpCommand?.(creds)).toBe('pg_dump -U peon appdb');
+  });
+
+  it('uses pg_dumpall for Postgres when dumpAll is true', () => {
+    expect(DATABASE_ENGINES.POSTGRESQL.dumpCommand?.(creds, { dumpAll: true })).toBe(
+      'pg_dumpall -U peon',
+    );
+    expect(DATABASE_ENGINES.POSTGRESQL.restoreCommand?.(creds, { dumpAll: true })).toBe(
+      'psql -U peon -d postgres',
+    );
+  });
+
+  it('uses --all-databases for MySQL/MariaDB when dumpAll is true', () => {
+    expect(DATABASE_ENGINES.MYSQL.dumpCommand?.(creds, { dumpAll: true })).toBe(
+      'mysqldump -u root -prootsecret --all-databases',
+    );
+    expect(DATABASE_ENGINES.MARIADB.dumpCommand?.(creds, { dumpAll: true })).toBe(
+      'mariadb-dump -u root -prootsecret --all-databases',
+    );
   });
 });

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Suspense, use, useEffect, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Trash2,
@@ -77,6 +77,7 @@ import {
   runBackupNow,
   listBackupExecutions,
   restoreBackup,
+  downloadBackup,
   type ServiceDetail,
   type ScheduledTaskItem,
   type ServiceConfigField,
@@ -98,6 +99,7 @@ import {
 import { PageContainer, Panel } from '@/components/app/page';
 import { ConfirmButton } from '@/components/app/confirm';
 import { StatusBadge } from '@/components/app/status-badge';
+import { RunOutput } from '@/components/app/run-output';
 import { KindChip } from '@/components/app/kind-chip';
 import { LocalDateTime } from '@/components/app/local-datetime';
 import { AccessGateBanner } from '@/components/billing/access-gate-banner';
@@ -2875,24 +2877,21 @@ function TaskExecutions({ serviceId, task }: { serviceId: string; task: Schedule
         {open ? ' ▲' : ' ▼'}
       </button>
       {open && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 space-y-2">
           {executions?.length ? (
             executions.map((e) => (
-              <div key={e.id} className="bg-secondary/50 rounded-md px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <span className={e.status === 'SUCCESS' ? 'text-phosphor' : e.status === 'FAILED' ? 'text-destructive' : ''}>
-                    {e.status.toLowerCase()}
-                  </span>
-                  <span className="text-muted-foreground">
+              <div
+                key={e.id}
+                className="border-border/60 bg-secondary/30 space-y-2 rounded-lg border px-3 py-2.5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <StatusBadge status={e.status} />
+                  <span className="text-muted-foreground shrink-0 tabular-nums">
                     <LocalDateTime value={e.startedAt} />
                     {e.duration != null ? ` · ${(e.duration / 1000).toFixed(1)}s` : ''}
                   </span>
                 </div>
-                {e.message && (
-                  <pre className="text-muted-foreground mt-1 max-h-32 overflow-auto font-mono text-[10.5px] whitespace-pre-wrap">
-                    {e.message}
-                  </pre>
-                )}
+                <RunOutput message={e.message} />
               </div>
             ))
           ) : (
@@ -2918,10 +2917,11 @@ function BackupsTab({ serviceId }: { serviceId: string }) {
     enabled: !!workspaceId,
   });
   const [frequency, setFrequency] = useState('0 0 * * *');
+  const [dumpAll, setDumpAll] = useState(true);
   const invalidate = () => qc.invalidateQueries({ queryKey: ['backups', serviceId] });
 
   const addMut = useMutation({
-    mutationFn: () => createBackup(serviceId, { frequency }),
+    mutationFn: () => createBackup(serviceId, { frequency, dumpAll }),
     onSuccess: async () => {
       await invalidate();
       toast.success('Backup schedule created');
@@ -2951,7 +2951,21 @@ function BackupsTab({ serviceId }: { serviceId: string }) {
               onChange={(e) => setFrequency(e.target.value)}
             />
             <p className="text-muted-foreground text-[11px]">
-              A logical dump of the database is taken on this schedule and stored on the server (optionally uploaded to S3).
+              Logical dumps are stored on the server and can be downloaded or restored from previous runs.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Backup scope</Label>
+            <div className="flex items-center gap-3 pt-1">
+              <Switch checked={dumpAll} onCheckedChange={setDumpAll} id="backup-dump-all" />
+              <Label htmlFor="backup-dump-all" className="font-normal text-[12.5px]">
+                Entire instance (all databases)
+              </Label>
+            </div>
+            <p className="text-muted-foreground text-[11px]">
+              {dumpAll
+                ? 'Uses pg_dumpall / --all-databases so every database in this service is included.'
+                : 'Dumps only the configured database name for this service.'}
             </p>
           </div>
         </div>
@@ -3024,6 +3038,7 @@ function BackupEditor({
   });
 
   const saveS3 = val('saveS3', false);
+  const dumpAll = val('dumpAll', true);
 
   return (
     <Panel
@@ -3031,6 +3046,11 @@ function BackupEditor({
         <span className="inline-flex items-center gap-2 font-mono">
           {backup.frequency}
           {!backup.enabled && <Badge variant="outline" className="text-[10px]">disabled</Badge>}
+          {backup.dumpAll ? (
+            <Badge variant="outline" className="text-[10px]">all dbs</Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px]">single db</Badge>
+          )}
           {backup.saveS3 && <Badge variant="outline" className="text-[10px]">S3</Badge>}
         </span>
       }
@@ -3058,7 +3078,7 @@ function BackupEditor({
         </>
       }
     >
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
           <Label>Frequency (cron)</Label>
           <Input
@@ -3074,6 +3094,15 @@ function BackupEditor({
             value={String(val('retentionAmountLocal', 7))}
             onChange={(e) => set('retentionAmountLocal', Number(e.target.value) || 0)}
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Entire instance</Label>
+          <div className="flex items-center gap-3 pt-1">
+            <Switch checked={dumpAll} onCheckedChange={(c) => set('dumpAll', c)} />
+            <span className="text-muted-foreground text-[11px]">
+              {dumpAll ? 'all databases' : 'configured DB only'}
+            </span>
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label>Upload to S3</Label>
@@ -3100,57 +3129,101 @@ function BackupEditor({
   );
 }
 
+function formatBackupSize(size: string | null): string | null {
+  if (!size) return null;
+  const n = Number(size);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function BackupExecutions({ serviceId, backup }: { serviceId: string; backup: ScheduledBackupItem }) {
-  const [open, setOpen] = useState(false);
-  const { data: executions } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
     queryKey: ['backup-executions', backup.id],
-    queryFn: () => listBackupExecutions(serviceId, backup.id),
-    enabled: open,
-    refetchInterval: open ? 5000 : false,
+    queryFn: ({ pageParam }) =>
+      listBackupExecutions(serviceId, backup.id, {
+        limit: 5,
+        cursor: pageParam,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+    refetchInterval: 5000,
   });
+
+  const items = data?.pages.flatMap((p) => p.items) ?? [];
 
   const restoreMut = useMutation({
     mutationFn: (filename: string) => restoreBackup(serviceId, filename),
-    onSuccess: () => toast.success('Restore completed'),
+    onSuccess: () => toast.success('Restore queued - the worker will apply it shortly'),
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Restore failed'),
   });
 
+  const downloadMut = useMutation({
+    mutationFn: (filename: string) => downloadBackup(serviceId, filename),
+    onSuccess: () => toast.success('Download started'),
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Download failed'),
+  });
+
   return (
-    <div className="text-[11px]">
-      <button onClick={() => setOpen(!open)} className="text-muted-foreground hover:text-foreground transition-colors">
-        {backup._count.executions} execution{backup._count.executions === 1 ? '' : 's'}
-        {open ? ' ▲' : ' ▼'}
-      </button>
-      {open && (
-        <div className="mt-2 space-y-1.5">
-          {executions?.length ? (
-            executions.map((e) => (
+    <div className="space-y-2 text-[11px]">
+      <div className="text-muted-foreground font-medium tracking-wide uppercase">
+        Previous backups ({backup._count.executions})
+      </div>
+      <div className="space-y-1.5">
+        {isLoading && items.length === 0 ? (
+          <div className="text-muted-foreground">loading…</div>
+        ) : items.length ? (
+          <>
+            {items.map((e) => (
               <div key={e.id} className="bg-secondary/50 rounded-md px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className={e.status === 'SUCCESS' ? 'text-phosphor' : e.status === 'FAILED' ? 'text-destructive' : ''}>
                     {e.status.toLowerCase()}
+                    {e.dumpAll ? ' · all dbs' : e.databaseName ? ` · ${e.databaseName}` : ''}
                     {e.s3Uploaded ? ' · s3' : ''}
+                    {formatBackupSize(e.size) ? ` · ${formatBackupSize(e.size)}` : ''}
                   </span>
                   <span className="text-muted-foreground">
                     <LocalDateTime value={e.startedAt} />
                   </span>
                 </div>
                 {e.filename && (
-                  <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-muted-foreground truncate font-mono text-[10.5px]">{e.filename}</span>
                     {e.status === 'SUCCESS' && (
-                      <ConfirmButton
-                        onConfirm={() => restoreMut.mutate(e.filename!)}
-                        title="Restore this backup?"
-                        description="Existing data in the database will be replaced with the contents of this dump. This cannot be undone."
-                        confirmLabel="Restore"
-                        variant="outline"
-                        confirmVariant="default"
-                        size="sm"
-                        disabled={restoreMut.isPending}
-                      >
-                        Restore
-                      </ConfirmButton>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={downloadMut.isPending}
+                          onClick={() => downloadMut.mutate(e.filename!)}
+                        >
+                          <Download className="size-3.5" /> Download
+                        </Button>
+                        <ConfirmButton
+                          onConfirm={() => restoreMut.mutate(e.filename!)}
+                          title="Queue restore of this backup?"
+                          description={
+                            e.dumpAll
+                              ? 'The restore will be queued and applied by the worker. All databases in this instance may be overwritten. This cannot be undone.'
+                              : 'The restore will be queued and applied by the worker. Existing data in the database may be overwritten. This cannot be undone.'
+                          }
+                          confirmLabel="Queue restore"
+                          variant="outline"
+                          confirmVariant="default"
+                          size="sm"
+                          disabled={restoreMut.isPending}
+                        >
+                          Restore
+                        </ConfirmButton>
+                      </div>
                     )}
                   </div>
                 )}
@@ -3160,12 +3233,23 @@ function BackupExecutions({ serviceId, backup }: { serviceId: string; backup: Sc
                   </pre>
                 )}
               </div>
-            ))
-          ) : (
-            <div className="text-muted-foreground">no executions yet.</div>
-          )}
-        </div>
-      )}
+            ))}
+            {hasNextPage ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
+              >
+                {isFetchingNextPage ? 'Loading…' : 'Load more'}
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <div className="text-muted-foreground">no previous backups yet. run “Backup now” to create one.</div>
+        )}
+      </div>
     </div>
   );
 }

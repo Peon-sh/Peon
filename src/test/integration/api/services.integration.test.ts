@@ -115,11 +115,12 @@ describe('service API', () => {
       body: { frequency: '0 0 * * *', enabled: true, saveS3: false },
     });
     expect(backup.status).toBe(201);
+    expect(backup.body.data.dumpAll).toBe(true);
     const backupPath = `${path}/backups/${backup.body.data.id as string}`;
     expect(
       (
         await http.patch(backupPath, {
-          body: { frequency: '0 1 * * *', enabled: true, saveS3: false },
+          body: { frequency: '0 1 * * *', enabled: true, saveS3: false, dumpAll: false },
         })
       ).status,
     ).toBe(200);
@@ -128,6 +129,13 @@ describe('service API', () => {
     expect(
       (await http.post(`${path}/backups/restore`, { body: { filename: 'backup.sql' } })).status,
     ).toBe(200);
+    expect(
+      (
+        await http.get(`${path}/backups/download`, {
+          searchParams: { filename: 'backup.sql' },
+        })
+      ).status,
+    ).toBe(404);
     expect((await http.delete(backupPath)).status).toBe(200);
 
     expect((await http.get(`${path}/previews`)).status).toBe(200);

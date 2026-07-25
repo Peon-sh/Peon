@@ -8,6 +8,11 @@ export interface DbCredentialField {
   isPassword?: boolean;
 }
 
+export interface DumpOptions {
+  /** When true, dump/restore every database in the instance (default for schedules). */
+  dumpAll?: boolean;
+}
+
 export interface DatabaseEngineSpec {
   engine: DatabaseEngine;
   label: string;
@@ -25,9 +30,9 @@ export interface DatabaseEngineSpec {
   /** Builds a connection URL, or null when the engine has no URL scheme. */
   connectionUrl?: (creds: DbCredentials, host: string, port: number) => string;
   /** Shell command (inside container) to produce a logical dump to stdout. */
-  dumpCommand?: (creds: DbCredentials) => string;
+  dumpCommand?: (creds: DbCredentials, opts?: DumpOptions) => string;
   /** Command to restore from a dump piped over stdin. */
-  restoreCommand?: (creds: DbCredentials) => string;
+  restoreCommand?: (creds: DbCredentials, opts?: DumpOptions) => string;
 }
 
 export interface DbCredentials {
@@ -87,8 +92,14 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
     ],
     connectionUrl: (c, host, port) =>
       `postgres://${c.username ?? 'postgres'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'postgres'}`,
-    dumpCommand: (c) => `pg_dump -U ${c.username ?? 'postgres'} ${c.database ?? 'postgres'}`,
-    restoreCommand: (c) => `psql -U ${c.username ?? 'postgres'} ${c.database ?? 'postgres'}`,
+    dumpCommand: (c, opts) =>
+      opts?.dumpAll
+        ? `pg_dumpall -U ${c.username ?? 'postgres'}`
+        : `pg_dump -U ${c.username ?? 'postgres'} ${c.database ?? 'postgres'}`,
+    restoreCommand: (c, opts) =>
+      opts?.dumpAll
+        ? `psql -U ${c.username ?? 'postgres'} -d postgres`
+        : `psql -U ${c.username ?? 'postgres'} ${c.database ?? 'postgres'}`,
   },
   MYSQL: {
     engine: 'MYSQL',
@@ -110,8 +121,16 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
     ],
     connectionUrl: (c, host, port) =>
       `mysql://${c.username ?? 'mysql'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'app'}`,
-    dumpCommand: (c) => `mysqldump -u root -p${c.rootPassword ?? c.password} ${c.database ?? 'app'}`,
-    restoreCommand: (c) => `mysql -u root -p${c.rootPassword ?? c.password} ${c.database ?? 'app'}`,
+    dumpCommand: (c, opts) => {
+      const auth = `-u root -p${c.rootPassword ?? c.password}`;
+      return opts?.dumpAll
+        ? `mysqldump ${auth} --all-databases`
+        : `mysqldump ${auth} ${c.database ?? 'app'}`;
+    },
+    restoreCommand: (c, opts) => {
+      const auth = `-u root -p${c.rootPassword ?? c.password}`;
+      return opts?.dumpAll ? `mysql ${auth}` : `mysql ${auth} ${c.database ?? 'app'}`;
+    },
   },
   MARIADB: {
     engine: 'MARIADB',
@@ -133,8 +152,16 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
     ],
     connectionUrl: (c, host, port) =>
       `mysql://${c.username ?? 'mariadb'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'app'}`,
-    dumpCommand: (c) => `mariadb-dump -u root -p${c.rootPassword ?? c.password} ${c.database ?? 'app'}`,
-    restoreCommand: (c) => `mariadb -u root -p${c.rootPassword ?? c.password} ${c.database ?? 'app'}`,
+    dumpCommand: (c, opts) => {
+      const auth = `-u root -p${c.rootPassword ?? c.password}`;
+      return opts?.dumpAll
+        ? `mariadb-dump ${auth} --all-databases`
+        : `mariadb-dump ${auth} ${c.database ?? 'app'}`;
+    },
+    restoreCommand: (c, opts) => {
+      const auth = `-u root -p${c.rootPassword ?? c.password}`;
+      return opts?.dumpAll ? `mariadb ${auth}` : `mariadb ${auth} ${c.database ?? 'app'}`;
+    },
   },
   MONGODB: {
     engine: 'MONGODB',
@@ -154,6 +181,7 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
     ],
     connectionUrl: (c, host, port) =>
       `mongodb://${c.username ?? 'root'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'app'}?authSource=admin`,
+    // mongodump/mongorestore without --db always cover the whole instance.
     dumpCommand: () => `mongodump --archive`,
     restoreCommand: () => `mongorestore --archive`,
   },

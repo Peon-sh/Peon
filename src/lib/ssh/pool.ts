@@ -191,6 +191,18 @@ class SshPool {
     });
   }
 
+  /** Download a remote file to a local path over SFTP. */
+  async getFile(target: SshTarget, remotePath: string, localPath: string): Promise<void> {
+    if (isE2eMode()) {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(localPath, '-- e2e backup stub\n');
+      return;
+    }
+    await this.withFreshConnection(target, async (ssh) => {
+      await ssh.getFile(localPath, remotePath);
+    });
+  }
+
   /** Verify connectivity. Returns false on any SSH failure. */
   async ping(target: SshTarget): Promise<boolean> {
     try {

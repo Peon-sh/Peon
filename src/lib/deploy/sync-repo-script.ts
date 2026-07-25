@@ -6,10 +6,13 @@ export function buildGitSyncScript(opts: {
   gitSshPrefix?: string;
   keyCleanup?: string;
   forceClean?: boolean;
+  /** When set (e.g. rollback), fetch and check out this commit instead of the branch tip. */
+  commitSha?: string | null;
 }): string {
   const src = JSON.stringify(opts.src);
   const repo = JSON.stringify(opts.repo);
   const branch = JSON.stringify(opts.branch);
+  const commitSha = JSON.stringify((opts.commitSha ?? '').trim());
   const gitSshPrefix = opts.gitSshPrefix ?? '';
   const keyCleanup = opts.keyCleanup ?? 'true';
   const forceClean = opts.forceClean ? '1' : '0';
@@ -19,6 +22,7 @@ set -e
 SRC=${src}
 REPO_URL=${repo}
 BRANCH=${branch}
+COMMIT_SHA=${commitSha}
 FORCE_CLEAN=${forceClean}
 
 if [ "$FORCE_CLEAN" = "1" ] && [ -d "$SRC" ]; then
@@ -26,7 +30,24 @@ if [ "$FORCE_CLEAN" = "1" ] && [ -d "$SRC" ]; then
   rm -rf "$SRC"
 fi
 
-if [ -d "$SRC/.git" ]; then
+if [ -n "$COMMIT_SHA" ]; then
+  echo "Checking out commit $COMMIT_SHA…"
+  if [ -d "$SRC/.git" ]; then
+    cd "$SRC"
+    ${gitSshPrefix}git remote set-url origin "$REPO_URL"
+  else
+    rm -rf "$SRC"
+    mkdir -p "$SRC"
+    cd "$SRC"
+    git init
+    git remote add origin "$REPO_URL"
+  fi
+  # Shallow-fetch the exact commit (GitHub/GitLab support fetch-by-sha).
+  ${gitSshPrefix}git fetch --depth 1 origin "$COMMIT_SHA"
+  git checkout -f FETCH_HEAD
+  git reset --hard FETCH_HEAD
+  git clean -fd
+elif [ -d "$SRC/.git" ]; then
   cd "$SRC"
   ${gitSshPrefix}git remote set-url origin "$REPO_URL"
   # Fetch the branch tip explicitly — shallow clones can leave a stale origin/<branch>.

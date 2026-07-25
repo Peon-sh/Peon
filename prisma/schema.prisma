@@ -899,7 +899,8 @@ model ScheduledBackup {
   saveS3      Boolean @default(false)
   s3StorageId String?
   disableLocal Boolean @default(false)
-  dumpAll     Boolean @default(false)
+  /** When true, dump every database in the instance (pg_dumpall / --all-databases). */
+  dumpAll     Boolean @default(true)
   databasesToBackup String?
   timeout     Int     @default(3600)
   retentionAmountLocal Int @default(7)
@@ -925,6 +926,8 @@ model ScheduledBackupExecution {
   size      String?
   filename  String?
   databaseName String?
+  /** Mirrors the schedule's dumpAll at run time (for restore). */
+  dumpAll   Boolean         @default(true)
   s3Uploaded Boolean        @default(false)
   startedAt DateTime        @default(now())
   finishedAt DateTime?

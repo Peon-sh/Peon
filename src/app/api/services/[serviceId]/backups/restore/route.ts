@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ok, route } from '@/lib/http/response';
 import { requireProjectManage } from '@/lib/auth/access';
 import { ServiceModule } from '@/services/internal/service/service';
-import { runRestore } from '@/services/internal/backup/engine';
+import { BackupModule } from '@/services/internal/backup/module';
 
 type Ctx = { params: Promise<{ serviceId: string }> };
 
@@ -14,6 +14,5 @@ export const POST = route(async (request: NextRequest, { params }: Ctx) => {
   const projectId = await ServiceModule.projectIdFor(serviceId);
   await requireProjectManage(projectId);
   const { filename } = restoreSchema.parse(await request.json());
-  await runRestore(serviceId, filename);
-  return ok({ restored: true, filename });
+  return ok(await BackupModule.queueRestore(serviceId, filename));
 });

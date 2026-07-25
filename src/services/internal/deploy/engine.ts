@@ -72,7 +72,7 @@ async function syncRepo(
   svc: FullService,
   dir: string,
   log: (m: string) => void,
-  opts: { forceClean?: boolean; branch?: string | null } = {},
+  opts: { forceClean?: boolean; branch?: string | null; commitSha?: string | null } = {},
 ) {
   let repo = svc.gitRepository!;
   const branch = opts.branch || svc.gitBranch || 'main';
@@ -100,6 +100,10 @@ async function syncRepo(
     keyCleanup = `rm -f ${keyPath}`;
   }
 
+  if (opts.commitSha?.trim()) {
+    log(`Rolling back / pinning to commit ${opts.commitSha.trim().slice(0, 12)}…`);
+  }
+
   const script = buildGitSyncScript({
     src,
     repo,
@@ -107,6 +111,7 @@ async function syncRepo(
     gitSshPrefix,
     keyCleanup,
     forceClean: opts.forceClean,
+    commitSha: opts.commitSha,
   });
   const res = await sshPool.execStream(target, script, (c) => log(c.trimEnd()));
   if (res.code !== 0) throw new Error('Git clone/pull failed.');
@@ -617,6 +622,8 @@ export async function runDeployment(deploymentId: string): Promise<void> {
           const sha = await syncRepo(target, svc, dir, log, {
             forceClean: deployment.forceRebuild || isPreview,
             branch: isPreview ? preview?.headBranch : null,
+            // Rollback (and any pinned deploy) must check out this SHA, not branch tip.
+            commitSha: deployment.commitSha,
           });
           await assertNotCancelled(deploymentId);
           // Only persist commit metadata while still in progress (cancel may have won the race).
