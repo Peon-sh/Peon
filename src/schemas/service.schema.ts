@@ -1,9 +1,20 @@
 import { z } from 'zod';
+import { isSafeGitRefName, MAX_GIT_REF_LENGTH } from '@/lib/git/ref';
 
 /**
  * Create/update validation for services.
  * Kind ↔ buildPack invariants: see docs/SERVICE_KIND_INVARIANTS.md
  */
+
+/** A branch name reaches git on the deploy host — keep it a plain refname. */
+const gitBranchSchema = z
+  .string()
+  .min(1)
+  .max(MAX_GIT_REF_LENGTH)
+  .refine(isSafeGitRefName, {
+    message: 'Branch name contains forbidden characters.',
+  });
+
 export const serviceKindEnum = z.enum([
   'GIT_APP',
   'DOCKERFILE',
@@ -47,7 +58,7 @@ const gitFields = {
   gitRepository: z.string().min(1),
   /** GitHub numeric repository id for App webhook matching. */
   repositoryProjectId: z.number().int().positive().optional(),
-  gitBranch: z.string().min(1).default('main'),
+  gitBranch: gitBranchSchema.default('main'),
   gitSourceType: gitSourceTypeEnum.default('PUBLIC'),
   githubAppId: z.string().min(1).optional(),
   gitlabAppId: z.string().min(1).optional(),
@@ -117,7 +128,7 @@ export const updateServiceSchema = z.object({
   buildPack: buildPackEnum.nullable().optional(),
   gitRepository: z.string().nullable().optional(),
   repositoryProjectId: z.number().int().positive().nullable().optional(),
-  gitBranch: z.string().nullable().optional(),
+  gitBranch: gitBranchSchema.nullable().optional(),
   gitSourceType: gitSourceTypeEnum.nullable().optional(),
   githubAppId: z.string().nullable().optional(),
   gitlabAppId: z.string().nullable().optional(),

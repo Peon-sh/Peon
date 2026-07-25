@@ -35,6 +35,7 @@ import {
 } from '@/lib/deploy/readiness';
 import { resolveComposeStartCommand } from '@/lib/deploy/start-command';
 import { buildGitSyncScript } from '@/lib/deploy/sync-repo-script';
+import { assertSafeGitRefName } from '@/lib/git/ref';
 import { authenticatedGithubCloneUrl, resolveGithubAuth } from '@/lib/github/app';
 import { makeDeploymentLogger } from '@/services/internal/deploy/logs';
 import { captureDeploymentPreview } from '@/services/internal/deploy/screenshot';
@@ -75,7 +76,9 @@ async function syncRepo(
   opts: { forceClean?: boolean; branch?: string | null; commitSha?: string | null } = {},
 ) {
   let repo = svc.gitRepository!;
-  const branch = opts.branch || svc.gitBranch || 'main';
+  // Single choke point for every deploy (production and preview): refuse a ref
+  // that could be interpreted by the remote shell or by git as an option/refspec.
+  const branch = assertSafeGitRefName(opts.branch || svc.gitBranch || 'main');
   const src = `${dir}/src`;
 
   // For private repos accessed via a deploy key, write the key to the server and

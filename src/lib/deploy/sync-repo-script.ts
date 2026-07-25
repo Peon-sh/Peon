@@ -1,4 +1,12 @@
-/** Build the remote shell script that clones or updates a service git checkout. */
+import { shellSingleQuote } from '@/lib/shell/quote';
+
+/**
+ * Build the remote shell script that clones or updates a service git checkout.
+ *
+ * Every interpolated value is single-quoted: `src`, `repo`, `branch`, and
+ * `commitSha` would otherwise be expanded by the remote shell — a double-quoted
+ * assignment still evaluates `$(…)`, backticks and `${…}`.
+ */
 export function buildGitSyncScript(opts: {
   src: string;
   repo: string;
@@ -9,10 +17,10 @@ export function buildGitSyncScript(opts: {
   /** When set (e.g. rollback), fetch and check out this commit instead of the branch tip. */
   commitSha?: string | null;
 }): string {
-  const src = JSON.stringify(opts.src);
-  const repo = JSON.stringify(opts.repo);
-  const branch = JSON.stringify(opts.branch);
-  const commitSha = JSON.stringify((opts.commitSha ?? '').trim());
+  const src = shellSingleQuote(opts.src);
+  const repo = shellSingleQuote(opts.repo);
+  const branch = shellSingleQuote(opts.branch);
+  const commitSha = shellSingleQuote((opts.commitSha ?? '').trim());
   const gitSshPrefix = opts.gitSshPrefix ?? '';
   const keyCleanup = opts.keyCleanup ?? 'true';
   const forceClean = opts.forceClean ? '1' : '0';
