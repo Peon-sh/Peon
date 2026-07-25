@@ -11,6 +11,7 @@ import {
 } from '@/lib/github/check-runs';
 import { upsertPreviewDeployment } from '@/lib/github/deployments';
 import { githubIdsEqual } from '@/lib/github/ids';
+import { isSafeGitRefName } from '@/lib/git/ref';
 import type { GithubPullRequestInfo } from '@/lib/webhooks/github';
 import { ForbiddenError } from '@/lib/errors';
 import {
@@ -243,6 +244,17 @@ export async function handlePreviewPullRequest(opts: {
         serviceId: svc.id,
         serviceName: svc.name,
         reason: 'missing PR head branch or commit',
+      });
+      continue;
+    }
+    // The head branch is chosen by whoever opened the PR — on a public repo that
+    // is anyone. Refuse anything outside a plain refname before it is persisted
+    // or handed to the deploy engine.
+    if (!isSafeGitRefName(pr.headBranch)) {
+      skipped.push({
+        serviceId: svc.id,
+        serviceName: svc.name,
+        reason: 'PR head branch name contains forbidden characters',
       });
       continue;
     }
