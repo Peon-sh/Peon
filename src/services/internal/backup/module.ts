@@ -46,6 +46,7 @@ export const BackupModule = {
         saveS3: input.saveS3,
         s3StorageId: input.saveS3 ? (input.s3StorageId ?? null) : null,
         retentionAmountLocal: input.retentionAmountLocal,
+        dumpAll: input.dumpAll,
       },
     });
     await recordServiceAudit(serviceId, {
@@ -69,6 +70,7 @@ export const BackupModule = {
         ...(input.retentionAmountLocal !== undefined
           ? { retentionAmountLocal: input.retentionAmountLocal }
           : {}),
+        ...(input.dumpAll !== undefined ? { dumpAll: input.dumpAll } : {}),
       },
     });
     await recordServiceAudit(serviceId, {
@@ -95,7 +97,7 @@ export const BackupModule = {
     const backup = await prisma.scheduledBackup.findFirst({ where: { id: backupId, serviceId } });
     if (!backup) throw new NotFoundError('Backup schedule not found.');
     const execution = await prisma.scheduledBackupExecution.create({
-      data: { backupId, status: 'RUNNING' },
+      data: { backupId, status: 'RUNNING', dumpAll: backup.dumpAll },
     });
     await enqueue({ type: 'backup.run', backupId, executionId: execution.id });
     await recordServiceAudit(serviceId, {
@@ -106,14 +108,51 @@ export const BackupModule = {
     return execution;
   },
 
-  async listExecutions(serviceId: string, backupId: string) {
+  /** Queue a restore from a local dump filename. */
+  async queueRestore(serviceId: string, filename: string) {
+    if (/[/\\]|\.\./.test(filename)) throw new ValidationError('Invalid backup filename.');
+    const svc = await this.assertBackupable(serviceId);
+    const spec = engineSpec(svc.databaseEngine!);
+    if (!spec.restoreCommand) {
+      throw new ValidationError(`Restore is not supported for ${spec.label}.`);
+    }
+
+    const execution = await prisma.scheduledBackupExecution.findFirst({
+      where: { filename, backup: { serviceId }, status: 'SUCCESS' },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
+    });
+    if (!execution) throw new NotFoundError('Backup execution not found for that filename.');
+
+    await enqueue({ type: 'backup.restore', serviceId, filename });
+    await recordServiceAudit(serviceId, {
+      action: 'service.backup.restore',
+      summary: 'Queued backup restore',
+      metadata: { filename },
+    });
+    return { queued: true as const, filename };
+  },
+
+  async listExecutions(
+    serviceId: string,
+    backupId: string,
+    opts: { limit?: number; cursor?: string | null } = {},
+  ) {
     const backup = await prisma.scheduledBackup.findFirst({ where: { id: backupId, serviceId } });
     if (!backup) throw new NotFoundError('Backup schedule not found.');
-    return prisma.scheduledBackupExecution.findMany({
+
+    const limit = Math.min(Math.max(opts.limit ?? 5, 1), 50);
+    const rows = await prisma.scheduledBackupExecution.findMany({
       where: { backupId },
-      orderBy: { startedAt: 'desc' },
-      take: 30,
+      orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null;
+    return { items, nextCursor };
   },
 };
 

@@ -42,6 +42,12 @@ export interface BackupJob {
   executionId: string;
 }
 
+export interface BackupRestoreJob {
+  type: 'backup.restore';
+  serviceId: string;
+  filename: string;
+}
+
 export interface TaskJob {
   type: 'task.run';
   taskId: string;
@@ -70,6 +76,7 @@ export type QueueMessage =
   | ServiceControlJob
   | DatabaseProvisionJob
   | BackupJob
+  | BackupRestoreJob
   | TaskJob
   | ServerCleanupJob
   | EmailSendJob;

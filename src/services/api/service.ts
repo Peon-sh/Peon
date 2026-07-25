@@ -303,6 +303,7 @@ export interface ScheduledBackupItem {
   s3StorageId: string | null;
   s3Storage: { id: string; name: string } | null;
   retentionAmountLocal: number;
+  dumpAll: boolean;
   createdAt: string;
   _count: { executions: number };
 }
@@ -313,6 +314,8 @@ export interface BackupExecution {
   message: string | null;
   filename: string | null;
   databaseName: string | null;
+  dumpAll: boolean;
+  size: string | null;
   s3Uploaded: boolean;
   startedAt: string;
   finishedAt: string | null;
@@ -338,12 +341,39 @@ export function runBackupNow(serviceId: string, backupId: string) {
   return unwrap(api.post(`/services/${serviceId}/backups/${backupId}/run`));
 }
 
-export function listBackupExecutions(serviceId: string, backupId: string) {
-  return unwrap<BackupExecution[]>(api.get(`/services/${serviceId}/backups/${backupId}/executions`));
+export function listBackupExecutions(
+  serviceId: string,
+  backupId: string,
+  opts?: { limit?: number; cursor?: string | null },
+) {
+  return unwrap<{ items: BackupExecution[]; nextCursor: string | null }>(
+    api.get(`/services/${serviceId}/backups/${backupId}/executions`, {
+      params: {
+        ...(opts?.limit != null ? { limit: opts.limit } : {}),
+        ...(opts?.cursor ? { cursor: opts.cursor } : {}),
+      },
+    }),
+  );
 }
 
 export function restoreBackup(serviceId: string, filename: string) {
   return unwrap(api.post(`/services/${serviceId}/backups/restore`, { filename }));
+}
+
+/** Download a backup dump file from the managed server. */
+export async function downloadBackup(serviceId: string, filename: string): Promise<void> {
+  const res = await api.get(`/services/${serviceId}/backups/download`, {
+    params: { filename },
+    responseType: 'blob',
+  });
+  const disposition = res.headers['content-disposition'] as string | undefined;
+  const name = disposition?.match(/filename="([^"]+)"/)?.[1] ?? filename;
+  const url = URL.createObjectURL(res.data);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export interface ScheduledTaskItem {

@@ -202,6 +202,8 @@ export const upsertBackupSchema = z.object({
   saveS3: z.boolean().default(false),
   s3StorageId: z.string().nullable().optional(),
   retentionAmountLocal: z.number().int().min(0).max(1000).default(7),
+  /** Entire instance (all DBs) vs configured database only. Default: entire instance. */
+  dumpAll: z.boolean().default(true),
 });
 
 export type UpsertBackupInput = z.infer<typeof upsertBackupSchema>;

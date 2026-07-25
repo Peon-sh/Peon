@@ -45,7 +45,7 @@ async function tick(log: Log) {
   for (const backup of backups) {
     if (!shouldFire(`backup:${backup.id}`, backup.frequency, now)) continue;
     const execution = await prisma.scheduledBackupExecution.create({
-      data: { backupId: backup.id, status: 'RUNNING' },
+      data: { backupId: backup.id, status: 'RUNNING', dumpAll: backup.dumpAll },
     });
     await enqueue({ type: 'backup.run', backupId: backup.id, executionId: execution.id });
     log(`enqueued backup.run for backup ${backup.id}`);

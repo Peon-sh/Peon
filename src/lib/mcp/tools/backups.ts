@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { BackupModule } from '@/services/internal/backup/module';
-import { runRestore } from '@/services/internal/backup/engine';
 import { upsertBackupSchema } from '@/schemas/service.schema';
 import { buildCatalogFromLegacy } from '@/lib/mcp/catalog/legacy';
 import type { CatalogTool } from '@/lib/mcp/catalog/types';
@@ -23,7 +22,7 @@ export function registerBackupTools(server: McpServer, _ctx: McpContext, access:
 
   server.tool(
     'create_backup',
-    'Create a backup schedule. Requires manage access.',
+    'Create a backup schedule. Requires manage access. By default dumps the entire database instance (all DBs).',
     {
       serviceId: z.string().describe('The service ID'),
       frequency: z.string().min(1).describe('5-field cron expression'),
@@ -37,6 +36,10 @@ export function registerBackupTools(server: McpServer, _ctx: McpContext, access:
         .max(1000)
         .optional()
         .describe('Local retention count (default 7)'),
+      dumpAll: z
+        .boolean()
+        .optional()
+        .describe('Dump entire instance / all databases (default true). Set false for configured DB only.'),
     },
     safe(async ({ serviceId, ...rest }) => {
       await serviceAccess(serviceId, true);
@@ -56,6 +59,7 @@ export function registerBackupTools(server: McpServer, _ctx: McpContext, access:
       saveS3: z.boolean().optional(),
       s3StorageId: z.string().nullable().optional(),
       retentionAmountLocal: z.number().int().min(0).max(1000).optional(),
+      dumpAll: z.boolean().optional().describe('Dump entire instance when true'),
     },
     safe(async ({ serviceId, backupId, ...rest }) => {
       await serviceAccess(serviceId, true);
@@ -92,28 +96,29 @@ export function registerBackupTools(server: McpServer, _ctx: McpContext, access:
 
   server.tool(
     'list_backup_executions',
-    'List recent backup executions.',
+    'List recent backup executions (paginated, newest first).',
     {
       serviceId: z.string().describe('The service ID'),
       backupId: z.string().describe('The backup ID'),
+      limit: z.number().int().min(1).max(50).optional().describe('Page size (default 5)'),
+      cursor: z.string().optional().describe('Cursor from a previous page nextCursor'),
     },
-    safe(async ({ serviceId, backupId }) => {
+    safe(async ({ serviceId, backupId, limit, cursor }) => {
       await serviceAccess(serviceId);
-      return json(await BackupModule.listExecutions(serviceId, backupId));
+      return json(await BackupModule.listExecutions(serviceId, backupId, { limit, cursor }));
     }),
   );
 
   server.tool(
     'restore_backup',
-    'Restore a database service from a backup filename. Requires manage access.',
+    'Queue a database restore from a backup filename. Requires manage access. Runs asynchronously on the worker.',
     {
       serviceId: z.string().describe('The service ID'),
       filename: z.string().min(1).describe('Backup filename to restore'),
     },
     safe(async ({ serviceId, filename }) => {
       await serviceAccess(serviceId, true);
-      await runRestore(serviceId, filename);
-      return json({ restored: true, filename });
+      return json(await BackupModule.queueRestore(serviceId, filename));
     }),
   );
 }
