@@ -81,6 +81,8 @@ export interface ServerDetail {
   port: number;
   user: string;
   privateKeyId: string | null;
+  /** Trusted SSH host key. Null until the first successful connection records it. */
+  hostKeyFingerprint: string | null;
   proxyType: ProxyType;
   proxyStatus: string;
   isBuildServer: boolean;
@@ -115,6 +117,7 @@ export interface CreateServerPayload {
   user: string;
   privateKeyId: string;
   proxyType: ProxyType;
+  hostKeyFingerprint?: string;
 }
 
 export interface UpdateServerPayload {
@@ -125,6 +128,8 @@ export interface UpdateServerPayload {
   user?: string;
   privateKeyId?: string | null;
   proxyType?: ProxyType;
+  /** Null clears the trusted key so a rebuilt server can be re-trusted. */
+  hostKeyFingerprint?: string | null;
   isBuildServer?: boolean;
   forceDisabled?: boolean;
   wildcardDomain?: string | null;

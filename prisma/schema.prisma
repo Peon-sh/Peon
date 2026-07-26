@@ -330,6 +330,8 @@ model Server {
   port        Int     @default(22)
   user        String  @default("root")
   privateKeyId String?
+  /** Trusted SSH host key fingerprint (`SHA256:…`). Pinned by the user, or learned on first connect. */
+  hostKeyFingerprint String?
 
   // proxy configuration
   proxyType   ProxyType @default(TRAEFIK)
