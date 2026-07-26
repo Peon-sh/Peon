@@ -19,6 +19,7 @@ import {
   Download,
   RefreshCw,
   CircleHelp,
+  TriangleAlert,
 } from 'lucide-react';
 import { type ServiceSectionId as SectionId } from '@/lib/service-sections';
 import {
@@ -98,6 +99,7 @@ import {
 } from '@/services/api/deployment';
 import { PageContainer, Panel } from '@/components/app/page';
 import { ConfirmButton } from '@/components/app/confirm';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { StatusBadge } from '@/components/app/status-badge';
 import { RunOutput } from '@/components/app/run-output';
 import { KindChip } from '@/components/app/kind-chip';
@@ -3523,7 +3525,18 @@ function DangerTab({
         <ConfirmButton
           onConfirm={() => delMut.mutate()}
           title={`Delete service "${name}"?`}
-          description="This permanently deletes the service, its configuration, environment variables, and deployment history."
+          description={
+            <div className="space-y-3">
+              <p>
+                This permanently deletes the service, its configuration, environment variables, and
+                deployment history from Peon.
+              </p>
+              <p className="text-amber-700 dark:text-amber-400 font-medium">
+                Stop the service first. Deleting does not stop or remove containers on the server —
+                they will keep running until you stop the service (or clean them up manually).
+              </p>
+            </div>
+          }
           confirmLabel="Delete permanently"
           size="sm"
           disabled={confirm !== name || delMut.isPending}
@@ -3532,10 +3545,18 @@ function DangerTab({
         </ConfirmButton>
       }
     >
-        <p className="text-muted-foreground text-sm">
-          This permanently deletes the service and its configuration. Type <b>{name}</b> to confirm.
-        </p>
-        <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={name} />
+      <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-50">
+        <TriangleAlert />
+        <AlertTitle>Stop the service first</AlertTitle>
+        <AlertDescription className="text-amber-900/85 dark:text-amber-100/80">
+          Deleting a service removes it from Peon only. Running containers on the server are not
+          stopped. Stop the service before deleting it.
+        </AlertDescription>
+      </Alert>
+      <p className="text-muted-foreground text-sm">
+        This permanently deletes the service and its configuration. Type <b>{name}</b> to confirm.
+      </p>
+      <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={name} />
     </Panel>
   );
 }
