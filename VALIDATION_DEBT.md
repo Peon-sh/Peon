@@ -459,8 +459,15 @@ objects unreachable — there is no migration tool.
 |---|---|
 | **Phase** | 7 |
 | **Area** | Local executor |
-| **Status** | OPEN |
+| **Status** | FIXED (implementation) — verification still OPEN |
 | **Risk** | **HIGH** |
+
+**Update (phase 7 groups 1–5).** All call sites are migrated: `server/operations.ts`,
+`server/runtime.ts`, `task/engine.ts`, `backup/engine.ts`, `service/runtime.ts`,
+`service/previews.ts`, `deploy/preview.ts` and finally `deploy/engine.ts`. The
+engine holds a `ServerExecutor` and never learns which transport it is. Diff
+inspection confirms every changed line is an import, a parameter type or a call
+receiver. **Still unverified at runtime** — see VD-024.
 
 **Description.** `ServerExecutor`, `SshServerExecutor` and `LocalServerExecutor`
 exist and `executorForServer()` resolves by `Server.executionMode`, but the 64
@@ -535,6 +542,113 @@ paths (`/data/peon/proxy`, `/data/peon/backups`, `/data/peon/ping-pong`,
 **Required validation.** Migrate remaining call sites, remove the constant,
 add a test asserting no hardcoded `/data/peon` literal remains outside
 `peonDataDir()`.
+
+---
+
+### VD-024 — Local deployment end to end
+
+| | |
+|---|---|
+| **Phase** | 7/8 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | **CRITICAL** |
+
+**Description.** The code path for single-server deployment now exists, but no
+deployment has ever run through `LocalServerExecutor`. Build, compose up, health
+wait, rolling swap, image cleanup and teardown are all unexercised locally.
+
+**Required validation.** With Peon installed on one host and a LOCAL server
+registered: project → service → deploy → worker claims → local executor → docker
+build → container starts → health check passes → deployment FINISHED → logs
+readable → redeploy → stop. Then the rolling-update path, then a preview deploy.
+
+---
+
+### VD-025 — SSH regression after the executor migration
+
+| | |
+|---|---|
+| **Phase** | 7 |
+| **Area** | SSH |
+| **Status** | OPEN |
+| **Risk** | **CRITICAL** |
+
+**Description.** 64 call sites changed transport object. `SshServerExecutor` is
+pure delegation, so remote behaviour *should* be identical, but the existing
+integration suite has not run against the change.
+
+**A regression here breaks every existing Peon installation**, which matters more
+than the new local path.
+
+**Required validation.** Full integration suite plus a real deploy to a real SSH
+server: deploy, rollback, cancel mid-build, rolling update, preview create and
+teardown, backup run and restore, scheduled task, proxy start/stop, server
+validate, browser terminal.
+
+---
+
+### VD-026 — Local terminal has no implementation
+
+| | |
+|---|---|
+| **Phase** | 7 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `worker/terminal-server.ts` opens its own `NodeSSH` PTY rather
+than using the pool, so it has no local path. `ServiceRuntime` now carries a null
+`target` for LOCAL servers; the terminal server does not yet handle that and will
+likely fail when a terminal is opened on a local service.
+
+**Required validation.** Implement a local PTY (`docker exec -it` via
+`child_process` with a pty), then test both transports. Until then, terminals on
+local servers must be treated as unsupported.
+
+---
+
+### VD-027 — Local server registration flow
+
+| | |
+|---|---|
+| **Phase** | 8 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | HIGH |
+
+**Description.** `ensureLocalServer()` exists and is unit-tested against a mocked
+Prisma client, but nothing calls it yet — the installer and onboarding wiring are
+phases 11 and 3. A user cannot currently get a local server without inserting a
+row by hand, which is exactly what the requirement forbids.
+
+**Required validation.** Onboarding "use this server" creates it; installer
+creates it; it appears in the UI as a normal server; RBAC applies; a service can
+target it.
+
+---
+
+### VD-028 — Queue table query plan
+
+| | |
+|---|---|
+| **Phase** | 5 |
+| **Area** | Queue |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** The claim query filters `queue` + `status IN (PENDING,
+PROCESSING)` + `visibleAt <= NOW()` and orders by `visibleAt`. The partial index
+`QueueJob_claim_idx (queue, visibleAt) WHERE status IN ('PENDING','PROCESSING')`
+is intended to serve exactly that, keeping completed history out of the hot path.
+**This is a static assumption — no EXPLAIN has been run.**
+
+Completed rows accumulate indefinitely; `purgeCompleted()` exists but nothing
+calls it on a schedule yet.
+
+**Required validation.** `EXPLAIN ANALYZE` the claim query against a table with
+~100k completed and ~1k pending rows; confirm an index scan, not a sequential
+scan. Wire `purgeCompleted` into the scheduler.
 
 ---
 
