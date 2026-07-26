@@ -6,6 +6,8 @@ export interface SshTarget {
   privateKey: string;
   /** SSH ready timeout in ms (from server connectionTimeout when available). */
   readyTimeoutMs?: number;
+  /** Trusted host key (`SHA256:…`). Null/undefined means "learn it on this connect". */
+  hostKeyFingerprint?: string | null;
 }
 
 export interface ExecResult {

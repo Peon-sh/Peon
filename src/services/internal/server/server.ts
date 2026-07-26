@@ -57,6 +57,7 @@ export const ServerService = {
         user: input.user,
         privateKeyId: input.privateKeyId,
         proxyType: input.proxyType,
+        hostKeyFingerprint: input.hostKeyFingerprint,
         settings: {
           create: {
             forceDockerCleanup: true,
@@ -194,11 +195,14 @@ export const ServerService = {
     });
 
     // Drop any pooled SSH session so the next connect uses the new key/host creds.
+    // Includes the host key pin: re-trusting a rebuilt server must not reuse the
+    // session that was opened under the old fingerprint.
     if (
       keyChanged ||
       serverInput.ip !== undefined ||
       serverInput.port !== undefined ||
-      serverInput.user !== undefined
+      serverInput.user !== undefined ||
+      serverInput.hostKeyFingerprint !== undefined
     ) {
       sshPool.disconnect(serverId);
     }

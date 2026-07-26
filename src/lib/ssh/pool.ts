@@ -1,6 +1,7 @@
 import { NodeSSH } from 'node-ssh';
 import { isE2eMode } from '@/lib/e2e';
 import { sshConnectHostOptions } from './host';
+import { createHostKeyVerifier, HostKeyMismatchError } from './host-key';
 import type { ExecResult, LogSink, SshTarget } from './types';
 
 interface PooledConnection {
@@ -53,14 +54,34 @@ class SshPool {
   private async connect(target: SshTarget, key: string): Promise<NodeSSH> {
     const ssh = new NodeSSH();
     const hostOpts = sshConnectHostOptions(target.host);
-    await ssh.connect({
-      ...hostOpts,
-      port: target.port,
-      username: target.username,
-      privateKey: target.privateKey,
-      readyTimeout: target.readyTimeoutMs ?? 30_000,
-      keepaliveInterval: 15_000,
-    });
+    const verifier = createHostKeyVerifier({ expected: target.hostKeyFingerprint });
+
+    try {
+      await ssh.connect({
+        ...hostOpts,
+        port: target.port,
+        username: target.username,
+        privateKey: target.privateKey,
+        readyTimeout: target.readyTimeoutMs ?? 30_000,
+        keepaliveInterval: 15_000,
+        hostVerifier: verifier.verify,
+      });
+    } catch (err) {
+      // ssh2 reports a rejected host key as a generic failure; say what actually happened.
+      if (verifier.mismatch) throw new HostKeyMismatchError(target.host, verifier.mismatch);
+      throw err;
+    }
+
+    if (verifier.learned) {
+      // Imported lazily so this module stays free of prisma at load time.
+      const { rememberHostKey } = await import('./host-key-store');
+      try {
+        await rememberHostKey(target.id, verifier.learned);
+      } catch {
+        // A failed write only means the key is learned again on the next connect.
+      }
+    }
+
     this.attachErrorHandler(key, ssh);
     return ssh;
   }
