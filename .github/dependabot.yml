@@ -10,6 +10,13 @@ updates:
     labels:
       - dependencies
       - npm
+    ignore:
+      # TypeScript 7 ships no JS entry point (`main`), and `next build` resolves
+      # the compiler API rather than the CLI — so it reports TypeScript as not
+      # installed and the type-check step fails. Hold the major until Next
+      # supports it; 6.x minor/patch updates still come through.
+      - dependency-name: "typescript"
+        versions: [">=7"]
     groups:
       production-deps:
         dependency-type: production
