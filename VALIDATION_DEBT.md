@@ -718,19 +718,29 @@ oldest OWNER/ADMIN membership, which is a heuristic.
 |---|---|
 | **Phase** | 3 |
 | **Area** | UI |
-| **Status** | OPEN |
+| **Status** | FIXED (implementation) — verification OPEN |
 | **Risk** | MEDIUM |
 
-**Description.** `src/lib/dev-fixtures/` provides deterministic data and the
-production-safe `isUiFixtureMode()` guard, and `docker-compose.ui.yml` starts a
-single web process. **The adapter that makes `src/services/api/*` return fixtures
-instead of calling the network is not written yet**, so UI mode currently boots
-without a backend but the screens will error rather than render fixture data.
+**Update.** Wired via an **axios adapter** rather than by editing API clients.
+Replacing `api.defaults.adapter` swaps the transport for every request the UI
+makes, so no file under `src/services/api/` and no component changed. There is
+exactly one conditional, in `lib/http/axios.ts`, asserted by a test that fails if
+`isUiFixtureMode` or `dev-fixtures` appears anywhere under `src/components/` or
+`src/services/api/`.
 
-Implementation-complete for the data and the guard; incomplete for the wiring.
+Two things were needed beyond the adapter, both found by reasoning through the
+request path rather than by testing:
 
-**Required validation.** §16 of the testing guide. Also confirm no `if (UI_MODE)`
-appears inside `src/components/**`.
+1. **`proxy.ts` bounces every route to `/login`** without a real session, so
+   nothing would be navigable. It now short-circuits in fixture mode. The guard
+   is `isUiFixtureMode()`, which is false in production unconditionally, so this
+   cannot disable authentication on a deployment.
+2. **The adapter must be assigned synchronously.** The first attempt installed it
+   inside a `.then()`, leaving a window where early requests would hit the real
+   network. Now assigned synchronously with a lazy inner import.
+
+**Required validation.** §16. Specifically T-UI-007 (cannot activate in
+production) and T-UI-003 (screens actually render fixture data end to end).
 
 ---
 

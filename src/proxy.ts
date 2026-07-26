@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getAuthFromRequest } from '@/lib/auth/jwt';
 import { isInstanceOwnerEmail } from '@/lib/auth/instance-owner';
 import { isPublicPath, isInstanceAdminPath } from '@/lib/routes/config';
+import { isUiFixtureMode } from '@/lib/dev-fixtures';
 
 function homeForAuth(auth: { isOnboarded?: boolean }): string {
   // Missing flag (old JWTs) → treat as onboarded so we don't trap existing sessions.
@@ -11,6 +12,17 @@ function homeForAuth(auth: { isOnboarded?: boolean }): string {
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // UI-only development mode: there is no database and no real session, so the
+  // auth gate would bounce every route to /login and nothing would be
+  // navigable. Fixtures are served client-side by the axios adapter.
+  //
+  // `isUiFixtureMode()` returns false in production unconditionally, so this
+  // cannot disable authentication on a real deployment.
+  if (isUiFixtureMode()) {
+    return NextResponse.next();
+  }
+
   const isApi = pathname.startsWith('/api');
   const auth = await getAuthFromRequest(request);
 
