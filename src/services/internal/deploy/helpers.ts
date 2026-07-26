@@ -5,6 +5,27 @@ import { DEFAULT_NETWORK, sanitizeName } from '@/lib/docker/naming';
 import { previewDir } from '@/services/internal/deploy/preview';
 import type { Service, ServiceSetting, PrivateKey, GithubApp } from '@/lib/prisma';
 
+/**
+ * Root for everything Peon writes on a target machine.
+ *
+ * Read from the environment rather than hardcoded because under **local**
+ * execution this path has to mean the same thing to three different actors: the
+ * worker process (which writes compose files), the Docker daemon (which resolves
+ * bind mounts against the *host* filesystem), and the containers themselves. The
+ * worker container must therefore mount it at the identical absolute path.
+ *
+ * See docs/server-modes.md — getting this wrong makes deployments mount the
+ * wrong directory silently rather than failing loudly.
+ */
+export function peonDataDir(): string {
+  return process.env.PEON_DATA_DIR?.trim() || '/data/peon';
+}
+
+export function servicesBaseDir(): string {
+  return `${peonDataDir()}/services`;
+}
+
+/** @deprecated Use {@link servicesBaseDir}; kept so existing imports resolve. */
 export const BASE_DIR = '/data/peon/services';
 
 export type FullService = Service & {
@@ -57,7 +78,7 @@ export function buildHealthcheck(svc: FullService, defaultPort: number) {
 
 export function serviceDir(svc: Service, pullRequestId?: number | null): string {
   if (pullRequestId != null) return previewDir(svc.uuid, pullRequestId);
-  return `${BASE_DIR}/${svc.uuid}`;
+  return `${servicesBaseDir()}/${svc.uuid}`;
 }
 
 export async function buildEnvMap(

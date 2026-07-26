@@ -451,6 +451,93 @@ objects unreachable — there is no migration tool.
 
 ---
 
+## Phase 7 — local execution
+
+### VD-020 — Deploy engine not yet migrated to the executor
+
+| | |
+|---|---|
+| **Phase** | 7 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | **HIGH** |
+
+**Description.** `ServerExecutor`, `SshServerExecutor` and `LocalServerExecutor`
+exist and `executorForServer()` resolves by `Server.executionMode`, but the 64
+`sshPool.*` call sites have **not** been migrated yet. `deploy/engine.ts` (27
+sites) and `server/operations.ts` (16) still call the pool directly, so a
+`LOCAL` server cannot actually deploy yet.
+
+**Local execution is wired but not reachable end to end. Do not describe
+single-server mode as working.**
+
+**Required validation.** Migrate the call sites, then prove the full path:
+create project → service → enqueue → worker claims → local executor → build →
+start → health check → FINISHED → logs → redeploy → stop.
+
+---
+
+### VD-021 — Filesystem model unproven
+
+| | |
+|---|---|
+| **Phase** | 7 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | **CRITICAL** |
+
+**Description.** The worker/host/daemon path model is documented in
+`docs/server-modes.md` and `BASE_DIR` is now `PEON_DATA_DIR`-driven, but nothing
+has been tested. If the worker container and the Docker daemon disagree about a
+path, bind mounts silently point at the wrong directory rather than failing.
+
+**Required validation.** With a containerised worker holding the Docker socket:
+deploy a service with a bind-mounted volume and confirm the container sees the
+expected contents; confirm the compose file the daemon reads is the one the
+worker wrote; confirm preview deployments isolate correctly.
+
+---
+
+### VD-022 — Local server privilege model
+
+| | |
+|---|---|
+| **Phase** | 7 |
+| **Area** | Security |
+| **Status** | OPEN |
+| **Risk** | HIGH |
+
+**Description.** Local mode requires Docker socket access, which is equivalent to
+root on the host. CI asserts no web-tier service mounts it, but the worker
+necessarily does. The documented position is that a socket proxy is not a real
+boundary for Peon's use case.
+
+**Required validation.** Security review of the local execution path; confirm the
+web process never gains socket access in any compose file or deployment topology;
+confirm `lib/shell/quote.ts` is applied identically in both executors.
+
+---
+
+### VD-023 — `BASE_DIR` deprecation left in place
+
+| | |
+|---|---|
+| **Phase** | 7 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | LOW |
+
+**Description.** `BASE_DIR` is still exported as a hardcoded constant for
+compatibility while `servicesBaseDir()` becomes the real source. Other hardcoded
+paths (`/data/peon/proxy`, `/data/peon/backups`, `/data/peon/ping-pong`,
+`.data/deployment-previews`) are **not** yet parameterised.
+
+**Required validation.** Migrate remaining call sites, remove the constant,
+add a test asserting no hardcoded `/data/peon` literal remains outside
+`peonDataDir()`.
+
+---
+
 ## Rules for this file
 
 1. Never delete an entry. Mark it `VERIFIED` (with evidence) or `FAILED`.

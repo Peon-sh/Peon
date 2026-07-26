@@ -320,12 +320,21 @@ model PrivateKey {
   @@index([workspaceId])
 }
 
+enum ServerExecutionMode {
+  /// Commands run over SSH on a separate machine. Default; unchanged behaviour.
+  REMOTE
+  /// Commands run on the Peon host itself, via the local Docker daemon.
+  LOCAL
+}
+
 model Server {
   id          String  @id @default(cuid())
   uuid        String  @unique @default(cuid())
   workspaceId String
   name        String
   description String?
+  /// How Peon reaches this server. REMOTE keeps every existing row on SSH.
+  executionMode ServerExecutionMode @default(REMOTE)
   ip          String
   port        Int     @default(22)
   user        String  @default("root")
