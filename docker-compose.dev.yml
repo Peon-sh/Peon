@@ -1,0 +1,135 @@
+# Lightweight development mode.
+#
+#   docker compose -f docker-compose.dev.yml up
+#
+# Real API, real PostgreSQL, real worker, real queue — but nothing heavier.
+# Targets a 4-core / 8 GB laptop.
+#
+# Deliberately absent: AWS, LocalStack, MinIO, an SQS emulator, Docker-in-Docker,
+# Playwright/Chromium, the scheduler and the terminal socket. The queue is the
+# built-in Postgres one, so no external broker is needed.
+#
+# Scheduler and socket are available behind the `extras` profile when a change
+# actually needs them:
+#
+#   docker compose -f docker-compose.dev.yml --profile extras up
+
+x-node: &node
+  image: node:22-bookworm-slim
+  working_dir: /app
+  environment: &node-env
+    NODE_ENV: development
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/peon?schema=public
+    # No AWS: the built-in Postgres queue and local disk are the defaults.
+    QUEUE_DRIVER: postgres
+    STORAGE_DRIVER: local
+    EMAIL_DRIVER: test
+    PEON_DATA_DIR: /data/peon
+    APP_URL: http://localhost:3000
+    NEXT_PUBLIC_APP_URL: http://localhost:3000
+    JWT_SECRET: dev-only-secret-at-least-16-chars
+    # Valid 32-byte base64. Development only — never reuse this anywhere real.
+    ENCRYPTION_KEY: ZGV2LW9ubHkta2V5LTMyLWJ5dGVzLXBhZGRpbmch
+    INSTANCE_OWNER_EMAIL: dev@peon.local
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    # One build at a time: parallel builds make a laptop unusable.
+    WORKER_MAX_CONCURRENCY: '2'
+  volumes: &node-volumes
+    - .:/app
+    - peon_dev_node_modules:/app/node_modules
+    - peon_dev_pnpm_store:/root/.local/share/pnpm/store
+    - peon_dev_data:/data/peon
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: peon-dev-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: peon
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - peon_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    <<: *node
+    container_name: peon-dev-migrate
+    restart: "no"
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm install --prefer-offline &&
+             pnpm exec prisma generate &&
+             pnpm exec prisma migrate deploy"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    <<: *node
+    container_name: peon-dev-web
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec next dev -H 0.0.0.0 -p 3000"
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *node
+    container_name: peon-dev-worker
+    environment: *node-env
+    volumes: *node-volumes
+    # `tsx watch` restarts the worker on change — no image rebuild.
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec tsx watch worker/index.ts"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *node
+    container_name: peon-dev-scheduler
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec tsx watch worker/schedule.ts"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["extras"]
+
+  socket:
+    <<: *node
+    container_name: peon-dev-socket
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec tsx watch worker/socket.ts"
+    ports:
+      - "${TERMINAL_WS_PORT:-8081}:8081"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["extras"]
+
+volumes:
+  peon_dev_pgdata:
+  peon_dev_node_modules:
+  peon_dev_pnpm_store:
+  peon_dev_data:

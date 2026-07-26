@@ -1,0 +1,52 @@
+# UI-only development mode.
+#
+#   docker compose -f docker-compose.ui.yml up
+#
+# One Next.js process serving deterministic fixtures. Intended for layout,
+# components, forms, navigation, responsive work and visual states on machines
+# that cannot run the full stack.
+#
+# Deliberately absent: PostgreSQL, worker, scheduler, socket server, queue, AWS,
+# SSH, the Docker deployment engine, Playwright and Chromium. If a change needs
+# any of those, use docker-compose.dev.yml instead.
+#
+# Fixture mode cannot activate in a production build — see
+# src/lib/dev-fixtures/index.ts.
+
+services:
+  web:
+    image: node:22-bookworm-slim
+    container_name: peon-ui
+    working_dir: /app
+    # corepack pins pnpm to the version in package.json.
+    command: >
+      sh -c "corepack enable &&
+             corepack prepare --activate &&
+             pnpm install --prefer-offline &&
+             pnpm exec next dev -H 0.0.0.0 -p 3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_PEON_UI_MODE: '1'
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      # Placeholders: nothing in this mode reads a database or a real secret,
+      # but the env schema still wants the keys present if it is ever consulted.
+      DATABASE_URL: postgresql://unused:unused@localhost:5432/unused?schema=public
+      JWT_SECRET: ui-mode-not-a-real-secret-32-chars
+      ENCRYPTION_KEY: dWktbW9kZS1vbmx5LW5vdC1hLXJlYWwta2V5ISE=
+      # Skip the Chromium download; screenshots are not reachable here.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Source is bind-mounted for hot reload. node_modules and .next stay in
+      # named volumes so the host's copies are never shadowed and installs are
+      # not repeated on every start.
+      - .:/app
+      - peon_ui_node_modules:/app/node_modules
+      - peon_ui_next:/app/.next
+      - peon_ui_pnpm_store:/root/.local/share/pnpm/store
+
+volumes:
+  peon_ui_node_modules:
+  peon_ui_next:
+  peon_ui_pnpm_store:

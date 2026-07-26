@@ -712,6 +712,75 @@ oldest OWNER/ADMIN membership, which is a heuristic.
 
 ---
 
+### VD-031 — UI fixture adapter not wired to API clients
+
+| | |
+|---|---|
+| **Phase** | 3 |
+| **Area** | UI |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `src/lib/dev-fixtures/` provides deterministic data and the
+production-safe `isUiFixtureMode()` guard, and `docker-compose.ui.yml` starts a
+single web process. **The adapter that makes `src/services/api/*` return fixtures
+instead of calling the network is not written yet**, so UI mode currently boots
+without a backend but the screens will error rather than render fixture data.
+
+Implementation-complete for the data and the guard; incomplete for the wiring.
+
+**Required validation.** §16 of the testing guide. Also confirm no `if (UI_MODE)`
+appears inside `src/components/**`.
+
+---
+
+### VD-032 — Compose files for ui/dev modes unparsed
+
+| | |
+|---|---|
+| **Phase** | 3/4 |
+| **Area** | Docker Compose |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `docker-compose.ui.yml` and `docker-compose.dev.yml` have never
+been parsed or started. Both use YAML anchors with merge keys plus `depends_on`
+gating, and both rely on `corepack prepare --activate` inside a bare `node:22`
+image rather than a built image. The dev file's `tsx watch` invocation is
+likewise unverified.
+
+The dev file also assumes `pnpm install` inside the container populates the
+`peon_dev_node_modules` volume before `web` starts — that ordering depends on the
+`migrate` service completing, which is asserted but untested.
+
+**Required validation.** `docker compose -f <file> config -q`, then a real start.
+T-UI-001…009, T-DEV-001…008.
+
+---
+
+### VD-033 — Development ENCRYPTION_KEY committed in compose
+
+| | |
+|---|---|
+| **Phase** | 4 |
+| **Area** | Security |
+| **Status** | OPEN |
+| **Risk** | LOW |
+
+**Description.** `docker-compose.dev.yml` hardcodes a valid 32-byte development
+`ENCRYPTION_KEY` and `JWT_SECRET` so the stack starts with no setup. These are
+committed and therefore public.
+
+Acceptable for a development-only file, and the alternative (failing to boot
+until the developer generates secrets) defeats the purpose. It is recorded so it
+is a deliberate choice rather than an oversight, and so nobody copies the file
+into production.
+
+**Required validation.** Confirm no production path can load these values;
+confirm the file is never referenced by the installer or self-host docs.
+
+---
+
 ## Rules for this file
 
 1. Never delete an entry. Mark it `VERIFIED` (with evidence) or `FAILED`.
