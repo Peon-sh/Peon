@@ -12,6 +12,122 @@ The supervising developer's machine is 4 CPU / 8 GB RAM and **no project code is
 
 ---
 
+## PHASES 2, 5, 6, 7 — providers, Postgres queue, storage/email, local execution
+
+**STATUS:** `CODE COMPLETE / VALIDATION PENDING` for phases 2, 5, 6.
+**Phase 7 is PARTIAL** — see the warning below.
+
+Commits: `0160b30` (2+5), `5e5d7a3` (6), `e786f52` (7).
+
+### Phase 2 — provider abstractions
+
+`QueueProvider`, `StorageProvider` and `ServerExecutor` interfaces introduced;
+`EmailDriver` already existed and was reused rather than rewritten. Each
+resolver imports only the selected implementation, so the SQS path never loads
+Prisma, the Postgres path never loads the AWS SDK, and `smtp` never loads
+nodemailer.
+
+`lib/queue/sqs.ts` became a re-export shim so all 11 existing import sites were
+left untouched.
+
+### Phase 5 — Postgres queue
+
+`QueueJob` model + migration. Claiming is a single
+`UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)` statement, so two
+workers cannot take the same row.
+
+The design point the developer asked for explicitly: **claiming leases rather
+than deletes.** The row stays, `visibleAt` moves forward, status becomes
+`PROCESSING`. A worker that dies never acknowledges, the lease expires, another
+worker picks it up. A job therefore cannot sit in `PROCESSING` forever. The
+trade-off is at-least-once delivery, which matches the SQS visibility-timeout
+semantics the handlers were already written against.
+
+Also: attempt counter with cap, exponential backoff, terminal `FAILED` state,
+malformed-payload rejection, and preserved drop-on-`NotFoundError`.
+
+**Backwards compatibility is the load-bearing part.** With SQS URLs configured
+and no `QUEUE_DRIVER`, the driver resolves to `sqs`. An existing installation is
+never silently migrated — doing so would strand in-flight SQS jobs with nothing
+polling for them.
+
+### Phase 6 — storage, email, backups
+
+- `LocalStorageProvider` under `PEON_DATA_DIR/storage`, served by
+  `/api/storage/[...key]` behind a session, with path-traversal guards.
+- `S3StorageProvider` wraps the existing platform-S3 helpers, so object URLs are
+  unchanged for installations already on S3. Auto-detects: `s3` when `S3_BUCKET`
+  is set, otherwise `local`.
+- `SmtpEmailDriver` added. `EMAIL_DRIVER` is now `test | smtp | aws-ses`.
+- **Backup OOM (N1) fixed.** `uploadFileFromServer` previously ran
+  `base64 <file>` over SSH and decoded the result in memory — roughly 2.4x the
+  dump size in heap, so a 2 GB database needed ~5 GB and killed the worker. It
+  now pulls over SFTP to a temp file and streams a multipart upload. Peak memory
+  is one 8 MiB part. The new cost is disk: the worker needs free space equal to
+  the dump.
+
+### Phase 7 — local execution (PARTIAL)
+
+Built: `ServerExecutor`, `SshServerExecutor` (pure delegation to `sshPool`),
+`LocalServerExecutor` (`/bin/sh` + Docker CLI), `Server.executionMode` with an
+additive migration, `executorForServer()`, and `PEON_DATA_DIR`-driven paths.
+
+`docs/server-modes.md` documents the worker/host/daemon filesystem model the
+developer flagged as blocking, the same-absolute-path mounting rule, and an
+honest position on Docker socket exposure — including why a socket proxy is
+**not** a real boundary for Peon's use case, since Peon legitimately needs
+container-create, build, exec and volume APIs, and that set is already enough to
+take over a host.
+
+> **The 64 `sshPool` call sites are NOT migrated.** `deploy/engine.ts` (27) and
+> `server/operations.ts` (16) still call the pool directly, so a `LOCAL` server
+> cannot deploy end to end yet. Recorded as VD-020. **Single-server mode must not
+> be described as working.**
+
+### ARCHITECTURAL DECISIONS
+
+| ID | Decision | Rationale |
+|---|---|---|
+| D16 | Async provider resolution everywhere | The initial queue resolver used `require()`, which does not work in this ESM project. Async `import()` also gives per-driver lazy loading for free. |
+| D17 | Postgres queue leases instead of deleting on claim | The only way a crashed worker's job returns. Deleting on claim would lose it silently. |
+| D18 | Worker releases failed jobs with backoff on the Postgres driver only | SQS has no client-side equivalent — not acknowledging is what triggers redelivery there. |
+| D19 | Backups stream via SFTP-to-temp-file, not in-memory base64 | Bounded memory. Accepts a new disk requirement, which is the cheaper resource. |
+| D20 | Local objects served through an authenticated app route | Local storage has no bucket ACLs; the session is the only gate. |
+| D21 | `LocalServerExecutor` shells out rather than using dockerode | Confirms D2. Reuses the engine's existing command strings verbatim, keeping one code path. |
+
+### TESTS PERFORMED
+
+None. Unchanged: no `node_modules`, no pnpm, Node v24 vs required 22.
+
+### TESTS NOT RUN
+
+All new tests: queue driver resolution (8), Postgres provider (16), local storage
+(14), local executor (16). Plus everything from phases 1/1a.
+
+### RISKS
+
+- **VD-012 is a certainty, not a risk:** `package.json` gained
+  `@aws-sdk/lib-storage`, `nodemailer` and `@types/nodemailer`, and the lockfile
+  could not be regenerated. Every CI job running `pnpm install --frozen-lockfile`
+  **will fail** until someone runs `pnpm install` and commits `pnpm-lock.yaml`.
+- **VD-013 (CRITICAL):** the claim SQL is raw and has never been parsed by
+  Postgres. Mocked tests prove call shapes, not the statement. A wrong claim
+  loses or duplicates jobs silently.
+- **VD-021 (CRITICAL):** the filesystem model is documented but untested. A
+  worker/daemon path disagreement makes bind mounts point at the wrong directory
+  rather than failing loudly.
+- `prisma.queueJob` does not exist on the generated client until
+  `prisma generate` runs, so typecheck fails until then (VD-015).
+
+### NEXT
+
+Phase 7 completion: migrate the 64 call sites, starting with
+`server/operations.ts` (16, mechanical) before `deploy/engine.ts` (27, where the
+cancellation and rolling-update logic lives and must not regress). Then phases 3,
+4, 8–17.
+
+---
+
 ## PHASE 1a — ENCRYPTION_KEY compatibility redesign (correction)
 
 **PHASE:** 1a — correction to Phase 1

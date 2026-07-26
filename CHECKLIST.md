@@ -11,6 +11,37 @@ Source of truth for the standalone self-hosting refactor. Updated continuously. 
 | `[x]` | Complete **with evidence** |
 | `[!]` | Blocked / needs investigation |
 
+## Implementation vs verification
+
+A task may be code-complete while validation is outstanding. These are tracked
+separately, and a phase is never held hostage by one expensive integration test.
+
+```
+- [x] Implement Postgres queue provider
+  - Implementation: COMPLETE
+  - Verification: PENDING
+  - Validation debt: VD-013, VD-015
+```
+
+A phase may ship as **`CODE COMPLETE / VALIDATION PENDING`**. No phase is ever
+called **`FULLY VERIFIED`** while it carries open debt in
+[VALIDATION_DEBT.md](VALIDATION_DEBT.md).
+
+## Phase status
+
+| Phase | Implementation | Verification |
+|---|---|---|
+| 0 — Audit | COMPLETE | n/a |
+| 1 — Compose & bootstrap | COMPLETE | PENDING |
+| 1a — Encryption compatibility | COMPLETE | PENDING |
+| 2 — Provider abstractions | COMPLETE | PENDING |
+| 3 — UI-only mode | NOT STARTED | — |
+| 4 — Lightweight dev mode | NOT STARTED | — |
+| 5 — Postgres queue | COMPLETE | PENDING |
+| 6 — Local storage + SMTP + backups | COMPLETE | PENDING |
+| 7 — Local executor | **PARTIAL** — call sites not migrated (VD-020) | PENDING |
+| 8–17 | NOT STARTED | — |
+
 ## Rule for marking `[x]`
 
 Writing the code is not completion. A task moves to `[x]` only when there is evidence, and the evidence is named next to it:
