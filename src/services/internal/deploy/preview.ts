@@ -20,7 +20,7 @@ import {
   ServerDeployQueueFullError,
 } from '@/services/internal/deploy/server-queue';
 import { BillingService } from '@/services/internal/billing/billing';
-import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { executorForServer } from '@/lib/executor';
 import type { GithubAppForAuth } from '@/lib/github/app';
 
 const BASE_DIR = '/data/peon/services';
@@ -416,10 +416,9 @@ async function teardownPreview(
 
   if (svc.serverId) {
     try {
-      const target = await sshTargetForServer(svc.serverId);
+      const executor = await executorForServer(svc.serverId);
       const dir = previewDir(svc.uuid, pullRequestId);
-      await sshPool.exec(
-        target,
+      await executor.exec(
         `if [ -f ${dir}/docker-compose.yml ]; then cd ${dir} && docker compose down --remove-orphans || true; fi`,
       );
     } catch (err) {

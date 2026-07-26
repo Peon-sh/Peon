@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { executorForServer } from '@/lib/executor';
+import type { ServerExecutor } from '@/lib/executor';
 import {
   INSTALL_DOCKER_SCRIPT,
   INSTALL_PREREQUISITES_SCRIPT,
@@ -104,6 +106,60 @@ async function auditServer(serverId: string, action: string, summary: string) {
   });
 }
 
+/** True when this server runs commands on the Peon host itself. */
+async function isLocalServer(serverId: string): Promise<boolean> {
+  const row = await prisma.server.findUnique({
+    where: { id: serverId },
+    select: { executionMode: true },
+  });
+  return row?.executionMode === 'LOCAL';
+}
+
+/**
+ * Reachability preamble.
+ *
+ * Split out because it is the one genuinely different step between transports:
+ * a remote server is reached over SSH and may need its host key and pooled
+ * session dropped, while the local server just needs a live Docker daemon.
+ * Everything after this point is identical for both.
+ */
+async function assertReachable(
+  serverId: string,
+  executor: ServerExecutor,
+  log: (m: string) => void | Promise<void>,
+): Promise<void> {
+  if (executor.mode === 'local') {
+    await log('Checking the local Docker daemon…');
+    const reach = await executor.pingWithError();
+    if (!reach.ok) {
+      await prisma.server.update({
+        where: { id: serverId },
+        data: { isReachable: false, isUsable: false },
+      });
+      throw new Error(`Local Docker is not reachable: ${reach.error}`);
+    }
+    await log('Local Docker daemon is reachable.');
+    return;
+  }
+
+  const target = await sshTargetForServer(serverId);
+  // Drop any pooled session so we never ping a previous host after IP/key changes.
+  sshPool.disconnect(serverId);
+
+  await log(`Connecting over SSH to ${target.username}@${target.host}:${target.port}…`);
+  const reach = await executor.pingWithError();
+  if (!reach.ok) {
+    await prisma.server.update({
+      where: { id: serverId },
+      data: { isReachable: false, isUsable: false },
+    });
+    throw new Error(
+      `Server is not reachable over SSH (${target.username}@${target.host}:${target.port}): ${reach.error}`,
+    );
+  }
+  await log(`Server is reachable at ${target.username}@${target.host}:${target.port}.`);
+}
+
 export const ServerOperations = {
   /** Validate connectivity and gather info; optionally install Docker. */
   async validate(
@@ -111,37 +167,38 @@ export const ServerOperations = {
     opts: { installDocker?: boolean } = {},
     log: (m: string) => void | Promise<void> = () => {},
   ) {
-    const target = await sshTargetForServer(serverId);
-    // Drop any pooled session so we never ping a previous host after IP/key changes.
-    sshPool.disconnect(serverId);
+    const executor = await executorForServer(serverId);
+    const local = executor.mode === 'local';
 
-    await log(`Connecting over SSH to ${target.username}@${target.host}:${target.port}…`);
-    const reach = await sshPool.pingWithError(target);
-    if (!reach.ok) {
-      await prisma.server.update({ where: { id: serverId }, data: { isReachable: false, isUsable: false } });
-      throw new Error(
-        `Server is not reachable over SSH (${target.username}@${target.host}:${target.port}): ${reach.error}`,
-      );
+    await assertReachable(serverId, executor, log);
+
+    // The Peon host provisions itself (installer or image), so the local server
+    // never runs apt-get/systemctl from the worker — it usually has no
+    // privileges to do so, and the packages are already present by construction.
+    const installDocker = local ? false : opts.installDocker;
+
+    let info = parseInfo((await executor.exec(SERVER_INFO_SCRIPT)).stdout);
+
+    // The OS gate exists to stop Peon trying to provision a distro whose package
+    // manager it does not know. The local host is already provisioned, so an
+    // unrecognised distro there is not a reason to refuse.
+    if (!local) {
+      await log('Checking supported OS type…');
+      const osId = info.osId?.toLowerCase();
+      if (!osId || !SUPPORTED_OS_IDS.has(osId)) {
+        await prisma.server.update({ where: { id: serverId }, data: { isReachable: true, isUsable: false } });
+        throw new Error(`Supported OS type check failed. Detected: ${info.os || osId || 'unknown'}.`);
+      }
+      await log(`Supported OS type: ${info.os || osId}.`);
     }
-    await log(`Server is reachable at ${target.username}@${target.host}:${target.port}.`);
-
-    let info = parseInfo((await sshPool.exec(target, SERVER_INFO_SCRIPT)).stdout);
-
-    await log('Checking supported OS type…');
-    const osId = info.osId?.toLowerCase();
-    if (!osId || !SUPPORTED_OS_IDS.has(osId)) {
-      await prisma.server.update({ where: { id: serverId }, data: { isReachable: true, isUsable: false } });
-      throw new Error(`Supported OS type check failed. Detected: ${info.os || osId || 'unknown'}.`);
-    }
-    await log(`Supported OS type: ${info.os || osId}.`);
 
     await log('Checking prerequisites…');
     let missing = missingPrerequisites(info);
-    if (missing.length && opts.installDocker) {
+    if (missing.length && installDocker) {
       await log(`Installing prerequisites: ${missing.join(', ')}.`);
-      const res = await sshPool.execStream(target, INSTALL_PREREQUISITES_SCRIPT, (c) => void log(c.trimEnd()));
+      const res = await executor.execStream(INSTALL_PREREQUISITES_SCRIPT, (c) => void log(c.trimEnd()));
       if (res.code !== 0) throw new Error(`Prerequisites could not be installed: ${missing.join(', ')}.`);
-      info = parseInfo((await sshPool.exec(target, SERVER_INFO_SCRIPT)).stdout);
+      info = parseInfo((await executor.exec(SERVER_INFO_SCRIPT)).stdout);
       missing = missingPrerequisites(info);
     }
     if (missing.length) {
@@ -153,11 +210,11 @@ export const ServerOperations = {
     await log('Checking Docker Engine…');
     let dockerReady = !!info.docker && info.docker !== 'none';
     let composeReady = !!info.compose && info.compose !== 'none';
-    if (opts.installDocker && (!dockerReady || !composeReady)) {
+    if (installDocker && (!dockerReady || !composeReady)) {
       await log('Installing Docker Engine and Docker Compose…');
-      const res = await sshPool.execStream(target, INSTALL_DOCKER_SCRIPT, (c) => void log(c.trimEnd()));
+      const res = await executor.execStream(INSTALL_DOCKER_SCRIPT, (c) => void log(c.trimEnd()));
       if (res.code !== 0) throw new Error('Docker installation failed.');
-      info = parseInfo((await sshPool.exec(target, SERVER_INFO_SCRIPT)).stdout);
+      info = parseInfo((await executor.exec(SERVER_INFO_SCRIPT)).stdout);
       dockerReady = !!info.docker && info.docker !== 'none';
       composeReady = !!info.compose && info.compose !== 'none';
     }
@@ -210,12 +267,11 @@ export const ServerOperations = {
   },
 
   async startAgent(serverId: string, log: (m: string) => void | Promise<void> = () => {}) {
-    const target = await sshTargetForServer(serverId);
+    const executor = await executorForServer(serverId);
     const creds = await ensureAgentCredentials(serverId);
     await log('Installing peon-ping-pong monitoring agent…');
-    await sshPool.exec(target, `mkdir -p ${agentComposePath()}/data`);
-    await sshPool.putContent(
-      target,
+    await executor.exec(`mkdir -p ${agentComposePath()}/data`);
+    await executor.putContent(
       `${agentComposePath()}/docker-compose.yml`,
       agentComposeFile({
         token: creds.token,
@@ -223,14 +279,14 @@ export const ServerOperations = {
         serverId: creds.serverId,
       }),
     );
-    const res = await sshPool.execStream(target, startAgentScript(), (c) => void log(c.trimEnd()));
+    const res = await executor.execStream(startAgentScript(), (c) => void log(c.trimEnd()));
     if (res.code !== 0) throw new Error('Failed to start peon-ping-pong agent.');
     await log('peon-ping-pong agent is running.');
   },
 
   async stopAgent(serverId: string, log: (m: string) => void | Promise<void> = () => {}) {
-    const target = await sshTargetForServer(serverId);
-    await sshPool.execStream(target, stopAgentScript(), (c) => void log(c.trimEnd()));
+    const executor = await executorForServer(serverId);
+    await executor.execStream(stopAgentScript(), (c) => void log(c.trimEnd()));
     await prisma.serverSetting.updateMany({
       where: { serverId },
       data: { isSentinelEnabled: false },
@@ -238,25 +294,24 @@ export const ServerOperations = {
   },
 
   async startProxy(serverId: string, log: (m: string) => void | Promise<void> = () => {}) {
-    const target = await sshTargetForServer(serverId);
+    const executor = await executorForServer(serverId);
     const server = await prisma.server.findUnique({ where: { id: serverId } });
     const proxyType = server?.proxyType ?? 'TRAEFIK';
     await log(`Writing ${proxyType} proxy configuration…`);
-    await sshPool.exec(target, `mkdir -p ${proxyComposePath()}`);
-    await sshPool.putContent(
-      target,
+    await executor.exec(`mkdir -p ${proxyComposePath()}`);
+    await executor.putContent(
       `${proxyComposePath()}/docker-compose.yml`,
       proxyComposeFile(proxyType),
     );
-    const res = await sshPool.execStream(target, startProxyScript(), (c) => void log(c.trimEnd()));
+    const res = await executor.execStream(startProxyScript(), (c) => void log(c.trimEnd()));
     if (res.code !== 0) throw new Error('Failed to start proxy.');
     await prisma.server.update({ where: { id: serverId }, data: { proxyStatus: 'running' } });
     await auditServer(serverId, 'server.proxy.started', 'Started server proxy');
   },
 
   async stopProxy(serverId: string, log: (m: string) => void | Promise<void> = () => {}) {
-    const target = await sshTargetForServer(serverId);
-    await sshPool.execStream(target, stopProxyScript(), (c) => void log(c.trimEnd()));
+    const executor = await executorForServer(serverId);
+    await executor.execStream(stopProxyScript(), (c) => void log(c.trimEnd()));
     await prisma.server.update({ where: { id: serverId }, data: { proxyStatus: 'exited' } });
     await auditServer(serverId, 'server.proxy.stopped', 'Stopped server proxy');
   },
@@ -268,12 +323,13 @@ export const ServerOperations = {
     await log(
       `Running docker cleanup (volumes=${deleteUnusedVolumes}, networks=${deleteUnusedNetworks}).`,
     );
-    const target = await sshTargetForServer(serverId);
-    await sshPool.execStream(
-      target,
+    const executor = await executorForServer(serverId);
+    await executor.execStream(
       cleanupScript({ deleteUnusedVolumes, deleteUnusedNetworks }),
       (c) => void log(c.trimEnd()),
     );
     await auditServer(serverId, 'server.cleanup_queued', 'Ran server Docker cleanup');
   },
 };
+
+export { isLocalServer };

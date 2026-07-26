@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
-import { sshPool, type SshTarget } from '@/lib/ssh';
+import type { ServerExecutor } from '@/lib/executor';
 import { s3ClientFor } from './client';
 import type { S3Storage } from '@/lib/prisma';
 
@@ -21,11 +21,11 @@ import type { S3Storage } from '@/lib/prisma';
  * the decoded Buffer — so a 2 GB database needed ~5 GB and killed the worker.
  *
  * Now the file is pulled over SFTP to a temp path (streamed to disk by
- * `sshPool.getFile`), then streamed into S3 as a multipart upload. Peak memory is
+ * the executor's `getFile`), then streamed into S3 as a multipart upload. Peak memory is
  * one part, not the whole backup. Disk still needs room for the dump.
  */
 export async function uploadFileFromServer(
-  target: SshTarget,
+  executor: ServerExecutor,
   remotePath: string,
   key: string,
   storage: S3Storage,
@@ -34,7 +34,7 @@ export async function uploadFileFromServer(
   const localPath = join(dir, 'dump');
 
   try {
-    await sshPool.getFile(target, remotePath, localPath);
+    await executor.getFile(remotePath, localPath);
 
     const { size } = await stat(localPath);
     const client = s3ClientFor(storage);

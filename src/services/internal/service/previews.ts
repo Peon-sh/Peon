@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { executorForServer } from '@/lib/executor';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 
 const BASE_DIR = '/data/peon/services';
@@ -25,10 +25,9 @@ export async function deletePreview(serviceId: string, previewId: string) {
 
   if (preview.service.serverId) {
     try {
-      const target = await sshTargetForServer(preview.service.serverId);
+      const executor = await executorForServer(preview.service.serverId);
       const dir = `${BASE_DIR}/${preview.service.uuid}/pr-${preview.pullRequestId}`;
-      await sshPool.exec(
-        target,
+      await executor.exec(
         `if [ -f ${dir}/docker-compose.yml ]; then cd ${dir} && docker compose down --remove-orphans || true; fi`,
       );
     } catch (err) {

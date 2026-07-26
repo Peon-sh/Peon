@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { prisma } from '@/lib/prisma';
-import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { executorForServer, type ServerExecutor } from '@/lib/executor';
 import { decrypt } from '@/lib/crypto/encryption';
 import { engineSpec } from '@/lib/docker/databases';
 import { containerName } from '@/lib/docker/naming';
@@ -29,7 +29,7 @@ export async function runBackup(backupId: string, executionId: string): Promise<
   if (!spec.dumpCommand) throw new Error(`Backups not supported for ${spec.label}.`);
 
   const dumpAll = backup.dumpAll;
-  const target = await sshTargetForServer(svc.serverId);
+  const executor = await executorForServer(svc.serverId);
   const name = containerName(svc.name, svc.uuid);
   const creds = {
     username: svc.dbUsername,
@@ -44,16 +44,16 @@ export async function runBackup(backupId: string, executionId: string): Promise<
 
   try {
     const script = `mkdir -p /data/peon/backups && docker exec ${name} sh -c '${spec.dumpCommand(creds, { dumpAll })}' > ${remotePath} && ls -la ${remotePath}`;
-    const res = await sshPool.exec(target, script);
+    const res = await executor.exec(script);
     if (res.code !== 0) throw new Error(res.stderr || 'Dump failed.');
 
     let s3Uploaded = false;
     if (backup.saveS3 && backup.s3Storage) {
-      await uploadFileFromServer(target, remotePath, `backups/${svc.uuid}/${filename}`, backup.s3Storage);
+      await uploadFileFromServer(executor, remotePath, `backups/${svc.uuid}/${filename}`, backup.s3Storage);
       s3Uploaded = true;
     }
 
-    const sizeRes = await sshPool.exec(target, `stat -c %s ${remotePath} 2>/dev/null || stat -f %z ${remotePath}`);
+    const sizeRes = await executor.exec(`stat -c %s ${remotePath} 2>/dev/null || stat -f %z ${remotePath}`);
     const sizeBytes = sizeRes.code === 0 ? sizeRes.stdout.trim() : null;
 
     await prisma.scheduledBackupExecution.update({
@@ -69,7 +69,7 @@ export async function runBackup(backupId: string, executionId: string): Promise<
       },
     });
 
-    await enforceRetention(backupId, target);
+    await enforceRetention(backupId, executor);
 
     await notifyService(svc.id, 'backup_success', {
       subject: `Backup succeeded: ${svc.name}`,
@@ -115,7 +115,7 @@ export async function runRestore(serviceId: string, filename: string): Promise<v
   });
   const dumpAll = execution?.dumpAll ?? true;
 
-  const target = await sshTargetForServer(svc.serverId);
+  const executor = await executorForServer(svc.serverId);
   const name = containerName(svc.name, svc.uuid);
   const creds = {
     username: svc.dbUsername,
@@ -125,11 +125,11 @@ export async function runRestore(serviceId: string, filename: string): Promise<v
   };
 
   const remotePath = `/data/peon/backups/${filename}`;
-  const check = await sshPool.exec(target, `test -f ${remotePath} && echo ok || echo missing`);
+  const check = await executor.exec(`test -f ${remotePath} && echo ok || echo missing`);
   if (!check.stdout.includes('ok')) throw new NotFoundError(`Backup file not found: ${filename}`);
 
   const script = `docker exec -i ${name} sh -c '${spec.restoreCommand(creds, { dumpAll })}' < ${remotePath}`;
-  const res = await sshPool.exec(target, script);
+  const res = await executor.exec(script);
   if (res.code !== 0) throw new Error(res.stderr || 'Restore failed.');
 }
 
@@ -152,15 +152,15 @@ export async function openBackupDownload(
   });
   if (!execution) throw new NotFoundError('Backup execution not found for that filename.');
 
-  const target = await sshTargetForServer(svc.serverId);
+  const executor = await executorForServer(svc.serverId);
   const remotePath = `/data/peon/backups/${filename}`;
-  const check = await sshPool.exec(target, `test -f ${remotePath} && echo ok || echo missing`);
+  const check = await executor.exec(`test -f ${remotePath} && echo ok || echo missing`);
   if (!check.stdout.includes('ok')) throw new NotFoundError(`Backup file not found: ${filename}`);
 
   const dir = await mkdtemp(join(tmpdir(), 'peon-backup-'));
   const localPath = join(dir, filename);
   try {
-    await sshPool.getFile(target, remotePath, localPath);
+    await executor.getFile(remotePath, localPath);
     const fileStat = await stat(localPath);
     const nodeStream = createReadStream(localPath);
     const cleanup = async () => {
@@ -187,7 +187,7 @@ export async function openBackupDownload(
   }
 }
 
-async function enforceRetention(backupId: string, target: Awaited<ReturnType<typeof sshTargetForServer>>) {
+async function enforceRetention(backupId: string, executor: ServerExecutor) {
   const backup = await prisma.scheduledBackup.findUnique({ where: { id: backupId } });
   if (!backup || backup.retentionAmountLocal <= 0) return;
   // Keep the most recent N local dumps for this service.
@@ -195,5 +195,5 @@ async function enforceRetention(backupId: string, target: Awaited<ReturnType<typ
   if (!svc) return;
   const name = containerName(svc.name, svc.uuid);
   const script = `cd /data/peon/backups 2>/dev/null && ls -1t ${name}-*.sql 2>/dev/null | tail -n +${backup.retentionAmountLocal + 1} | xargs -r rm -f || true`;
-  await sshPool.exec(target, script);
+  await executor.exec(script);
 }

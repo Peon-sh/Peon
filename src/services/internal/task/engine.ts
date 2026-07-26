@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { executorForServer } from '@/lib/executor';
 import { containerName } from '@/lib/docker/naming';
 import { dockerExecShellCommand } from '@/lib/shell/quote';
 import { notifyService } from '@/services/internal/notifications/events';
@@ -13,14 +13,14 @@ export async function runScheduledTask(taskId: string, executionId: string): Pro
   const svc = task.service;
   if (!svc.serverId) throw new Error('Service has no server.');
 
-  const target = await sshTargetForServer(svc.serverId);
+  const executor = await executorForServer(svc.serverId);
   const container = task.container || svc.activeContainerName || containerName(svc.name, svc.uuid);
   const start = Date.now();
 
   try {
     // Single-quote the command so the remote SSH shell does not expand $VARS
     // (e.g. $CRON_SECRET) before they reach the container.
-    const res = await sshPool.exec(target, dockerExecShellCommand(container, task.command));
+    const res = await executor.exec(dockerExecShellCommand(container, task.command));
     await prisma.scheduledTaskExecution.update({
       where: { id: executionId },
       data: {
