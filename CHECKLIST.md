@@ -40,9 +40,18 @@ called **`FULLY VERIFIED`** while it carries open debt in
 | 5 — Postgres queue | COMPLETE | PENDING |
 | 6 — Local storage + SMTP + backups | COMPLETE | PENDING |
 | 7 — Local executor | COMPLETE — all 64 call sites migrated | PENDING (VD-024, VD-025) |
-| 8 — Single-server mode | PARTIAL — local server concept exists, not wired to onboarding/installer (VD-027) | PENDING |
-| 9 — Remote + hybrid | Implicit in 7/8; needs regression proof (VD-025) | PENDING |
-| 3, 4, 10–17 | NOT STARTED | — |
+| 8 — Single-server mode | COMPLETE — local server + onboarding wiring | PENDING (VD-027, VD-030) |
+| 9 — Remote + hybrid | COMPLETE by construction (per-server property) | PENDING (VD-025) |
+| 3 — UI-only mode | **PARTIAL** — fixtures + guard + compose; API adapter not wired (VD-031) | PENDING |
+| 4 — Lightweight dev mode | COMPLETE | PENDING (VD-032) |
+| 10 — Infrastructure mode | **NOT STARTED** | — |
+| 11 — One-command installer | **NOT STARTED** | — |
+| 12 — Control-plane TLS | **NOT STARTED** | — |
+| 13 — Prebuilt images | **NOT STARTED** | — |
+| 14 — CI / validation | PARTIAL — jobs added in phase 1 | PENDING |
+| 15 — Documentation | PARTIAL — 5 docs written; development.md, troubleshooting.md, infrastructure-providers.md missing | — |
+| 16 — Security review | **NOT STARTED** | — |
+| 17 — Final regression review | **NOT STARTED** | — |
 
 ## Rule for marking `[x]`
 
