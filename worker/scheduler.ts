@@ -1,6 +1,15 @@
 import { prisma } from '../src/lib/prisma';
-import { enqueue } from '../src/lib/queue/sqs';
+import { enqueue, getQueueProvider } from '../src/lib/queue';
 import { cronMatches } from '../src/lib/queue/cron';
+
+/** Hourly, on the hour. */
+const QUEUE_PURGE_CRON = '0 * * * *';
+
+/** How long finished queue jobs are retained. */
+function queueRetentionDays(): number {
+  const raw = Number(process.env.QUEUE_RETENTION_DAYS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 7;
+}
 
 /**
  * Cron scheduler (run via `pnpm schedule`). Evaluates enabled scheduled
@@ -59,6 +68,26 @@ async function tick(log: Log) {
     if (!shouldFire(`cleanup:${setting.serverId}`, setting.dockerCleanupFrequency, now)) continue;
     await enqueue({ type: 'server.cleanup', serverId: setting.serverId });
     log(`enqueued server.cleanup for server ${setting.serverId}`);
+  }
+
+  // Queue history retention.
+  //
+  // The Postgres queue keeps COMPLETED and FAILED rows for auditing, which
+  // means the table grows without bound on a long-running installation and the
+  // claim index degrades with it. Prune once an hour. No-op for the SQS driver,
+  // where AWS owns retention.
+  if (shouldFire('queue:purge', QUEUE_PURGE_CRON, now)) {
+    try {
+      const provider = await getQueueProvider();
+      if (provider.name === 'postgres') {
+        const purge = provider as { purgeCompleted?: (days: number) => Promise<number> };
+        const removed = (await purge.purgeCompleted?.(queueRetentionDays())) ?? 0;
+        if (removed > 0) log(`purged ${removed} finished queue jobs`);
+      }
+    } catch (err) {
+      // Retention is housekeeping: never let it stop the scheduler.
+      log(`queue purge failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 

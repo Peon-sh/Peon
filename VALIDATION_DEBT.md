@@ -668,8 +668,19 @@ scan. Wire `purgeCompleted` into the scheduler.
 |---|---|
 | **Phase** | 8 |
 | **Area** | Local executor |
-| **Status** | OPEN (design decision, implementation complete) |
+| **Status** | FIXED (UI now hides it) — verification OPEN |
 | **Risk** | LOW |
+
+**Update (freeze review).** The earlier note said "the UI should also disable the
+action — not yet done". That was a real exposed-broken-button defect, not a
+documentation gap: `servers/[serverId]/page.tsx` rendered the Terminal tab
+unconditionally, and `sectionsForService()` always emitted a Terminal section, so
+a LOCAL server showed controls that could only fail.
+
+Now: `executionMode` is carried on the server DTO, the server Terminal tab is not
+rendered for LOCAL (with an explanation if reached by deep link), and the service
+Terminal section is omitted when the target server is LOCAL. No null SSH target
+can be produced from the UI.
 
 **Description.** Supersedes VD-026's "will crash" state. Both terminal paths now
 fail fast with a specific message instead of dialling a null SSH target:
@@ -882,6 +893,57 @@ real database behaviour rather than a mock returning `count: 0`.
 **Required validation.** Against real Postgres: two concurrent POSTs to
 `/api/setup` with the same token must produce exactly one administrator. Confirm
 the plaintext token never appears in logs.
+
+---
+
+### VD-038 — Queue retention now scheduled, unverified
+
+| | |
+|---|---|
+| **Phase** | 5 |
+| **Area** | Queue |
+| **Status** | FIXED (implementation) — verification OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `purgeCompleted()` previously had no callers, so the `QueueJob`
+table grew without bound on a long-running standalone installation and the claim
+index degraded with it. A real defect, not merely unexecuted code.
+
+Fixed: the scheduler prunes finished jobs hourly, retention configurable via
+`QUEUE_RETENTION_DAYS` (default 7). No-op on the SQS driver, where AWS owns
+retention. Failures are logged and never stop the scheduler.
+
+**Second defect found while fixing it:** the scheduler was behind the `full`
+profile in the root compose file, so a default `docker compose up -d` ran no
+scheduler at all — meaning **scheduled backups and tasks silently never ran** on
+a self-hosted install, independent of this refactor. The scheduler is now part of
+the default stack; only the terminal socket remains behind `full`.
+
+**Required validation.** Confirm the purge fires hourly and removes only rows
+past retention; confirm exactly one scheduler runs; confirm scheduled backups
+fire on a default install.
+
+---
+
+### VD-039 — Local server is created at setup, not by the installer
+
+| | |
+|---|---|
+| **Phase** | 8/11 |
+| **Area** | Installer |
+| **Status** | OPEN (by design) |
+| **Risk** | LOW |
+
+**Description.** `install.sh` does not call `ensureLocalServer()` directly — it
+cannot, because no workspace exists until the first administrator is created.
+The local server is created by `POST /api/setup` when the operator picks "On this
+server", which is the default selection.
+
+Consequence: between `install.sh` finishing and the operator completing the setup
+form, no local server exists. That is correct, but it means a tester following
+§19 must complete setup before T-LOCAL-001 can pass.
+
+**Required validation.** T-INST-008, T-LOCAL-001.
 
 ---
 

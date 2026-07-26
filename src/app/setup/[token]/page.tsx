@@ -144,21 +144,47 @@ export default function SetupPage({ params }: { params: Promise<{ token: string 
             <p className="text-muted-foreground text-xs">At least 8 characters.</p>
           </div>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={useLocalServer}
-              onChange={(e) => setUseLocalServer(e.target.checked)}
-            />
-            <span className="text-sm">
-              <span className="font-medium">Deploy to this server</span>
-              <span className="text-muted-foreground block text-xs">
-                Registers this machine as a deployment target. You can add remote
-                servers later, and use both together.
+          <fieldset className="space-y-2">
+            <legend className="mb-2 text-sm font-medium">Where should your apps run?</legend>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-checked:border-primary">
+              <input
+                type="radio"
+                name="placement"
+                className="mt-0.5"
+                checked={useLocalServer}
+                onChange={() => setUseLocalServer(true)}
+              />
+              <span className="text-sm">
+                <span className="font-medium">On this server</span>
+                <span className="text-muted-foreground block text-xs">
+                  Peon and your apps share this machine. Simplest to start with.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-checked:border-primary">
+              <input
+                type="radio"
+                name="placement"
+                className="mt-0.5"
+                checked={!useLocalServer}
+                onChange={() => setUseLocalServer(false)}
+              />
+              <span className="text-sm">
+                <span className="font-medium">On separate servers only</span>
+                <span className="text-muted-foreground block text-xs">
+                  Keep this machine as a control plane. Add servers over SSH
+                  afterwards.
+                </span>
+              </span>
+            </label>
+
+            <p className="text-muted-foreground pt-1 text-xs">
+              Not a permanent choice — you can add remote servers later either
+              way, and run both together.
+            </p>
+          </fieldset>
         </div>
 
         {error && (

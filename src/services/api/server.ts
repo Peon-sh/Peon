@@ -49,11 +49,15 @@ export interface Destination {
   createdAt: string;
 }
 
+/** How Peon reaches a server. LOCAL means the Peon host itself, with no SSH. */
+export type ServerExecutionMode = 'REMOTE' | 'LOCAL';
+
 export interface ServerListItem {
   id: string;
   uuid: string;
   name: string;
   description: string | null;
+  executionMode: ServerExecutionMode;
   ip: string;
   port: number;
   user: string;
@@ -77,6 +81,7 @@ export interface ServerDetail {
   uuid: string;
   name: string;
   description: string | null;
+  executionMode: ServerExecutionMode;
   ip: string;
   port: number;
   user: string;

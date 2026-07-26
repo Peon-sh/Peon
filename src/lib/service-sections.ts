@@ -45,9 +45,16 @@ export const BACKUPABLE_ENGINES = new Set(['POSTGRESQL', 'MYSQL', 'MARIADB', 'MO
 export function sectionsForService(svc: {
   kind: string;
   databaseEngine: string | null;
+  /** Execution mode of the target server, when known. */
+  serverExecutionMode?: string | null;
 }): ServiceSection[] {
   const isDb = svc.kind === 'DATABASE';
   const canBackup = isDb && !!svc.databaseEngine && BACKUPABLE_ENGINES.has(svc.databaseEngine);
+  // Container terminals need a PTY, which the local executor does not yet
+  // provide, so the terminal server refuses them for services on a LOCAL
+  // server. Hide the section rather than expose a control that cannot work.
+  // See docs/server-modes.md and VD-029.
+  const canTerminal = svc.serverExecutionMode !== 'LOCAL';
   return [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'configuration', label: 'Configuration', icon: Settings2 },
@@ -58,7 +65,7 @@ export function sectionsForService(svc: {
     ...(isDb ? [] : [{ id: 'tasks' as const, label: 'Scheduled Tasks', icon: CalendarClock }]),
     ...(canBackup ? [{ id: 'backups' as const, label: 'Backups', icon: DatabaseBackup }] : []),
     { id: 'logs', label: 'Logs', icon: ScrollText },
-    { id: 'terminal', label: 'Terminal', icon: SquareTerminal },
+    ...(canTerminal ? [{ id: 'terminal' as const, label: 'Terminal', icon: SquareTerminal }] : []),
     { id: 'webhooks', label: 'Webhooks', icon: Webhook },
     { id: 'danger', label: 'Danger Zone', icon: ShieldAlert, danger: true },
   ];

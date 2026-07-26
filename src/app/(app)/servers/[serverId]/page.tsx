@@ -85,13 +85,20 @@ export default function ServerDetailPage({ params }: { params: Promise<{ serverI
     );
   }
 
+  // Host terminals are not available on the server Peon itself runs on: there is
+  // no SSH connection to open, and a host shell there would be an unaudited root
+  // shell on the control plane. See docs/server-modes.md.
+  const isLocal = server.executionMode === 'LOCAL';
+
   return (
     <PageContainer>
       <Tabs value={tab} onValueChange={setTab} className="w-full min-w-0">
         <TabsList className={TABS_LIST_CLASS}>
           <TabsTrigger className={TABS_TRIGGER_CLASS} value="general">General</TabsTrigger>
           <TabsTrigger className={TABS_TRIGGER_CLASS} value="proxy">Gateway</TabsTrigger>
-          <TabsTrigger className={TABS_TRIGGER_CLASS} value="terminal">Terminal</TabsTrigger>
+          {!isLocal && (
+            <TabsTrigger className={TABS_TRIGGER_CLASS} value="terminal">Terminal</TabsTrigger>
+          )}
           <TabsTrigger className={TABS_TRIGGER_CLASS} value="advanced">Advanced</TabsTrigger>
           <TabsTrigger className={TABS_TRIGGER_CLASS} value="destinations">Destinations</TabsTrigger>
           <TabsTrigger className={TABS_TRIGGER_CLASS} value="danger">Danger</TabsTrigger>
@@ -107,7 +114,7 @@ export default function ServerDetailPage({ params }: { params: Promise<{ serverI
           </TabWithActivity>
         </TabsContent>
         <TabsContent value="terminal" className="pt-6">
-          <ServerTerminalTab serverId={server.id} />
+          {isLocal ? <LocalTerminalUnavailable /> : <ServerTerminalTab serverId={server.id} />}
         </TabsContent>
         <TabsContent value="advanced" className="pt-6">
           <TabWithActivity serverId={server.id}>
@@ -594,6 +601,20 @@ function AdvancedTab({ server, onSaved }: { server: ServerDetail; onSaved: () =>
           </div>
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function LocalTerminalUnavailable() {
+  return (
+    <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center text-sm">
+      <p className="text-foreground mb-1 font-medium">
+        Terminal is not available for this server
+      </p>
+      <p className="mx-auto max-w-md">
+        Peon runs on this machine, so there is no SSH connection to open. Use a
+        shell on the host directly, or open a terminal on an individual service.
+      </p>
     </div>
   );
 }

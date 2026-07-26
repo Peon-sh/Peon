@@ -1,8 +1,8 @@
 # Self-host / production-like stack for Peon.
 #
-#   docker compose up -d                  # Postgres + migrations + app + worker
+#   docker compose up -d                  # Postgres, migrations, app, worker, scheduler
 #   docker compose up -d postgres         # just the database (host-based development)
-#   docker compose --profile full up -d   # adds scheduler + terminal socket
+#   docker compose --profile full up -d   # adds the terminal socket
 #
 # Requires a `.env` file — copy `.env.example` and fill in the REQUIRED block.
 #
@@ -97,8 +97,12 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  # Cron scheduler. Run EXACTLY ONE instance — worker/scheduler.ts dedupes in
-  # memory, so a second process double-fires every backup and scheduled task.
+  # Cron scheduler. Part of the default stack: without it, scheduled backups and
+  # tasks silently never run, and the Postgres queue's finished-job retention
+  # never prunes.
+  #
+  # Run EXACTLY ONE instance — worker/scheduler.ts dedupes in memory, so a
+  # second process double-fires every backup and scheduled task. Do not scale it.
   schedule:
     build:
       context: .
@@ -113,7 +117,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    profiles: ["full"]
 
   socket:
     build:
