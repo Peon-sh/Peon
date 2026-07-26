@@ -1,0 +1,102 @@
+# Build and publish production container images.
+#
+# NOT ENABLED ON THIS FORK. `workflow_dispatch` only, so nothing publishes until
+# a maintainer runs it deliberately. Registry naming is subject to upstream
+# approval — see docs/container-images.md.
+#
+# Exists so self-hosters do not have to compile Next.js and download Chromium on
+# a small VPS just to install Peon.
+
+name: Release images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag, e.g. 1.4.0 (without a leading v)'
+        required: true
+        type: string
+      push:
+        description: 'Push to the registry (unchecked = build only)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Web/API. Alpine — no browser, no build toolchain at runtime.
+          - image: peon
+            dockerfile: docker/Dockerfile
+            platforms: linux/amd64,linux/arm64
+
+          # Worker without Chromium. The default: most installations never take
+          # deployment screenshots, and the browser roughly doubles image size.
+          - image: peon-worker
+            dockerfile: docker/Dockerfile.worker
+            platforms: linux/amd64,linux/arm64
+            build_args: |
+              INCLUDE_CHROMIUM=false
+
+          # Worker with Chromium, for installations that want screenshots.
+          # amd64 only: Playwright's arm64 builds are less reliable and this is
+          # an opt-in image.
+          - image: peon-worker-screenshots
+            dockerfile: docker/Dockerfile.worker
+            platforms: linux/amd64
+            build_args: |
+              INCLUDE_CHROMIUM=true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}
+            type=semver,pattern={{major}},value=${{ inputs.version }}
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ !contains(inputs.version, '-') }}
+
+      - name: Build${{ inputs.push && ' and push' || '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platforms }}
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          provenance: true
+          sbom: true

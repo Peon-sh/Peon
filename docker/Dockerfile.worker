@@ -4,6 +4,11 @@
 # Default CMD is the SQS worker; override for schedule or socket:
 #   command: ["node", "--import", "tsx", "worker/schedule.ts"]
 #   command: ["node", "--import", "tsx", "worker/socket.ts"]
+# Chromium is only needed for deployment preview screenshots, and roughly
+# doubles the image. Off by default; the release workflow builds a separate
+# `peon-worker-screenshots` image with it on.
+ARG INCLUDE_CHROMIUM=false
+
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -53,8 +58,13 @@ COPY --from=build /app/worker ./worker
 COPY docker/worker-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Chromium + OS deps for deployment preview screenshots.
-RUN pnpm exec playwright install --with-deps chromium
+# Chromium + OS deps, only when this image is built for screenshots.
+ARG INCLUDE_CHROMIUM
+RUN if [ "$INCLUDE_CHROMIUM" = "true" ]; then \
+      pnpm exec playwright install --with-deps chromium; \
+    else \
+      echo "Skipping Chromium (INCLUDE_CHROMIUM=$INCLUDE_CHROMIUM)"; \
+    fi
 
 # Replace the node image entrypoint so a custom start command
 # "pnpm worker" (often a single arg) does not become `node "pnpm worker"`.

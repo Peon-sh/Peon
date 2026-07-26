@@ -45,15 +45,40 @@ export async function captureDeploymentPreview(
     });
     if (!deployment) return;
 
-    const { chromium } = await import('playwright');
+    // The default worker image ships without Chromium (INCLUDE_CHROMIUM=false)
+    // because most installations never take screenshots and the browser roughly
+    // doubles the image. Missing browser is a normal configuration, not an
+    // error — degrade quietly rather than logging a stack trace per deployment.
+    let chromium: typeof import('playwright').chromium;
+    try {
+      ({ chromium } = await import('playwright'));
+    } catch {
+      console.info(
+        '[screenshot] Playwright is not installed; skipping the deployment preview. ' +
+          'Use the peon-worker-screenshots image to enable it.',
+      );
+      return;
+    }
+
     await fs.mkdir(PREVIEW_DIR, { recursive: true });
     localPath = path.join(PREVIEW_DIR, `${deploymentId}.png`);
 
     // Docker/root: sandboxing fails without these flags; shm is often tiny in containers.
-    const browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    let browser;
+    try {
+      browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (err) {
+      // Playwright present but the browser binary is not — same situation.
+      console.info(
+        `[screenshot] Chromium is unavailable; skipping the deployment preview. ${
+          err instanceof Error ? err.message.split('\n')[0] : ''
+        }`,
+      );
+      return;
+    }
     try {
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
       await page.goto(serviceUrl(fqdn), { waitUntil: 'networkidle', timeout: 45_000 });

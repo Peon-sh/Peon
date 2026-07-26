@@ -195,6 +195,6 @@ async function enforceRetention(backupId: string, executor: ServerExecutor) {
   const svc = await prisma.service.findFirst({ where: { scheduledBackups: { some: { id: backupId } } } });
   if (!svc) return;
   const name = containerName(svc.name, svc.uuid);
-  const script = `cd /data/peon/backups 2>/dev/null && ls -1t ${name}-*.sql 2>/dev/null | tail -n +${backup.retentionAmountLocal + 1} | xargs -r rm -f || true`;
+  const script = `cd ${backupsDir()} 2>/dev/null && ls -1t ${name}-*.sql 2>/dev/null | tail -n +${backup.retentionAmountLocal + 1} | xargs -r rm -f || true`;
   await executor.exec(script);
 }
