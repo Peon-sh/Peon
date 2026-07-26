@@ -62,6 +62,15 @@ const serverSchema = z.object({
 
   /** Root for local storage, service directories and backups. */
   PEON_DATA_DIR: z.string().default('/data/peon'),
+
+  /**
+   * Domain the control plane is served on. Used by the gateway overlay
+   * (docker-compose.gateway.yml) to route Peon through the same proxy that
+   * serves deployed applications, rather than a second one fighting for :443.
+   */
+  PEON_CONTROL_PLANE_DOMAIN: z.string().optional(),
+  /** Contact address for ACME certificate expiry notices. */
+  ACME_EMAIL: z.string().email().optional(),
   EMAIL_FROM: z.string().default('no-reply@peon.local'),
   EMAIL_FROM_NAME: z.string().default('Peon'),
 

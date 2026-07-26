@@ -1,0 +1,77 @@
+# Control-plane TLS overlay.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gateway.yml up -d
+#
+# Routes the Peon control plane through the SAME gateway that serves deployed
+# applications, instead of running a second proxy that would fight it for ports
+# 80 and 443.
+#
+# Peon already installs `peon-proxy` (Traefik or Caddy, network_mode: host) on
+# every server it manages, including this one. This overlay makes the control
+# plane just another labelled container on the shared `peon` network, discovered
+# the same way a deployed app is.
+#
+# Requires in .env:
+#   PEON_CONTROL_PLANE_DOMAIN=peon.example.com
+#   APP_URL=https://peon.example.com
+#   NEXT_PUBLIC_APP_URL=https://peon.example.com
+#
+# DNS must already resolve to this machine — ACME HTTP-01 fails otherwise, and
+# repeated failures hit Let's Encrypt rate limits. See docs/tls-and-proxy.md.
+
+services:
+  app:
+    # No longer published publicly: the gateway is the only way in. Bound to
+    # loopback so `curl 127.0.0.1:3000/api/health` still works for debugging.
+    ports: !override
+      - "127.0.0.1:${PORT:-3000}:3000"
+    networks:
+      - default
+      - peon
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "peon"
+
+      # HTTPS router for the control plane.
+      traefik.http.routers.peon-control-plane.rule: "Host(`${PEON_CONTROL_PLANE_DOMAIN}`)"
+      traefik.http.routers.peon-control-plane.entrypoints: "https"
+      traefik.http.routers.peon-control-plane.tls: "true"
+      traefik.http.routers.peon-control-plane.tls.certresolver: "letsencrypt"
+      traefik.http.routers.peon-control-plane.service: "peon-control-plane"
+      traefik.http.services.peon-control-plane.loadbalancer.server.port: "3000"
+
+      # Port 80 stays open for the ACME challenge; everything else redirects.
+      traefik.http.routers.peon-control-plane-http.rule: "Host(`${PEON_CONTROL_PLANE_DOMAIN}`)"
+      traefik.http.routers.peon-control-plane-http.entrypoints: "http"
+      traefik.http.routers.peon-control-plane-http.middlewares: "peon-control-plane-https"
+      traefik.http.middlewares.peon-control-plane-https.redirectscheme.scheme: "https"
+      traefik.http.middlewares.peon-control-plane-https.redirectscheme.permanent: "true"
+
+      # Caddy equivalent, read by caddy-docker-proxy when ProxyType is CADDY.
+      # Ignored by Traefik.
+      caddy: "${PEON_CONTROL_PLANE_DOMAIN}"
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+
+  # The terminal WebSocket, when enabled, needs the same treatment.
+  socket:
+    networks:
+      - default
+      - peon
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "peon"
+      traefik.http.routers.peon-terminal.rule: "Host(`${PEON_CONTROL_PLANE_DOMAIN}`) && PathPrefix(`/terminal`)"
+      traefik.http.routers.peon-terminal.entrypoints: "https"
+      traefik.http.routers.peon-terminal.tls: "true"
+      traefik.http.routers.peon-terminal.tls.certresolver: "letsencrypt"
+      traefik.http.routers.peon-terminal.service: "peon-terminal"
+      traefik.http.services.peon-terminal.loadbalancer.server.port: "8081"
+      caddy: "${PEON_CONTROL_PLANE_DOMAIN}"
+      caddy.reverse_proxy: "/terminal/* {{upstreams 8081}}"
+
+networks:
+  # Created by Peon when it provisions this server's gateway. External so the
+  # overlay attaches to the existing one rather than creating a rival.
+  peon:
+    external: true
+    name: peon
