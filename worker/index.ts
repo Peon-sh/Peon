@@ -1,50 +1,56 @@
 import 'dotenv/config';
 import { serverEnv } from '../src/lib/env';
 import { assertEncryptionKeyUsable } from '../src/lib/crypto/preflight';
-import { receiveMessages, deleteMessage } from '../src/lib/queue/sqs';
-import type { QueueMessage, QueueName } from '../src/lib/queue/messages';
+import {
+  deleteMessage,
+  failMessage,
+  getQueueProvider,
+  receiveMessages,
+  resolveQueueDriver,
+  shutdownQueue,
+  type ReceivedJob,
+} from '../src/lib/queue';
+import type { QueueName } from '../src/lib/queue/messages';
 import { dispatch, loadHandlers } from './handlers';
 import { NotFoundError } from '../src/lib/errors';
-import type { Message } from '@aws-sdk/client-sqs';
 
 const QUEUES: QueueName[] = ['deployments', 'tasks'];
 
-/** SQS ReceiveMessage allows at most 10 messages per call. */
-const SQS_RECEIVE_MAX = 10;
-
 let running = true;
 
-async function handleMessage(name: QueueName, raw: Message): Promise<void> {
-  if (!raw.Body || !raw.ReceiptHandle) return;
+async function handleJob(name: QueueName, job: ReceivedJob): Promise<void> {
+  const { message, receipt } = job;
+  const log = (m: string) => console.log(`[worker:${name}:${message.type}] ${m}`);
 
-  let parsed: QueueMessage;
   try {
-    parsed = JSON.parse(raw.Body) as QueueMessage;
-  } catch {
-    console.error(`[worker:${name}] invalid message body, deleting`);
-    await deleteMessage(name, raw.ReceiptHandle);
-    return;
-  }
-
-  const log = (m: string) => console.log(`[worker:${name}:${parsed.type}] ${m}`);
-  try {
-    await dispatch(parsed, { log });
-    await deleteMessage(name, raw.ReceiptHandle);
+    await dispatch(message, { log });
+    await deleteMessage(name, receipt);
     log('done');
   } catch (err) {
-    console.error(`[worker:${name}:${parsed.type}] failed:`, err instanceof Error ? err.message : err);
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[worker:${name}:${message.type}] failed:`, reason);
+
     if (err instanceof NotFoundError) {
-      // The referenced record no longer exists (stale message) —
-      // retrying can never succeed, so drop it instead of redelivering.
-      await deleteMessage(name, raw.ReceiptHandle);
+      // The referenced record no longer exists (stale message) — retrying can
+      // never succeed, so drop it instead of redelivering.
+      await failMessage(name, receipt, reason);
       log('dropped stale message (target record deleted)');
+      return;
     }
-    // Other errors: leave for redelivery after the visibility timeout.
+
+    // Postgres can release the job for retry immediately with backoff instead of
+    // holding it invisible for the full lease. SQS has no client-side equivalent:
+    // not acknowledging is what triggers redelivery there.
+    const provider = await getQueueProvider();
+    if (provider.name === 'postgres') {
+      const pg = provider as { retryMessage?: (r: string, e: string) => Promise<void> };
+      await pg.retryMessage?.(receipt, reason);
+    }
   }
 }
 
 /**
- * Poll a queue and process up to `concurrency` messages in parallel.
+ * Poll a queue and process up to `concurrency` jobs in parallel.
  * Keeps fetching while slots are free so long-running deploys don't block others.
  */
 async function pollQueue(name: QueueName, waitSeconds: number, concurrency: number) {
@@ -59,11 +65,11 @@ async function pollQueue(name: QueueName, waitSeconds: number, concurrency: numb
       if (!running) break;
 
       const slots = Math.max(1, concurrency - inFlight.size);
-      const messages = await receiveMessages(name, waitSeconds, Math.min(SQS_RECEIVE_MAX, slots));
-      if (messages.length === 0) continue;
+      const jobs = await receiveMessages(name, waitSeconds, slots);
+      if (jobs.length === 0) continue;
 
-      for (const raw of messages) {
-        const job = handleMessage(name, raw).finally(() => {
+      for (const raw of jobs) {
+        const job = handleJob(name, raw).finally(() => {
           inFlight.delete(job);
         });
         inFlight.add(job);
@@ -89,7 +95,8 @@ async function main() {
   const concurrency = Math.max(1, env.WORKER_MAX_CONCURRENCY);
   await loadHandlers();
   console.log(
-    `[worker] started; polling queues: ${QUEUES.join(', ')}; concurrency=${concurrency}`,
+    `[worker] started; queue driver=${resolveQueueDriver()}; ` +
+      `polling: ${QUEUES.join(', ')}; concurrency=${concurrency}`,
   );
   await Promise.all(QUEUES.map((q) => pollQueue(q, env.WORKER_POLL_WAIT_SECONDS, concurrency)));
 }
@@ -97,7 +104,10 @@ async function main() {
 function shutdown() {
   console.log('[worker] shutting down…');
   running = false;
-  setTimeout(() => process.exit(0), 1000);
+  // Give in-flight jobs a moment to acknowledge before the process exits.
+  setTimeout(() => {
+    void shutdownQueue().finally(() => process.exit(0));
+  }, 1000);
 }
 
 process.on('SIGINT', shutdown);

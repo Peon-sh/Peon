@@ -42,6 +42,13 @@ const serverSchema = z.object({
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
 
+  /**
+   * Queue transport. Omit to auto-detect: `sqs` when both SQS URLs are set
+   * (so existing installations are never silently migrated), otherwise
+   * `postgres`, which needs no AWS account.
+   */
+  QUEUE_DRIVER: z.enum(['sqs', 'postgres']).optional(),
+
   SQS_ENDPOINT: z.string().optional(),
   SQS_REGION: z.string().optional(),
   SQS_DEPLOYMENT_QUEUE_URL: z.string().optional(),

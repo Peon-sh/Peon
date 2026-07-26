@@ -1234,3 +1234,39 @@ model WorkspaceAuditLog {
   @@index([workspaceId, actorUserId])
   @@index([workspaceId, resourceType])
 }
+
+// ============================================================
+// Postgres job queue (QUEUE_DRIVER=postgres)
+// ============================================================
+
+enum QueueJobStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  COMPLETED
+}
+
+/// Job row for the built-in Postgres queue. Used when QUEUE_DRIVER=postgres,
+/// which is the default for installations that have no SQS configured.
+/// Claiming uses SELECT ... FOR UPDATE SKIP LOCKED, so multiple workers are safe.
+model QueueJob {
+  id          String         @id @default(cuid())
+  queue       String
+  type        String
+  payload     Json
+  status      QueueJobStatus @default(PENDING)
+  attempts    Int            @default(0)
+  maxAttempts Int            @default(5)
+  lastError   String?
+  /// Invisible to consumers until this time. Also the retry backoff timer and
+  /// the lease expiry that makes a crashed worker's job recoverable.
+  visibleAt   DateTime       @default(now())
+  claimedAt   DateTime?
+  claimedBy   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  completedAt DateTime?
+
+  @@index([queue, visibleAt])
+  @@index([status, createdAt])
+}
