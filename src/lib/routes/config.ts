@@ -38,6 +38,10 @@ export const PUBLIC_PATHS: string[] = [
   '/mcp',
   // peon-ping-pong agent push (Bearer sentinel token)
   '/api/v1/agents',
+  // First-administrator bootstrap. Authenticated by a single-use setup token
+  // and refused outright once any user exists, so it cannot be replayed.
+  '/api/setup',
+  '/setup',
 ];
 
 export const INSTANCE_ADMIN_PATHS: string[] = ['/profile/instance', '/admin'];

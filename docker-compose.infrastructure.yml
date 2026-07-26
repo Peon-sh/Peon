@@ -1,0 +1,225 @@
+# Infrastructure / parity development mode.
+#
+#   docker compose -f docker-compose.infrastructure.yml up
+#
+# Everything the control plane can talk to, emulated locally, so infrastructure
+# behaviour can be tested without an AWS account or a second VPS.
+#
+# This is NOT the everyday development environment — use docker-compose.dev.yml
+# for that. This one runs eight services and is correspondingly heavier.
+#
+#   Mode            Services                          Use for
+#   ------------    ------------------------------    -----------------------------
+#   ui.yml          web                               components, layout, states
+#   dev.yml         web, worker, postgres             API, auth, CRUD, queue
+#   infrastructure  + scheduler, socket, mail, s3,     providers, SSH, backups,
+#                     sshd                              email, storage, terminals
+#   (root)          postgres, migrate, app, worker    self-host / production-like
+#
+# Optional profiles:
+#   --profile sqs   adds ElasticMQ so QUEUE_DRIVER=sqs can be exercised
+#
+# No Docker-in-Docker. The sshd container is a deployment *target*, and it gets
+# the host Docker socket so deployments to it behave like a real server.
+
+x-node: &node
+  image: node:22-bookworm-slim
+  working_dir: /app
+  environment: &node-env
+    NODE_ENV: development
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/peon?schema=public
+    QUEUE_DRIVER: postgres
+    STORAGE_DRIVER: s3
+    EMAIL_DRIVER: smtp
+    PEON_DATA_DIR: /data/peon
+    APP_URL: http://localhost:3000
+    NEXT_PUBLIC_APP_URL: http://localhost:3000
+    JWT_SECRET: infra-mode-secret-at-least-16-chars
+    # Valid 32-byte base64. Development only.
+    ENCRYPTION_KEY: aW5mcmEtbW9kZS1rZXktMzItYnl0ZXMtcGFkISE=
+    INSTANCE_OWNER_EMAIL: dev@peon.local
+    # Mailpit
+    SMTP_HOST: mailpit
+    SMTP_PORT: '1025'
+    SMTP_SECURE: 'false'
+    # MinIO, S3-compatible
+    S3_ENDPOINT: http://minio:9000
+    S3_BUCKET: peon-dev
+    S3_REGION: us-east-1
+    S3_ACCESS_KEY_ID: peonminio
+    S3_SECRET_ACCESS_KEY: peonminio123
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    WORKER_MAX_CONCURRENCY: '2'
+  volumes: &node-volumes
+    - .:/app
+    - peon_infra_node_modules:/app/node_modules
+    - peon_infra_pnpm_store:/root/.local/share/pnpm/store
+    - peon_infra_data:/data/peon
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: peon-infra-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: peon
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - peon_infra_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # SMTP sink with a web UI on :8025. Nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: peon-infra-mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  # S3-compatible storage. Console on :9001.
+  minio:
+    image: minio/minio:latest
+    container_name: peon-infra-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: peonminio
+      MINIO_ROOT_PASSWORD: peonminio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - peon_infra_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Creates the bucket once, then exits.
+  minio-init:
+    image: minio/mc:latest
+    container_name: peon-infra-minio-init
+    restart: "no"
+    entrypoint: >
+      sh -c "mc alias set local http://minio:9000 peonminio peonminio123 &&
+             mc mb --ignore-existing local/peon-dev &&
+             echo 'bucket ready'"
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  # A deployment target reachable over SSH, so the SSH executor path can be
+  # exercised without a VPS. It receives the host Docker socket because Peon
+  # drives Docker on its managed servers -- that is the behaviour under test.
+  sshd:
+    image: linuxserver/openssh-server:latest
+    container_name: peon-infra-sshd
+    environment:
+      PUID: '1000'
+      PGID: '1000'
+      USER_NAME: peon
+      PASSWORD_ACCESS: 'true'
+      USER_PASSWORD: peon-dev-password
+      SUDO_ACCESS: 'true'
+    ports:
+      - "2222:2222"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - peon_infra_sshd_data:/config
+
+  # Optional: only needed when testing QUEUE_DRIVER=sqs.
+  elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    container_name: peon-infra-elasticmq
+    ports:
+      - "9324:9324"
+    profiles: ["sqs"]
+
+  migrate:
+    <<: *node
+    container_name: peon-infra-migrate
+    restart: "no"
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm install --prefer-offline &&
+             pnpm exec prisma generate &&
+             pnpm exec prisma migrate deploy"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    <<: *node
+    container_name: peon-infra-web
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec next dev -H 0.0.0.0 -p 3000"
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # The only service with Docker access. Never the web tier.
+  worker:
+    <<: *node
+    container_name: peon-infra-worker
+    environment: *node-env
+    volumes:
+      - .:/app
+      - peon_infra_node_modules:/app/node_modules
+      - peon_infra_pnpm_store:/root/.local/share/pnpm/store
+      # Identical absolute path on both sides so the worker and the Docker
+      # daemon agree on what a path means. See docs/server-modes.md.
+      - peon_infra_data:/data/peon
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec tsx watch worker/index.ts"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *node
+    container_name: peon-infra-scheduler
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec tsx watch worker/schedule.ts"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  socket:
+    <<: *node
+    container_name: peon-infra-socket
+    environment: *node-env
+    volumes: *node-volumes
+    command: >
+      sh -c "corepack enable && corepack prepare --activate &&
+             pnpm exec tsx watch worker/socket.ts"
+    ports:
+      - "${TERMINAL_WS_PORT:-8081}:8081"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  peon_infra_pgdata:
+  peon_infra_node_modules:
+  peon_infra_pnpm_store:
+  peon_infra_data:
+  peon_infra_minio:
+  peon_infra_sshd_data:

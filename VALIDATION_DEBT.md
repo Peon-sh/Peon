@@ -791,6 +791,100 @@ confirm the file is never referenced by the installer or self-host docs.
 
 ---
 
+## Phases 10–11 — infrastructure mode and installer
+
+### VD-034 — Infrastructure compose never started
+
+| | |
+|---|---|
+| **Phase** | 10 |
+| **Area** | Docker Compose |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `docker-compose.infrastructure.yml` defines eight services
+(postgres, mailpit, minio, minio-init, sshd, web, worker, scheduler, socket, plus
+an optional elasticmq profile) and has never been parsed or started. The MinIO
+healthcheck uses `mc ready local`, which requires a recent image. The
+`linuxserver/openssh-server` target is configured for password auth, so Peon's
+key-based SSH may not connect to it without extra setup.
+
+**Required validation.** §18. In particular confirm the sshd container is usable
+as a managed server, since that is the point of including it.
+
+---
+
+### VD-035 — Installer never executed
+
+| | |
+|---|---|
+| **Phase** | 11 |
+| **Area** | Installer |
+| **Status** | OPEN |
+| **Risk** | **HIGH** |
+
+**Description.** `install.sh` has never run. It installs Docker, writes secrets,
+starts containers and creates directories as root — the highest-blast-radius
+script in the branch.
+
+Statically reviewed for: `set -euo pipefail`, quoted expansions, `umask 077`
+before writing `.env`, no unquoted user input in shell commands, no `eval`, and
+existing-installation detection that preserves `.env` (regenerating
+`ENCRYPTION_KEY` would destroy an existing installation's data).
+
+Known rough edges found by inspection but not fixed:
+- `check_ports` treats busy ports as a warning, not an error, because an existing
+  Peon install legitimately holds them. A *different* service on :80 will
+  therefore surface later as a proxy failure.
+- `docker compose build --quiet` on a small VPS is slow and produces no progress
+  output. Phase 13's prebuilt images are the real fix.
+- `hostname -I` is Linux-specific; the final URL line may be empty elsewhere.
+
+**Required validation.** §19, from a clean VM snapshot. Especially T-INST-012
+(idempotent re-run must not destroy an installation).
+
+---
+
+### VD-036 — Setup token flow has no UI
+
+| | |
+|---|---|
+| **Phase** | 11 |
+| **Area** | Installer |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `POST /api/setup` and `GET /api/setup` are implemented and
+unit-tested, and `/setup` is registered as a public path — but **the `/setup/[token]`
+page does not exist**, so the link the installer prints will 404.
+
+The API is complete; the page is not. This is the last gap between "installer
+runs" and "user can log in".
+
+**Required validation.** T-INST-010, T-INST-011.
+
+---
+
+### VD-037 — Setup token security properties
+
+| | |
+|---|---|
+| **Phase** | 11 |
+| **Area** | Security |
+| **Status** | OPEN |
+| **Risk** | HIGH |
+
+**Description.** Unit tests (mocked Prisma) cover: hash-only storage, expiry,
+single use, atomic consumption via conditional `updateMany`, and refusal once any
+user exists. None have executed, and the atomicity claim in particular depends on
+real database behaviour rather than a mock returning `count: 0`.
+
+**Required validation.** Against real Postgres: two concurrent POSTs to
+`/api/setup` with the same token must produce exactly one administrator. Confirm
+the plaintext token never appears in logs.
+
+---
+
 ## Rules for this file
 
 1. Never delete an entry. Mark it `VERIFIED` (with evidence) or `FAILED`.

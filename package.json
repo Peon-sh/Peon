@@ -27,7 +27,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "encryption:rotate": "tsx scripts/rotate-encryption-key.ts",
-    "release": "node release.mjs"
+    "release": "node release.mjs",
+    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.0",

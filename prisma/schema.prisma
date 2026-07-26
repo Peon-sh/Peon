@@ -1279,3 +1279,21 @@ model QueueJob {
   @@index([queue, visibleAt])
   @@index([status, createdAt])
 }
+
+// ============================================================
+// First-administrator bootstrap
+// ============================================================
+
+/// Single-use, expiring token that lets a fresh installation create its first
+/// administrator without working email and without a shipped default password.
+/// Only the SHA-256 hash is stored — the plaintext is printed once by the
+/// installer, so a database leak does not yield a usable setup link.
+model SetupToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
+}
