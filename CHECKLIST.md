@@ -39,8 +39,10 @@ called **`FULLY VERIFIED`** while it carries open debt in
 | 4 — Lightweight dev mode | NOT STARTED | — |
 | 5 — Postgres queue | COMPLETE | PENDING |
 | 6 — Local storage + SMTP + backups | COMPLETE | PENDING |
-| 7 — Local executor | **PARTIAL** — call sites not migrated (VD-020) | PENDING |
-| 8–17 | NOT STARTED | — |
+| 7 — Local executor | COMPLETE — all 64 call sites migrated | PENDING (VD-024, VD-025) |
+| 8 — Single-server mode | PARTIAL — local server concept exists, not wired to onboarding/installer (VD-027) | PENDING |
+| 9 — Remote + hybrid | Implicit in 7/8; needs regression proof (VD-025) | PENDING |
+| 3, 4, 10–17 | NOT STARTED | — |
 
 ## Rule for marking `[x]`
 

@@ -12,6 +12,106 @@ The supervising developer's machine is 4 CPU / 8 GB RAM and **no project code is
 
 ---
 
+## PHASES 7 (complete) and 8 (partial) — local execution
+
+**STATUS:** Phase 7 `CODE COMPLETE / VALIDATION PENDING`. Phase 8 PARTIAL.
+
+Commits: `ea3a64c` (groups 1–4), `5f95289` (group 5, engine), `2dbfe23` (phase 8).
+
+### Migration approach
+
+Done in controlled groups as instructed, engine last:
+
+1. `server/operations.ts` — validate, agent, proxy, cleanup
+2. `server/runtime.ts`, `task/engine.ts`, `backup/engine.ts`
+3. `service/runtime.ts`, `service/previews.ts`, `deploy/preview.ts`
+4. `s3/backup.ts` — now takes a `ServerExecutor` rather than an `SshTarget`
+5. `deploy/engine.ts` — 27 sites, last
+
+The engine never learns which transport it holds. No `if (executionMode ===
+'LOCAL')` was added inside it. Every helper signature changed from
+`target: SshTarget` to `executor: ServerExecutor`; the bodies are untouched.
+
+**Verification method used, since nothing could be executed:** the engine diff
+was inspected line by line and every changed line is an import, a parameter type,
+or a call receiver. No control flow, no state transitions, no command strings, no
+error messages. Preserved intact: the optimistic QUEUED claim, all nine
+`assertNotCancelled` checks, terminal writes conditioned on `IN_PROGRESS`,
+rolling-update swap, preview isolation and router naming, Peon ownership labels,
+git-ref validation, readiness waiting, image retention, the
+notify-failure-does-not-fail-the-deploy rule, and rollback semantics.
+
+### Two deliberate transport branches
+
+Both are contained and documented, not scattered:
+
+1. **Reachability** (`assertReachable`) — a remote server is pinged over SSH with
+   its pooled session dropped first; the local server checks the Docker daemon.
+   Everything after this point in `validate()` is shared.
+2. **Provisioning** — a LOCAL server never runs `apt-get`/`systemctl` from the
+   worker. This resolves audit finding N5: the worker typically lacks the
+   privileges, and the Peon host is provisioned by its installer or image
+   already. The OS allow-list is skipped locally for the same reason — it exists
+   to gate package provisioning that will not be attempted.
+
+### Phase 8 — local server concept
+
+`ensureLocalServer()` creates an ordinary `Server` row with `executionMode:
+LOCAL`. No keypair, no sshd, no `127.0.0.1`, no fake record. It deliberately uses
+`ip: 'local'` rather than a loopback address, because a loopback address would
+imply SSH is involved.
+
+Hybrid needs no extra work: local vs remote is a per-server property, so a
+workspace can hold one local server and many remote ones simultaneously and each
+service picks its target as before. There is no "local mode" installation.
+
+`concurrentBuilds` defaults to 1 for local servers — the control plane and the
+workloads share CPU, and a parallel Nixpacks build makes the dashboard unusable.
+
+**Not wired yet.** Nothing calls `ensureLocalServer()`; the installer (phase 11)
+and onboarding (phase 3) do that. Until then a user still cannot obtain a local
+server through the product. VD-027.
+
+### ARCHITECTURAL DECISIONS
+
+| ID | Decision | Rationale |
+|---|---|---|
+| D22 | `ServiceRuntime` keeps the SSH target alongside the executor | The terminal server opens its own PTY channel rather than reusing the pool, so it still needs the target. Null for local servers, which is why VD-026 exists. |
+| D23 | Local servers skip the OS allow-list and package provisioning | The allow-list gates provisioning Peon will not attempt locally. Resolves N5. |
+| D24 | Local server uses `ip: 'local'`, not `127.0.0.1` | A loopback address would suggest an SSH hop that does not happen. |
+| D25 | `ensureLocalServer` does not validate Docker | Registration should succeed even when the daemon is briefly down; `validate()` reports that separately. |
+
+### TESTS PERFORMED
+
+None executed.
+
+### TESTS NOT RUN
+
+Everything, including 14 new local-server unit tests. The two that matter most:
+
+- **VD-025 (CRITICAL): SSH regression.** 64 call sites changed transport object.
+  A regression here breaks every existing Peon installation, which matters more
+  than the new local path.
+- **VD-024 (CRITICAL): local deploy end to end.** Never run.
+
+### RISKS
+
+- `service/runtime.ts` now dereferences `svc.server.privateKey!` behind an
+  `executionMode !== 'LOCAL'` guard. If that guard is wrong for some path, it is
+  a null dereference at runtime rather than a compile error.
+- Local terminals will likely fail outright (VD-026) — the terminal server has no
+  local branch and now receives a null target.
+- The queue table's partial index is a static assumption; no `EXPLAIN` has been
+  run (VD-028), and `purgeCompleted()` is not scheduled, so completed rows
+  accumulate.
+
+### NEXT
+
+Phase 3 (UI-only mode) and 4 (lightweight dev), which the checklist orders before
+10–17 and which onboarding wiring for VD-027 depends on.
+
+---
+
 ## PHASES 2, 5, 6, 7 — providers, Postgres queue, storage/email, local execution
 
 **STATUS:** `CODE COMPLETE / VALIDATION PENDING` for phases 2, 5, 6.
