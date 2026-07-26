@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ENV_VAR_KEY, MAX_ENV_VAR_KEY_LENGTH } from '@/lib/env-var-key';
 import { isSafeGitRefName, MAX_GIT_REF_LENGTH } from '@/lib/git/ref';
 
 /**
@@ -184,7 +185,7 @@ export const updateServiceSchema = z.object({
 export type UpdateServiceInput = z.infer<typeof updateServiceSchema>;
 
 export const upsertEnvSchema = z.object({
-  key: z.string().min(1).max(255).regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Invalid env var key'),
+  key: z.string().min(1).max(MAX_ENV_VAR_KEY_LENGTH).regex(ENV_VAR_KEY, 'Invalid env var key'),
   value: z.string().default(''),
   isPreview: z.boolean().default(false),
   isBuildtime: z.boolean().default(true),

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { ENV_VAR_KEY, MAX_ENV_VAR_KEY_LENGTH } from '@/lib/env-var-key';
 import { ServiceModule } from '@/services/internal/service/service';
 import { buildCatalogFromLegacy } from '@/lib/mcp/catalog/legacy';
 import type { CatalogTool } from '@/lib/mcp/catalog/types';
@@ -27,7 +28,12 @@ export function registerEnvTools(server: McpServer, _ctx: McpContext, access: Mc
     'Create or update an environment variable on a service. Requires manage access. Redeploy for changes to take effect.',
     {
       serviceId: z.string().describe('The service ID'),
-      key: z.string().min(1).describe('Variable name'),
+      key: z
+        .string()
+        .min(1)
+        .max(MAX_ENV_VAR_KEY_LENGTH)
+        .regex(ENV_VAR_KEY, 'Invalid env var key')
+        .describe('Variable name'),
       value: z.string().describe('Variable value'),
       isBuildtime: z.boolean().optional().describe('Available at build time (default true)'),
       isRuntime: z.boolean().optional().describe('Available at runtime (default true)'),

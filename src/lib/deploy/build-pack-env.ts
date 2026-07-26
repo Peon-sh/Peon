@@ -1,3 +1,5 @@
+import { isValidEnvVarKey } from '@/lib/env-var-key';
+
 /** Default Node major version for Nixpacks/Railpack builds (Nixpacks still defaults to EOL 18). */
 export const DEFAULT_NODE_BUILD_VERSION = '22';
 
@@ -26,6 +28,12 @@ function shellQuote(value: string): string {
  * Includes every build-time service variable — not only NIXPACKS_* — so
  * frameworks like Next.js can inline `NEXT_PUBLIC_*` at `next build`.
  * Always ensures NIXPACKS_NODE_VERSION / RAILPACK_NODE_VERSION are set.
+ *
+ * Keys that are not valid variable names are dropped. {@link buildPackEnvPrefix}
+ * emits shell assignment prefixes (`KEY=value cmd`), and a shell does not treat
+ * a quoted word as an assignment — so the name cannot be escaped the way the
+ * value can, and anything that is not a plain identifier must not reach it.
+ * Names are validated when they are stored; this is the backstop.
  */
 export function resolveBuildPackEnv(
   svc: NixpacksCommandFields,
@@ -35,6 +43,7 @@ export function resolveBuildPackEnv(
 
   for (const [key, value] of Object.entries(env)) {
     if (!value.trim()) continue;
+    if (!isValidEnvVarKey(key)) continue;
     entries[key] = value;
   }
 

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { encrypt, decryptNullable } from '@/lib/crypto/encryption';
 import { AppError } from '@/lib/errors';
+import { assertValidEnvVarKey, isValidEnvVarKey } from '@/lib/env-var-key';
 import type { UpsertEnvInput } from '@/schemas/service.schema';
 import { MASK } from './shared';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
@@ -40,7 +41,7 @@ export async function bulkSaveEnv(
     const eq = trimmed.indexOf('=');
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    if (!isValidEnvVarKey(key)) {
       throw new AppError(`Invalid variable key: "${key}"`);
     }
     let value = trimmed.slice(eq + 1);
@@ -130,6 +131,10 @@ export async function importPreviewEnvFromProduction(serviceId: string) {
 }
 
 export async function upsertEnv(serviceId: string, input: UpsertEnvInput) {
+  // Enforced here rather than only at each boundary: this is the one point every
+  // caller goes through, including the MCP tools.
+  assertValidEnvVarKey(input.key);
+
   const row = await prisma.environmentVariable.upsert({
     where: {
       serviceId_key_isPreview: {
