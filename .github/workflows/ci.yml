@@ -31,15 +31,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # npm retired legacy /security/audits endpoints; pnpm 10.x audit is broken.
+      # Use pnpm 11 for audit only (packageManager still pins 10.8.0 for installs).
+      # Unpin before pnpm/action-setup so it does not conflict with packageManager.
+      - name: Unpin packageManager for audit
+        run: |
+          node <<'EOF'
+          const fs = require('fs')
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+          delete pkg.packageManager
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')
+          EOF
       - uses: pnpm/action-setup@v6
         with:
-          version: 10.8.0
+          version: 11.17.0
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
       # Free npm advisory DB — fail on high/critical production vulns.
+      # Lockfile alone is enough; no install required.
       - run: pnpm audit --prod --audit-level=high
 
   unit:
