@@ -531,17 +531,27 @@ confirm `lib/shell/quote.ts` is applied identically in both executors.
 |---|---|
 | **Phase** | 7 |
 | **Area** | Local executor |
-| **Status** | OPEN |
+| **Status** | FIXED (implementation) — verification OPEN |
 | **Risk** | LOW |
 
-**Description.** `BASE_DIR` is still exported as a hardcoded constant for
-compatibility while `servicesBaseDir()` becomes the real source. Other hardcoded
-paths (`/data/peon/proxy`, `/data/peon/backups`, `/data/peon/ping-pong`,
-`.data/deployment-previews`) are **not** yet parameterised.
+**Update (phase 8).** A static sweep found the migration was genuinely
+incomplete: three hardcoded `/data/peon/backups` literals in `backup/engine.ts`,
+duplicate `BASE_DIR` constants in `service/previews.ts` and `deploy/preview.ts`,
+and hardcoded proxy/agent paths in `lib/scripts/server.ts`. All now route through
+the new `src/lib/paths.ts`, which is the single source of truth.
 
-**Required validation.** Migrate remaining call sites, remove the constant,
-add a test asserting no hardcoded `/data/peon` literal remains outside
-`peonDataDir()`.
+**Defect found and fixed during the same sweep:** the first consolidation used
+`export { x } from 'y'`, which creates no local binding — `servicesBaseDir()` and
+`storageRoot()` would have been `undefined` at their call sites in
+`deploy/helpers.ts` and `storage/providers/local.ts`. Corrected to import-then-
+re-export. This is exactly the class of defect static review is for, and it was a
+real bug, not merely an unexecuted path.
+
+Still not parameterised: `.data/deployment-previews` in `deploy/screenshot.ts`
+(relative to `process.cwd()`).
+
+**Required validation.** T-FS-009 (custom `PEON_DATA_DIR` relocates everything).
+Add a lint/test asserting no `/data/peon` literal outside `lib/paths.ts`.
 
 ---
 
@@ -649,6 +659,56 @@ calls it on a schedule yet.
 **Required validation.** `EXPLAIN ANALYZE` the claim query against a table with
 ~100k completed and ~1k pending rows; confirm an index scan, not a sequential
 scan. Wire `purgeCompleted` into the scheduler.
+
+---
+
+### VD-029 — Local terminals are deliberately unsupported
+
+| | |
+|---|---|
+| **Phase** | 8 |
+| **Area** | Local executor |
+| **Status** | OPEN (design decision, implementation complete) |
+| **Risk** | LOW |
+
+**Description.** Supersedes VD-026's "will crash" state. Both terminal paths now
+fail fast with a specific message instead of dialling a null SSH target:
+
+- **Local host terminal** — refused. Implementing it needs a real PTY on the
+  control-plane host (`node-pty`), and the result would be an unaudited root
+  shell on the machine running Peon, a materially larger privilege grant than
+  `docker exec` into one container on a remote host. Blocking is the safer
+  default.
+- **Local service terminal** — refused for now. `docker exec -it` is plausible
+  locally but still needs a PTY to be usable; deferred rather than half-built.
+
+**Known limitation, not a defect.** The UI should also disable the action rather
+than surfacing the error only after a connection attempt — not yet done.
+
+**Required validation.** T-TERM-003/004/005: confirm no null target is dialled,
+and that the message is comprehensible.
+
+---
+
+### VD-030 — Onboarding local-server wiring
+
+| | |
+|---|---|
+| **Phase** | 8 |
+| **Area** | Local executor |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `POST /api/auth/onboarding` now accepts `useLocalServer` and
+calls `ensureLocalServer()`. Registration is best-effort — a failure is logged
+and onboarding still completes, so a user is never trapped in the wizard.
+
+**The onboarding UI does not yet present the choice**, so the flag is currently
+only reachable via the API. The installer (phase 11) is the other intended caller.
+
+**Required validation.** T-LOCAL-001, T-INST-008. Also confirm the workspace
+selected is the right one when a user owns several — the current query takes the
+oldest OWNER/ADMIN membership, which is a heuristic.
 
 ---
 

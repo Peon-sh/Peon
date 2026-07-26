@@ -56,8 +56,11 @@ export function resetPassword(input: { email: string; code: string; newPassword:
   return unwrap<{ message: string }>(api.post('/auth/reset-password', input));
 }
 
-export function completeOnboarding() {
-  return unwrap<{ isOnboarded: boolean }>(api.post('/auth/onboarding'));
+/** `useLocalServer` registers the Peon host itself as a deployment target. */
+export function completeOnboarding(opts?: { useLocalServer?: boolean }) {
+  return unwrap<{ isOnboarded: boolean; localServerId: string | null }>(
+    api.post('/auth/onboarding', opts ?? {}),
+  );
 }
 
 export function logout() {

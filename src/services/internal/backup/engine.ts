@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { prisma } from '@/lib/prisma';
+import { backupsDir } from '@/lib/paths';
 import { executorForServer, type ServerExecutor } from '@/lib/executor';
 import { decrypt } from '@/lib/crypto/encryption';
 import { engineSpec } from '@/lib/docker/databases';
@@ -40,10 +41,10 @@ export async function runBackup(backupId: string, executionId: string): Promise<
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `${name}-${timestamp}.sql`;
-  const remotePath = `/data/peon/backups/${filename}`;
+  const remotePath = `${backupsDir()}/${filename}`;
 
   try {
-    const script = `mkdir -p /data/peon/backups && docker exec ${name} sh -c '${spec.dumpCommand(creds, { dumpAll })}' > ${remotePath} && ls -la ${remotePath}`;
+    const script = `mkdir -p ${backupsDir()} && docker exec ${name} sh -c '${spec.dumpCommand(creds, { dumpAll })}' > ${remotePath} && ls -la ${remotePath}`;
     const res = await executor.exec(script);
     if (res.code !== 0) throw new Error(res.stderr || 'Dump failed.');
 
@@ -124,7 +125,7 @@ export async function runRestore(serviceId: string, filename: string): Promise<v
     rootPassword: svc.dbRootPassword ? decrypt(svc.dbRootPassword) : undefined,
   };
 
-  const remotePath = `/data/peon/backups/${filename}`;
+  const remotePath = `${backupsDir()}/${filename}`;
   const check = await executor.exec(`test -f ${remotePath} && echo ok || echo missing`);
   if (!check.stdout.includes('ok')) throw new NotFoundError(`Backup file not found: ${filename}`);
 
@@ -153,7 +154,7 @@ export async function openBackupDownload(
   if (!execution) throw new NotFoundError('Backup execution not found for that filename.');
 
   const executor = await executorForServer(svc.serverId);
-  const remotePath = `/data/peon/backups/${filename}`;
+  const remotePath = `${backupsDir()}/${filename}`;
   const check = await executor.exec(`test -f ${remotePath} && echo ok || echo missing`);
   if (!check.stdout.includes('ok')) throw new NotFoundError(`Backup file not found: ${filename}`);
 

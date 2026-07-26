@@ -1,4 +1,5 @@
 import { DEFAULT_NETWORK } from '@/lib/docker/naming';
+import { peonDataDir } from '@/lib/paths';
 
 /** Idempotent Docker installation via the official convenience script. */
 export const INSTALL_DOCKER_SCRIPT = `
@@ -61,7 +62,7 @@ echo "DISK=$(df -h / 2>/dev/null | awk 'NR==2{print $5}')"
 `.trim();
 
 export function proxyComposePath(): string {
-  return '/data/peon/proxy';
+  return `${peonDataDir()}/proxy`;
 }
 
 /** Traefik proxy docker-compose written to the server. */
@@ -135,7 +136,7 @@ export const PEON_PING_PONG_IMAGE = 'ghcr.io/peon-sh/peon-ping-pong:0.0.1';
 export const PEON_PING_PONG_CONTAINER = 'peon-ping-pong';
 
 export function agentComposePath(): string {
-  return '/data/peon/ping-pong';
+  return `${peonDataDir()}/ping-pong`;
 }
 
 export function agentComposeFile(opts: {

@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
+import { storageDir } from '@/lib/paths';
 import type { PutObjectInput, StorageProvider, StoredObject } from '../types';
 
 /**
@@ -13,10 +14,8 @@ import type { PutObjectInput, StorageProvider, StoredObject } from '../types';
  * the API. Nothing here is world-readable by virtue of being on disk.
  */
 
-export function storageRoot(): string {
-  const base = process.env.PEON_DATA_DIR?.trim() || '/data/peon';
-  return path.join(base, 'storage');
-}
+/** Re-exported under the provider-local name used by tests and callers. */
+export const storageRoot = storageDir;
 
 /**
  * Resolve a key to an absolute path, refusing anything that escapes the root.

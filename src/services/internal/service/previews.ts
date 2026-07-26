@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { executorForServer } from '@/lib/executor';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 
-const BASE_DIR = '/data/peon/services';
+import { servicesBaseDir } from '@/lib/paths';
 
 export function listPreviews(serviceId: string) {
   return prisma.servicePreview.findMany({
@@ -26,7 +26,7 @@ export async function deletePreview(serviceId: string, previewId: string) {
   if (preview.service.serverId) {
     try {
       const executor = await executorForServer(preview.service.serverId);
-      const dir = `${BASE_DIR}/${preview.service.uuid}/pr-${preview.pullRequestId}`;
+      const dir = `${servicesBaseDir()}/${preview.service.uuid}/pr-${preview.pullRequestId}`;
       await executor.exec(
         `if [ -f ${dir}/docker-compose.yml ]; then cd ${dir} && docker compose down --remove-orphans || true; fi`,
       );

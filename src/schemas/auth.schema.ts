@@ -52,6 +52,14 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8),
 });
 
+/**
+ * Onboarding completion. `useLocalServer` registers the Peon host itself as a
+ * deployment target — the "run workloads on this server" choice in the wizard.
+ */
+export const onboardingCompleteSchema = z.object({
+  useLocalServer: z.boolean().optional(),
+});
+
 export type SignupInitiateInput = z.infer<typeof signupInitiateSchema>;
 export type SignupCompleteInput = z.infer<typeof signupCompleteSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

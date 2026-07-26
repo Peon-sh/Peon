@@ -23,10 +23,10 @@ import { BillingService } from '@/services/internal/billing/billing';
 import { executorForServer } from '@/lib/executor';
 import type { GithubAppForAuth } from '@/lib/github/app';
 
-const BASE_DIR = '/data/peon/services';
+import { servicesBaseDir } from '@/lib/paths';
 
 function previewDir(serviceUuid: string, pullRequestId: number): string {
-  return `${BASE_DIR}/${serviceUuid}/pr-${pullRequestId}`;
+  return `${servicesBaseDir()}/${serviceUuid}/pr-${pullRequestId}`;
 }
 
 function peonAppBaseUrl(): string | null {

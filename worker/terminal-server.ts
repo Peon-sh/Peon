@@ -232,6 +232,26 @@ async function handleConnection(
   }
 }
 
+/**
+ * Message shown when a terminal is requested for a local server.
+ *
+ * A host shell on a LOCAL server is deliberately not implemented. It would need
+ * a real PTY on the control-plane host (node-pty or similar), and the resulting
+ * session would be an unaudited root shell on the machine running Peon itself —
+ * a materially larger privilege grant than `docker exec` into one container on a
+ * remote box. Blocking it explicitly is safer than shipping a half-working path.
+ *
+ * Service (container) terminals on a local server are a separate question and
+ * are handled below.
+ */
+const LOCAL_HOST_TERMINAL_UNSUPPORTED =
+  'Host terminals are not available for this server because Peon runs on it. ' +
+  'Use a shell on the machine directly, or open a terminal on a specific service instead.';
+
+const LOCAL_SERVICE_TERMINAL_UNSUPPORTED =
+  'Container terminals are not yet available for services on the local server. ' +
+  'Use `docker exec -it <container> sh` on the host.';
+
 async function openServerSession(
   payload: TerminalTicketPayload,
   cols: number,
@@ -240,9 +260,18 @@ async function openServerSession(
   const serverId = payload.serverId!;
   const server = await prisma.server.findUnique({
     where: { id: serverId },
-    select: { id: true, workspaceId: true, privateKeyId: true },
+    select: { id: true, workspaceId: true, privateKeyId: true, executionMode: true },
   });
-  if (!server?.privateKeyId) {
+  if (!server) {
+    throw new Error('server not found');
+  }
+  // Checked before the SSH target is built: a LOCAL server has no private key
+  // and no host to dial, so proceeding would attempt a connection with a null
+  // target.
+  if (server.executionMode === 'LOCAL') {
+    throw new Error(LOCAL_HOST_TERMINAL_UNSUPPORTED);
+  }
+  if (!server.privateKeyId) {
     throw new Error('server not found');
   }
 
@@ -304,6 +333,11 @@ async function openServiceSession(
   if (!allowed) throw new Error('forbidden');
 
   const { target, container } = await ServiceRuntime.resolveContainer(serviceId);
+  // Null target means the service sits on a LOCAL server. Fail with an
+  // explanation rather than dialling a null host.
+  if (!target) {
+    throw new Error(LOCAL_SERVICE_TERMINAL_UNSUPPORTED);
+  }
   const ssh = await connectSsh(target);
 
   const channel = await dockerExecPty(ssh, container, cols, rows);
