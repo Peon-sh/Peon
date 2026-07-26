@@ -1,0 +1,81 @@
+---
+description: PR security review — auth flaws, injection, SSRF, IDOR, crypto, strategic/indirect exploits. Use when reviewing PRs, pull requests, open-source contributions, or security of a diff.
+alwaysApply: false
+---
+
+# PR security review (control-plane)
+
+When reviewing a PR or contribution, assume a hostile author until proven otherwise. Prefer **reject / request changes** over benefit of the doubt for security-sensitive diffs.
+
+## Process (do in order)
+
+1. **Diff inventory** — list every touched path; flag auth, crypto, SSH, deploy, webhooks, MCP, CI, deps, migrations, `PUBLIC_PATHS`, cookies.
+2. **Trust boundary map** — what becomes attacker-controlled after merge? (HTTP body, headers, git refs, URLs, fingerprints, env values, Dockerfile content, webhook tokens.)
+3. **Direct exploits** — can an unauthenticated or low-privilege caller trigger RCE, auth bypass, IDOR, secret leak, or SSRF *immediately*?
+4. **Indirect / multi-step** — does the change enable a later attack (TOFU poison, orphaned public ports, weak pin fail-open, token without scope, learn-then-MitM)?
+5. **Strategic / deep integration** — does it weaken tenancy, expand public surface, skip AuthZ, or plant durable backdoors (agent tokens, deploy keys, MCP tools, scheduled jobs)?
+6. **Verdict** — Approve / Request changes / Reject, with severity-ranked findings (Critical → Info).
+
+## Direct exploit checklist
+
+Reject or block merge if any of these appear without a clear, tested mitigation:
+
+| Class | Look for |
+|---|---|
+| Auth bypass | New public routes, skipped `requireUser` / `requireProject*`, JWT verify removed, cookie `httpOnly`/`secure` weakened |
+| IDOR / tenancy | Resource loaded by ID without `requireProjectAccess` / workspace membership; MCP tools without `serviceAccess` |
+| Injection | Unquoted shell interpolation into `sshPool.exec`, git scripts, dump/restore, docker compose; raw SQL |
+| SSRF | Server `fetch(userUrl)` without https + private-IP blocklist (notifications, screenshots, webhooks) |
+| Secret leak | Private keys, tokens, passwords in logs, API responses, MCP tool output, client bundles (`NEXT_PUBLIC_*`) |
+| Crypto downgrade | Weak JWT alg, missing auth tag, `ENCRYPTION_KEY` fallback, hardcoded secrets |
+| RCE on control plane | `eval`, dynamic `Function`, unsandboxed template exec, arbitrary `child_process` from request input |
+
+## Indirect / chained attack checklist
+
+Flag even when the PR “works” in happy path:
+
+- **TOFU / fail-open** — first connect trusts attacker; unparseable pins treated as unset; silent re-learn of host keys.
+- **Lifecycle orphans** — delete/update without tearing down containers, ports, cron, webhooks, or agent tokens.
+- **Privilege sticky** — role checks only at mint time (tickets, tokens) not at use time; long-lived JWTs without session revoke.
+- **Confused deputy** — webhook/agent/MCP acts with higher privilege than the triggering principal.
+- **Data poisoning** — attacker-controlled git ref, compose, Dockerfile, or env reaches build/deploy without validation.
+- **Log/query token leak** — secrets in URL query (`?ticket=`), Referer, or access logs.
+
+## Strategic / deep-integration attacks
+
+Ask: *If this merges and sits for 6 months, how does an adversary abuse it?*
+
+- New **always-on** network listeners or public path prefixes (`PUBLIC_PATHS`, `/mcp`, `/api/v1/agents`, webhooks).
+- New **outbound** from worker/app to attacker-chosen hosts.
+- Changes to **multi-tenant** filters (`workspaceId`, soft-delete, `deletedAt`).
+- Broadening **API token / MCP** power without scopes.
+- CI that can push secrets, skip tests, or publish artifacts from fork PRs.
+- Migrations that weaken constraints, drop RLS-like filters, or add nullable trust fields defaulting insecure.
+
+## AuthZ pattern (Peon)
+
+```typescript
+// ✅ expected
+const projectId = await ServiceModule.projectIdFor(serviceId);
+await requireProjectManage(projectId);
+
+// ❌ reject
+const svc = await prisma.service.findUnique({ where: { id } });
+// … mutate with no membership check
+```
+
+## Output format for the review
+
+```markdown
+### Security verdict: Approve | Request changes | Reject
+
+#### Findings
+| Sev | Location | Issue | Exploit path | Fix |
+|---|---|---|---|---|
+| High | file:line | … | … | … |
+
+#### Residual risk / follow-ups
+- …
+```
+
+Do not approve security-sensitive PRs that only add UI warnings when the underlying unsafe behavior remains (e.g. delete without teardown).

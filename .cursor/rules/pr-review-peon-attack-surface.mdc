@@ -1,0 +1,79 @@
+---
+description: Peon-specific PR attack-surface review — SSH, deploy, terminal, webhooks, MCP, agents, multi-tenant isolation. Use when reviewing PRs that touch deploy, SSH, servers, services, MCP, webhooks, workers, or auth.
+globs: src/lib/ssh/**,src/services/internal/deploy/**,src/services/internal/webhooks/**,src/lib/mcp/**,worker/**,src/proxy.ts,src/lib/routes/**,src/lib/auth/**,src/lib/crypto/**,src/app/api/**/*.ts
+alwaysApply: false
+---
+
+# Peon attack-surface PR review
+
+Peon is a multi-tenant deploy control plane. A bug here often means **remote code on customer VPS** or **cross-workspace data access**.
+
+## Trust model (do not weaken)
+
+| Boundary | Trusted after | Must verify |
+|---|---|---|
+| Browser → App | Session cookie + active `sid` | `requireUser` / project RBAC |
+| MCP / API token → App | `peon_…` token hash | Workspace scope + role; prefer least privilege |
+| Git provider → App | HMAC / app webhook secret | Signature before deploy enqueue |
+| Agent → App | Sentinel bearer | `timingSafeEqual`; no privilege escalation via metrics body |
+| App/Worker → VPS | SSH key + host key | `hostVerifier`; never drop host checks “for convenience” |
+| VPS → Git | Deploy key / GitHub App | Prefer HTTPS App; avoid `StrictHostKeyChecking=no` |
+
+## Hot paths — review extra carefully
+
+### SSH / terminal
+- Removing or bypassing `hostVerifier` / fingerprint checks → **Reject**
+- Fail-open on bad fingerprints, silent host-key replace → **Request changes**
+- Terminal tickets: re-check membership **at connect**; avoid long-lived query-string tokens
+- `sshPool.exec` / `putContent`: every interpolated value must be quoted/validated (`shellSingleQuote`, `assertSafeGitRefName`, `normalizeRepoPath`)
+
+### Deploy / git sync
+- User-controlled branch, repo URL, commit SHA, `baseDirectory`, `dockerfileContent` → validate or treat as intentional high trust for **admins only**
+- New `GIT_SSH_COMMAND` flags that disable host checking → flag as Medium+; require known_hosts plan
+- Delete/update service without stopping containers / closing public DB ports → lifecycle risk
+
+### Webhooks / public routes
+- Additions to `PUBLIC_PATHS` → justify auth model
+- Generic deploy webhook without HMAC → treat as Medium; require rate limit + rotation story
+- Timing-unsafe compares for secrets → **Request changes**
+
+### MCP / chat tools
+- New mutating tools without `serviceAccess(..., true)` / infra role checks → **Reject**
+- Secrets in tool responses without redact → **Request changes**
+- Mutating chat tools that skip user approval → **Request changes**
+
+### Multi-tenant data
+- Queries missing `workspaceId` / project membership
+- Soft-delete bypass (`deletedAt`) leaking other tenants
+- Cross-workspace token use
+
+### Crypto / sessions
+- `ENCRYPTION_KEY` / `JWT_SECRET` handling; cookie flags; session revoke on password reset must remain
+
+## Exploit scenario prompts (write at least one if High+)
+
+For each serious finding, state:
+
+1. **Actor** (anon, member, admin, stolen token, MitM on path)
+2. **Step** (request / PR field / webhook)
+3. **Impact** (other tenant data, RCE on VPS, deploy poison, billing abuse)
+4. **Blast radius** (one workspace vs instance-wide)
+
+## Examples
+
+```text
+❌ BAD: ssh.connect({ ...opts }) // no hostVerifier
+✅ GOOD: hostVerifier from createHostKeyVerifier({ expected: fingerprint })
+
+❌ BAD: await fetch(config.webhookUrl) // no URL policy
+✅ GOOD: assertSafeEgressUrl(url) then fetch
+
+❌ BAD: prisma.service.delete({ where: { id } }) // no RBAC
+✅ GOOD: requireProjectDelete(projectId) then remove + teardown
+```
+
+## Verdict rule of thumb
+
+- **Reject** — auth bypass, tenancy break, unauthenticated RCE, secret exfil, supply-chain backdoor
+- **Request changes** — SSRF, missing teardown, TOFU fail-open, unscored tokens, disabled host checks
+- **Approve with notes** — defense-in-depth improvements with residual risk documented

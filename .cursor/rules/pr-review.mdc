@@ -1,0 +1,37 @@
+---
+description: Orchestrates full PR review for Peon — security, supply chain, and Peon attack surface. Use whenever the user asks to review a PR, pull request, contribution, or /review.
+alwaysApply: false
+---
+
+# Full PR review workflow (Peon)
+
+When asked to review a PR / contribution:
+
+1. Fetch PR metadata, author association, file list, and full diff (`gh pr view` / `gh pr diff`).
+2. Apply **all** of:
+   - `.cursor/rules/pr-review-security.mdc`
+   - `.cursor/rules/pr-review-supply-chain.mdc`
+   - `.cursor/rules/pr-review-peon-attack-surface.mdc` (especially if SSH/deploy/MCP/auth touched)
+3. Run dependency/CI attention if `package.json`, lockfile, or `.github/workflows/**` changed.
+4. Produce one combined review:
+
+```markdown
+## Verdict: Approve | Request changes | Reject
+
+### Summary
+1–3 sentences.
+
+### Security findings
+(table: Sev | Location | Issue | Exploit path | Fix)
+
+### Supply chain
+Clean | Suspicious | Reject — bullets
+
+### Peon attack surface
+Bullets for SSH/deploy/tenancy/webhooks/MCP if relevant
+
+### Test plan gaps
+What still needs manual/CI verification before merge
+```
+
+Prioritize **hostile-contributor** mindset for first-time / external PRs. Do not soft-approve “looks helpful” security-sensitive changes without exploit reasoning.
