@@ -281,6 +281,176 @@ rows without a user. Consider widening the check to also count `PrivateKey`.
 
 ---
 
+## Phase 2 / 5 — providers and Postgres queue
+
+### VD-012 — Lockfile is out of date (KNOWN-CERTAIN CI failure)
+
+| | |
+|---|---|
+| **Phase** | 6 |
+| **Area** | CI |
+| **Status** | OPEN |
+| **Risk** | **HIGH** |
+
+**Description.** `package.json` gained `@aws-sdk/lib-storage`, `nodemailer` and
+`@types/nodemailer`, but `pnpm-lock.yaml` could not be regenerated. **Every CI
+job that runs `pnpm install --frozen-lockfile` will fail** until someone runs
+`pnpm install` and commits the lockfile.
+
+This is not a suspicion — it is a certainty, recorded so it is not mistaken for a
+real defect when CI first runs.
+
+**Required validation.** `pnpm install` in a Node 22 environment, commit the
+updated `pnpm-lock.yaml`, confirm `ci:unit` reaches the test step.
+
+---
+
+### VD-013 — Postgres queue against a real database
+
+| | |
+|---|---|
+| **Phase** | 5 |
+| **Area** | Queue |
+| **Status** | OPEN |
+| **Risk** | **CRITICAL** |
+
+**Description.** The claim query is raw SQL executed through
+`prisma.$queryRaw`. Unit tests mock Prisma, so they prove the shape of the calls
+and nothing about the SQL itself. The `UPDATE ... WHERE id IN (SELECT ... FOR
+UPDATE SKIP LOCKED)` statement has never been parsed by Postgres.
+
+If the claim is wrong, jobs are lost, duplicated, or run concurrently on multiple
+workers — the failure mode is silent and data-affecting.
+
+**Required validation.** Against real Postgres:
+
+1. enqueue → claim → acknowledge round trip
+2. two concurrent workers claiming from a shared queue never receive the same row
+3. lease expiry makes an unacknowledged job visible again (crash recovery)
+4. retry backoff increases; `maxAttempts` moves the job to FAILED
+5. malformed payload is failed, not redelivered forever
+6. `scheduled_at`/`visibleAt` in the future is not claimed early
+7. graceful shutdown drains in-flight jobs
+
+---
+
+### VD-014 — Worker behaviour parity between drivers
+
+| | |
+|---|---|
+| **Phase** | 5 |
+| **Area** | Queue |
+| **Status** | OPEN |
+| **Risk** | HIGH |
+
+**Description.** `worker/index.ts` was rewritten around the provider interface.
+The SQS path must behave exactly as before for existing installations, including
+the drop-on-`NotFoundError` rule.
+
+**Required validation.** Integration run against both drivers dispatching the same
+job types; confirm SQS message lifecycle is unchanged.
+
+---
+
+### VD-015 — Prisma client regeneration for `QueueJob`
+
+| | |
+|---|---|
+| **Phase** | 5 |
+| **Area** | Prisma |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `prisma.queueJob` does not exist on the generated client until
+`prisma generate` runs against the updated schema. Typecheck will fail until then.
+The hand-written migration SQL has also never been applied.
+
+**Required validation.** `pnpm exec prisma generate`, `prisma migrate deploy`
+against an empty database, and confirm the migration matches the schema
+(`prisma migrate diff`).
+
+---
+
+## Phase 6 — storage, email, backups
+
+### VD-016 — Backup streaming under real load
+
+| | |
+|---|---|
+| **Phase** | 6 |
+| **Area** | Storage |
+| **Status** | OPEN |
+| **Risk** | **HIGH** |
+
+**Description.** `uploadFileFromServer` no longer base64-encodes the whole dump
+into heap; it pulls over SFTP to a temp file and streams a multipart upload. The
+memory claim is unproven, and the disk requirement is new — the worker now needs
+free space equal to the dump size.
+
+**Required validation.** Back up a multi-GB database and observe worker RSS stays
+bounded (target: well under 1 GB regardless of dump size). Confirm the temp file
+is removed on both success and failure. Confirm behaviour when the temp
+filesystem is full.
+
+---
+
+### VD-017 — SMTP delivery
+
+| | |
+|---|---|
+| **Phase** | 6 |
+| **Area** | Email |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `SmtpEmailDriver` has never sent a message. TLS/STARTTLS
+selection by port, auth, and the lazy `nodemailer` import are all unverified.
+
+**Required validation.** Send through Mailpit in the infrastructure compose mode;
+then against one real provider. Confirm signup OTP arrives with
+`QUEUE_DRIVER=postgres` and `EMAIL_DRIVER=smtp` and no AWS configured.
+
+---
+
+### VD-018 — Local storage serving and RBAC
+
+| | |
+|---|---|
+| **Phase** | 6 |
+| **Area** | Storage |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** `/api/storage/[...key]` requires a session but performs **no
+per-object ownership check** — any authenticated user who knows a key can read
+it. Keys contain cuids/uuids so they are not trivially guessable, but this is
+weaker than S3 presigning. Existing avatar/screenshot URLs are also public in the
+S3 path today, so this is not a regression, but it should be tightened.
+
+**Required validation.** Decide whether avatars and screenshots need per-workspace
+authorisation; add tests either way. Confirm path traversal is impossible
+(unit-tested, not yet run).
+
+---
+
+### VD-019 — Storage driver switch does not orphan existing objects
+
+| | |
+|---|---|
+| **Phase** | 6 |
+| **Area** | Migration |
+| **Status** | OPEN |
+| **Risk** | MEDIUM |
+
+**Description.** Auto-detection keeps S3 when `S3_BUCKET` is set, so existing
+installations are unaffected. But an operator who switches drivers finds old
+objects unreachable — there is no migration tool.
+
+**Required validation.** Document the limitation; decide whether a
+`storage:migrate` command is needed before release.
+
+---
+
 ## Rules for this file
 
 1. Never delete an entry. Mark it `VERIFIED` (with evidence) or `FAILED`.

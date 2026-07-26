@@ -32,8 +32,36 @@ const serverSchema = z.object({
   /** Google Identity Services client ID (no client secret needed for token login). */
   GOOGLE_CLIENT_ID: z.string().optional(),
 
-  /** Email: `test` logs to console; `aws-ses` sends via Amazon SES. */
-  EMAIL_DRIVER: z.enum(['test', 'aws-ses']).default('test'),
+  /**
+   * Email transport. `test` logs to console, `smtp` uses any standard SMTP
+   * server (the self-host default), `aws-ses` sends via Amazon SES.
+   */
+  EMAIL_DRIVER: z.enum(['test', 'smtp', 'aws-ses']).default('test'),
+
+  /** SMTP settings, used when EMAIL_DRIVER=smtp. */
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  /** Implicit TLS. Defaults to true on port 465, false elsewhere (STARTTLS). */
+  SMTP_SECURE: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  /** Set false only for self-signed certificates on a trusted network. */
+  SMTP_TLS_REJECT_UNAUTHORIZED: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+
+  /**
+   * Platform object storage. Omit to auto-detect: `s3` when S3_BUCKET is set
+   * (existing installations keep their URLs), otherwise `local` disk.
+   */
+  STORAGE_DRIVER: z.enum(['local', 's3']).optional(),
+
+  /** Root for local storage, service directories and backups. */
+  PEON_DATA_DIR: z.string().default('/data/peon'),
   EMAIL_FROM: z.string().default('no-reply@peon.local'),
   EMAIL_FROM_NAME: z.string().default('Peon'),
 
