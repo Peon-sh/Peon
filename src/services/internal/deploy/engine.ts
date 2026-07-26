@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { NotFoundError } from '@/lib/errors';
-import { sshPool, sshTargetForServer, type SshTarget } from '@/lib/ssh';
+import { executorForServer, type ServerExecutor } from '@/lib/executor';
 import { decrypt } from '@/lib/crypto/encryption';
 import {
   buildCompose,
@@ -69,7 +69,7 @@ import { ServiceRuntime } from '@/services/internal/service/runtime';
 
 /** Clone or update a git repository on the server. */
 async function syncRepo(
-  target: SshTarget,
+  executor: ServerExecutor,
   svc: FullService,
   dir: string,
   log: (m: string) => void,
@@ -96,9 +96,9 @@ async function syncRepo(
     } catch {
       // stored in plaintext (should not happen); use as-is
     }
-    await sshPool.exec(target, `mkdir -p ${dir}`);
-    await sshPool.putContent(target, keyPath, keyContent.endsWith('\n') ? keyContent : keyContent + '\n');
-    await sshPool.exec(target, `chmod 600 ${keyPath}`);
+    await executor.exec(`mkdir -p ${dir}`);
+    await executor.putContent(keyPath, keyContent.endsWith('\n') ? keyContent : keyContent + '\n');
+    await executor.exec(`chmod 600 ${keyPath}`);
     gitSshPrefix = `GIT_SSH_COMMAND='ssh -i ${keyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' `;
     keyCleanup = `rm -f ${keyPath}`;
   }
@@ -116,14 +116,14 @@ async function syncRepo(
     forceClean: opts.forceClean,
     commitSha: opts.commitSha,
   });
-  const res = await sshPool.execStream(target, script, (c) => log(c.trimEnd()));
+  const res = await executor.execStream(script, (c) => log(c.trimEnd()));
   if (res.code !== 0) throw new Error('Git clone/pull failed.');
   return res.stdout.trim().split('\n').pop() ?? '';
 }
 
 /** Build a docker image on the server according to the service's build pack. */
 async function buildImage(
-  target: SshTarget,
+  executor: ServerExecutor,
   svc: FullService,
   dir: string,
   imageTag: string,
@@ -146,7 +146,7 @@ async function buildImage(
   switch (svc.buildPack) {
     case 'DOCKERFILE':
       if (svc.dockerfileContent) {
-        await sshPool.putContent(target, `${base}/Dockerfile.peon`, svc.dockerfileContent);
+        await executor.putContent(`${base}/Dockerfile.peon`, svc.dockerfileContent);
         buildScript = `cd ${base} && ${packEnv} docker build ${noCache} ${dockerBuildArgs} -t ${imageTag} -f Dockerfile.peon .`;
       } else {
         // Workdir + dockerfile location (e.g. /docker/Dockerfile.worker).
@@ -163,13 +163,13 @@ async function buildImage(
       break;
     case 'STATIC': {
       const nginxfile = `FROM nginx:alpine\nCOPY . /usr/share/nginx/html\n`;
-      await sshPool.putContent(target, `${base}/Dockerfile.peon-static`, nginxfile);
+      await executor.putContent(`${base}/Dockerfile.peon-static`, nginxfile);
       buildScript = `cd ${base} && docker build ${noCache} -t ${imageTag} -f Dockerfile.peon-static .`;
       break;
     }
     default:
       if (svc.dockerfileContent) {
-        await sshPool.putContent(target, `${base}/Dockerfile.peon`, svc.dockerfileContent);
+        await executor.putContent(`${base}/Dockerfile.peon`, svc.dockerfileContent);
         buildScript = `cd ${base} && ${packEnv} docker build ${noCache} ${dockerBuildArgs} -t ${imageTag} -f Dockerfile.peon .`;
       } else {
         const dockerfileFile = resolveDockerfileBuildPath(base, svc.dockerfilePath);
@@ -179,35 +179,33 @@ async function buildImage(
 
   if (opts.noCache) log('Building without cache (--no-cache)…');
   log(`Building image ${imageTag}…`);
-  const res = await sshPool.execStream(target, buildScript, (c) => log(c.trimEnd()));
+  const res = await executor.execStream(buildScript, (c) => log(c.trimEnd()));
   if (res.code !== 0) throw new Error('Image build failed.');
 }
 
 async function composeUp(
-  target: SshTarget,
+  executor: ServerExecutor,
   dir: string,
   compose: string,
   log: (m: string) => void,
   env?: Record<string, string>,
   opts?: { projectName?: string; removeOrphans?: boolean },
 ) {
-  await sshPool.exec(target, `mkdir -p ${dir}`);
-  await sshPool.putContent(target, `${dir}/docker-compose.yml`, compose);
+  await executor.exec(`mkdir -p ${dir}`);
+  await executor.putContent(`${dir}/docker-compose.yml`, compose);
   if (env && Object.keys(env).length > 0) {
     // Written beside the compose file so `${VAR}` interpolation (incl. the
     // template magic vars) resolves during `docker compose up`.
-    await sshPool.putContent(target, `${dir}/.env`, envFileContent(env));
+    await executor.putContent(`${dir}/.env`, envFileContent(env));
   }
   // The compose file references the shared proxy network as external; make
   // sure it exists (older servers were provisioned with a different default).
-  await sshPool.exec(
-    target,
+  await executor.exec(
     `docker network inspect ${DEFAULT_NETWORK} >/dev/null 2>&1 || docker network create --attachable ${DEFAULT_NETWORK}`,
   );
   const project = opts?.projectName ? `-p ${shellSingleQuote(opts.projectName)} ` : '';
   const orphans = opts?.removeOrphans === false ? '' : ' --remove-orphans';
-  const res = await sshPool.execStream(
-    target,
+  const res = await executor.execStream(
     `cd ${dir} && docker compose ${project}up -d${orphans}`,
     (c) => log(c.trimEnd()),
   );
@@ -216,13 +214,12 @@ async function composeUp(
 
 /** Stop/remove other containers for this Peon service, keeping `keepContainer`. */
 async function stopPreviousServiceContainers(
-  target: SshTarget,
+  executor: ServerExecutor,
   serviceId: string,
   keepContainer: string,
   log: (m: string) => void,
 ): Promise<void> {
-  const list = await sshPool.exec(
-    target,
+  const list = await executor.exec(
     `docker ps -aq --filter label=${PEON_SERVICE_ID_LABEL}=${shellSingleQuote(serviceId)} --filter label=${PEON_ROLE_LABEL}=app 2>/dev/null`,
   );
   const ids = list.stdout
@@ -234,46 +231,41 @@ async function stopPreviousServiceContainers(
     return;
   }
   for (const id of ids) {
-    const nameRes = await sshPool.exec(
-      target,
+    const nameRes = await executor.exec(
       `docker inspect --format='{{.Name}}' ${shellSingleQuote(id)} 2>/dev/null`,
     );
     const name = nameRes.stdout.trim().replace(/^\//, '');
     if (!name || name === keepContainer) continue;
     log(`Stopping previous container ${name}…`);
-    await sshPool.exec(
-      target,
+    await executor.exec(
       `docker stop ${shellSingleQuote(name)} >/dev/null 2>&1 || true; docker rm -f ${shellSingleQuote(name)} >/dev/null 2>&1 || true`,
     );
   }
 }
 
 async function removeFailedRollingContainer(
-  target: SshTarget,
+  executor: ServerExecutor,
   container: string,
   log: (m: string) => void,
 ): Promise<void> {
   log(`Rolling update failed — removing new container ${container}, keeping the previous one.`);
-  await sshPool.exec(
-    target,
+  await executor.exec(
     `docker stop ${shellSingleQuote(container)} >/dev/null 2>&1 || true; docker rm -f ${shellSingleQuote(container)} >/dev/null 2>&1 || true`,
   );
 }
 
 /** Resolve the actual container name for a compose service after `compose up`. */
 async function resolveComposeRuntimeContainer(
-  target: SshTarget,
+  executor: ServerExecutor,
   dir: string,
   serviceKey: string,
 ): Promise<string | null> {
-  const idRes = await sshPool.exec(
-    target,
+  const idRes = await executor.exec(
     `cd ${shellSingleQuote(dir)} && docker compose ps -q ${shellSingleQuote(serviceKey)} 2>/dev/null | head -1`,
   );
   const id = idRes.stdout.trim();
   if (!id) return null;
-  const nameRes = await sshPool.exec(
-    target,
+  const nameRes = await executor.exec(
     `docker inspect --format='{{.Name}}' ${shellSingleQuote(id)} 2>/dev/null`,
   );
   const name = nameRes.stdout.trim().replace(/^\//, '');
@@ -282,21 +274,21 @@ async function resolveComposeRuntimeContainer(
 
 /** Remove old peon/* tags past dockerImagesToKeep (always keeps currentTag). */
 async function cleanupRetainedImages(
-  target: SshTarget,
+  executor: ServerExecutor,
   imageRepository: string,
   currentTag: string,
   imagesToKeep: number,
   log: (m: string) => void,
 ): Promise<void> {
   try {
-    const listRes = await sshPool.exec(target, buildImageCleanupScript(imageRepository));
+    const listRes = await executor.exec(buildImageCleanupScript(imageRepository));
     const images = parseDockerImageList(listRes.stdout);
     const toDelete = selectImagesToDelete(images, currentTag, imagesToKeep);
     if (toDelete.length === 0) return;
     log(
       `Cleaning old images for ${imageRepository} (keep ${imagesToKeep} + current): removing ${toDelete.length}…`,
     );
-    await sshPool.exec(target, buildImageRmiScript(toDelete.map((img) => img.imageRef)));
+    await executor.exec(buildImageRmiScript(toDelete.map((img) => img.imageRef)));
   } catch (err) {
     log(
       `Image cleanup skipped: ${err instanceof Error ? err.message : 'unknown error'}`,
@@ -309,7 +301,7 @@ async function cleanupRetainedImages(
  * healthcheck is present) before marking the deployment finished.
  */
 async function waitUntilReady(
-  target: SshTarget,
+  executor: ServerExecutor,
   container: string,
   svc: FullService,
   deploymentId: string,
@@ -340,8 +332,7 @@ async function waitUntilReady(
   try {
     await waitForContainerReadiness(opts, {
       inspect: async () => {
-        const res = await sshPool.exec(
-          target,
+        const res = await executor.exec(
           `docker inspect --format='${CONTAINER_INSPECT_FORMAT}' ${container}`,
         );
         if (res.code !== 0) {
@@ -363,8 +354,8 @@ async function waitUntilReady(
     // Surface recent logs before failing the deploy.
     log('----------------------------------------');
     log('Container logs:');
-    await sshPool
-      .execStream(target, `docker logs -n 100 ${container} 2>&1 || true`, (c) => log(c.trimEnd()))
+    await executor
+      .execStream(`docker logs -n 100 ${container} 2>&1 || true`, (c) => log(c.trimEnd()))
       .catch(() => undefined);
     log('----------------------------------------');
     if (err instanceof Error && err.message === 'Deployment cancelled') {
@@ -473,7 +464,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   try {
     await assertNotCancelled(deploymentId);
 
-    const target = await sshTargetForServer(svc.serverId);
+    const executor = await executorForServer(svc.serverId);
     const server = await prisma.server.findUnique({ where: { id: svc.serverId } });
     const proxyType: 'TRAEFIK' | 'CADDY' = server?.proxyType === 'CADDY' ? 'CADDY' : 'TRAEFIK';
     const dir = serviceDir(svc, isPreview ? deployment.pullRequestId : null);
@@ -622,7 +613,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         }
         if (svc.gitRepository) {
           await assertNotCancelled(deploymentId);
-          const sha = await syncRepo(target, svc, dir, log, {
+          const sha = await syncRepo(executor, svc, dir, log, {
             forceClean: deployment.forceRebuild || isPreview,
             branch: isPreview ? preview?.headBranch : null,
             // Rollback (and any pinned deploy) must check out this SHA, not branch tip.
@@ -636,7 +627,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
           });
         }
         await assertNotCancelled(deploymentId);
-        await buildImage(target, svc, dir, image, log, buildEnv, { noCache: forceRebuild });
+        await buildImage(executor, svc, dir, image, log, buildEnv, { noCache: forceRebuild });
       }
 
       await assertNotCancelled(deploymentId);
@@ -692,8 +683,8 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     if (preCmd && !isPreview) {
       const preTarget = previousContainer || runtimeContainer;
       log('Running pre-deploy command…');
-      await sshPool
-        .execStream(target, `${dockerExecShellCommand(preTarget, preCmd)} || true`, (c) => log(c.trimEnd()))
+      await executor
+        .execStream(`${dockerExecShellCommand(preTarget, preCmd)} || true`, (c) => log(c.trimEnd()))
         .catch(() => log('Pre-deploy command skipped (container not running yet).'));
     }
 
@@ -701,13 +692,13 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     log(useRolling ? 'Starting new container (rolling update)…' : 'Starting containers…');
     try {
-      await composeUp(target, dir, composeYaml, log, svc.kind === 'COMPOSE' ? runtimeEnv : undefined, {
+      await composeUp(executor, dir, composeYaml, log, svc.kind === 'COMPOSE' ? runtimeEnv : undefined, {
         projectName: rollingProject ?? undefined,
         removeOrphans: !useRolling,
       });
     } catch (err) {
       if (useRolling) {
-        await removeFailedRollingContainer(target, name, log);
+        await removeFailedRollingContainer(executor, name, log);
       }
       throw err;
     }
@@ -718,7 +709,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       svc.settings?.isRawComposeDeploymentEnabled &&
       composePrimaryKey
     ) {
-      const resolved = await resolveComposeRuntimeContainer(target, dir, composePrimaryKey);
+      const resolved = await resolveComposeRuntimeContainer(executor, dir, composePrimaryKey);
       if (resolved) {
         runtimeContainer = resolved;
         log(`Resolved primary container: ${runtimeContainer}`);
@@ -729,10 +720,10 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     await assertNotCancelled(deploymentId);
     try {
-      await waitUntilReady(target, runtimeContainer, svc, deploymentId, log);
+      await waitUntilReady(executor, runtimeContainer, svc, deploymentId, log);
     } catch (err) {
       if (useRolling) {
-        await removeFailedRollingContainer(target, runtimeContainer, log);
+        await removeFailedRollingContainer(executor, runtimeContainer, log);
       }
       throw err;
     }
@@ -742,20 +733,18 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     if (useRolling) {
       if (previousContainer && previousContainer !== runtimeContainer) {
         // Prefer label-based cleanup; also stop the known previous name if still up.
-        await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log);
-        const still = await sshPool.exec(
-          target,
+        await stopPreviousServiceContainers(executor, svc.id, runtimeContainer, log);
+        const still = await executor.exec(
           `docker inspect --format='{{.State.Running}}' ${shellSingleQuote(previousContainer)} 2>/dev/null || true`,
         );
         if (still.stdout.trim() === 'true') {
           log(`Stopping previous container ${previousContainer}…`);
-          await sshPool.exec(
-            target,
+          await executor.exec(
             `docker stop ${shellSingleQuote(previousContainer)} >/dev/null 2>&1 || true; docker rm -f ${shellSingleQuote(previousContainer)} >/dev/null 2>&1 || true`,
           );
         }
       } else {
-        await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log);
+        await stopPreviousServiceContainers(executor, svc.id, runtimeContainer, log);
       }
       await prisma.service.update({
         where: { id: svc.id },
@@ -765,7 +754,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       log(`Rolling update complete — active container is ${runtimeContainer}.`);
     } else if (!isPreview && svc.kind !== 'COMPOSE' && svc.kind !== 'DATABASE') {
       // Recreate path: drop any leftover rolling containers from earlier deploys.
-      await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log);
+      await stopPreviousServiceContainers(executor, svc.id, runtimeContainer, log);
       await prisma.service.update({
         where: { id: svc.id },
         data: { activeContainerName: runtimeContainer },
@@ -777,8 +766,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     const postCmd = svc.settings?.postDeployCommand?.trim();
     if (postCmd) {
       log('Running post-deploy command…');
-      const res = await sshPool.execStream(
-        target,
+      const res = await executor.execStream(
         dockerExecShellCommand(runtimeContainer, postCmd),
         (c) => log(c.trimEnd()),
       );
@@ -789,7 +777,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     if (!isPreview && builtImageRepository && builtImageTag) {
       await cleanupRetainedImages(
-        target,
+        executor,
         builtImageRepository,
         builtImageTag,
         svc.settings?.dockerImagesToKeep ?? 3,
@@ -921,7 +909,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 export async function controlService(serviceId: string, action: 'start' | 'stop' | 'restart'): Promise<void> {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc || !svc.serverId) throw new Error('Service or server missing.');
-  const target = await sshTargetForServer(svc.serverId);
+  const executor = await executorForServer(svc.serverId);
   const dir = serviceDir(svc);
   const cmd =
     action === 'stop'
@@ -929,7 +917,7 @@ export async function controlService(serviceId: string, action: 'start' | 'stop'
       : action === 'restart'
         ? 'docker compose restart'
         : 'docker compose up -d';
-  await sshPool.exec(target, `cd ${dir} && ${cmd}`);
+  await executor.exec(`cd ${dir} && ${cmd}`);
   await prisma.service.update({
     where: { id: serviceId },
     data: { status: action === 'stop' ? 'STOPPED' : 'RUNNING' },
@@ -944,10 +932,9 @@ export async function controlService(serviceId: string, action: 'start' | 'stop'
 export async function teardownService(serviceId: string): Promise<void> {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc?.serverId) return;
-  const target = await sshTargetForServer(svc.serverId);
+  const executor = await executorForServer(svc.serverId);
   const dir = shellSingleQuote(serviceDir(svc));
-  await sshPool.exec(
-    target,
+  await executor.exec(
     `if [ -d ${dir} ]; then cd ${dir} && docker compose down -v --remove-orphans || true; fi; rm -rf ${dir}`,
   );
 }
