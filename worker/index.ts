@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { serverEnv } from '../src/lib/env';
+import { assertEncryptionKeyUsable } from '../src/lib/crypto/preflight';
 import { receiveMessages, deleteMessage } from '../src/lib/queue/sqs';
 import type { QueueMessage, QueueName } from '../src/lib/queue/messages';
 import { dispatch, loadHandlers } from './handlers';
@@ -83,6 +84,8 @@ async function pollQueue(name: QueueName, waitSeconds: number, concurrency: numb
 
 async function main() {
   const env = serverEnv();
+  // Warns on a legacy/derived key, refuses only on a provably fresh install.
+  await assertEncryptionKeyUsable();
   const concurrency = Math.max(1, env.WORKER_MAX_CONCURRENCY);
   await loadHandlers();
   console.log(

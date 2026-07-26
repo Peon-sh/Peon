@@ -52,6 +52,22 @@ jobs:
       # Lockfile alone is enough; no install required.
       - run: pnpm audit --prod --audit-level=high
 
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.8.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm typecheck
+
   unit:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -66,6 +82,85 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:unit
+
+  compose-validate:
+    name: Compose config validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # `docker compose config` needs the referenced env_file to exist.
+      - name: Create a .env for validation
+        run: cp .env.example .env
+      - name: Validate every committed compose file
+        run: |
+          set -e
+          for f in docker-compose*.yml; do
+            echo "::group::$f"
+            docker compose -f "$f" config -q
+            echo "ok: $f"
+            echo "::endgroup::"
+          done
+      - name: Assert the Docker socket is never mounted into a web service
+        # Decision D6: only the worker / execution layer may reach Docker.
+        # Parsed from the resolved config as JSON rather than grepped, so this
+        # cannot be fooled by formatting or by anchors/extension fields.
+        run: |
+          set -e
+          for f in docker-compose*.yml; do
+            docker compose -f "$f" config --format json > /tmp/compose.json
+            python3 - "$f" <<'EOF'
+          import json, sys
+          path = sys.argv[1]
+          cfg = json.load(open('/tmp/compose.json'))
+          WEB = {'app', 'web', 'migrate'}
+          bad = []
+          for name, svc in (cfg.get('services') or {}).items():
+              if name not in WEB:
+                  continue
+              for vol in (svc.get('volumes') or []):
+                  src = vol.get('source', '') if isinstance(vol, dict) else str(vol)
+                  if 'docker.sock' in src:
+                      bad.append(f'{name}: {src}')
+          if bad:
+              print(f'FAIL: {path} mounts the Docker socket into a non-worker service:')
+              for b in bad:
+                  print('  ' + b)
+              sys.exit(1)
+          print(f'ok: {path}')
+          EOF
+          done
+
+  selfhost-smoke:
+    name: Self-host fresh-install smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate a .env with real secrets
+        run: |
+          cp .env.example .env
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env
+          sed -i "s|^ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$(openssl rand -base64 32)|" .env
+      - name: Boot the stack from an empty volume
+        run: docker compose up -d --build --wait --wait-timeout 900
+      - name: Assert migrations ran
+        run: |
+          docker compose exec -T postgres \
+            psql -U postgres -d peon -tAc \
+            "select count(*) from _prisma_migrations where finished_at is not null" > /tmp/migrations
+          applied=$(cat /tmp/migrations)
+          echo "applied migrations: $applied"
+          test "$applied" -gt 0
+      - name: Assert the app answers /api/health
+        run: |
+          code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:3000/api/health)
+          echo "status=$code body=$(cat /tmp/health.json)"
+          test "$code" = "200"
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
 
   integration:
     name: API integration tests

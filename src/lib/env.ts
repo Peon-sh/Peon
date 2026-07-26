@@ -21,7 +21,13 @@ const serverSchema = z.object({
   /** Email of the Peon instance owner — only this user can edit global instance settings. */
   INSTANCE_OWNER_EMAIL: z.string().email().optional(),
 
+  /**
+   * Format is intentionally unvalidated here — see the superRefine note below.
+   * Acceptability is decided at startup by `lib/crypto/preflight.ts`.
+   */
   ENCRYPTION_KEY: z.string().min(1, 'ENCRYPTION_KEY is required'),
+  /** Old key during rotation; decryption falls back to it. See docs/self-hosting.md. */
+  ENCRYPTION_KEY_PREVIOUS: z.string().optional(),
 
   /** Google Identity Services client ID (no client secret needed for token login). */
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -73,13 +79,41 @@ const serverSchema = z.object({
   STRIPE_PRICE_LOOKUP_YEARLY: z.string().default('peon_pro_yearly'),
 });
 
+/** Placeholder shipped in `.env.example` — never valid in production. */
+const PLACEHOLDER_JWT_SECRETS = new Set(['change-me-long-random-string']);
+
+/**
+ * Production-only secret hardening.
+ *
+ * **ENCRYPTION_KEY is deliberately NOT validated here.** This schema is
+ * synchronous and has no database access, so it cannot tell a new installation
+ * (where a weak key should be refused) from an upgrade of an existing one
+ * (where refusing would make already-encrypted data unreadable). That decision
+ * needs a database round-trip and lives in `lib/crypto/preflight.ts`.
+ *
+ * JWT_SECRET is different and *is* enforced here: rotating it only invalidates
+ * sessions, so a hard failure costs users a re-login, never data.
+ */
+const serverSchemaChecked = serverSchema.superRefine((env, ctx) => {
+  if (env.NODE_ENV !== 'production') return;
+
+  if (PLACEHOLDER_JWT_SECRETS.has(env.JWT_SECRET.trim())) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['JWT_SECRET'],
+      message:
+        'JWT_SECRET is still the .env.example placeholder. Generate one with: openssl rand -hex 32',
+    });
+  }
+});
+
 export type ServerEnv = z.infer<typeof serverSchema>;
 
 let cached: ServerEnv | null = null;
 
 export function serverEnv(): ServerEnv {
   if (cached) return cached;
-  const parsed = serverSchema.safeParse(process.env);
+  const parsed = serverSchemaChecked.safeParse(process.env);
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((i) => `  - ${i.path.join('.')}: ${i.message}`)

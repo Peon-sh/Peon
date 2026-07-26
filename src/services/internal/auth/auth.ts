@@ -15,6 +15,7 @@ import {
   countUsers,
 } from '@/services/internal/auth/users';
 import { isInstanceOwnerEmail } from '@/lib/auth/instance-owner';
+import { assertRegistrationAllowed } from '@/services/internal/instance/instance';
 import { enqueueEmail } from '@/lib/email/enqueue';
 import { welcomeEmailTemplate } from '@/lib/email/templates/welcome';
 import { AppError, ConflictError, UnauthorizedError, ValidationError } from '@/lib/errors';
@@ -88,6 +89,10 @@ export const AuthService = {
     if (await getUserByEmail(email)) {
       throw new ConflictError('An account with this email already exists.');
     }
+    // Checked here so a disabled instance never even sends an OTP, and again in
+    // completeSignup — the two calls are separate requests and the setting can
+    // change between them.
+    await assertRegistrationAllowed(email);
     await OTPService.generateAndSend(email, 'SIGNUP');
   },
 
@@ -107,6 +112,7 @@ export const AuthService = {
     if (await getUserByEmail(input.email)) {
       throw new ConflictError('An account with this email already exists.');
     }
+    await assertRegistrationAllowed(input.email);
 
     const valid = await OTPService.verify(input.email, 'SIGNUP', input.code);
     if (!valid) throw new UnauthorizedError('Invalid or expired verification code.');
@@ -161,6 +167,10 @@ export const AuthService = {
       }
       return issue(user, meta);
     }
+
+    // Google sign-in auto-provisions accounts, so it is a second registration
+    // vector and must honour the same gate as email signup.
+    await assertRegistrationAllowed(normalized.email);
 
     const isFirstUser = (await countUsers()) === 0;
     user = await createUser({

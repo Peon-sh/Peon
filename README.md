@@ -52,14 +52,24 @@ pnpm socket            # terminal WebSocket
 
 Leave `SQS_ENDPOINT` empty so the app talks to real AWS SQS. See `.env.example` for the full list of environment variables.
 
-### Optional Docker Compose
-
-Compose is optional and not used for day-to-day local development. Profiles:
+### Docker Compose
 
 ```bash
-docker compose --profile db up -d      # Postgres only, if you want it
-docker compose --profile full up -d    # containerized app + worker + schedule + socket
+cp .env.example .env   # fill in the REQUIRED block first
+docker compose up -d                  # Postgres + migrations + app + worker
+docker compose up -d postgres         # just the database, for host-based `pnpm dev`
+docker compose --profile full up -d   # adds scheduler + terminal socket
 ```
+
+Migrations run automatically via a one-shot `migrate` service that `app` and
+`worker` wait on, so a fresh volume comes up with the schema already applied.
+
+Generate `ENCRYPTION_KEY` with `openssl rand -base64 32`. A **new** installation
+refuses to start without a valid 32-byte key; an **existing** one using an older
+arbitrary key keeps working and only warns, so upgrading never breaks your data.
+Set it once and back it up — see
+[docs/self-hosting.md](docs/self-hosting.md#the-encryption-key) for the key modes
+and the zero-downtime rotation procedure.
 
 ## Scripts
 

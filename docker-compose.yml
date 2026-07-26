@@ -1,14 +1,22 @@
-# Optional self-host / production-like stack for Peon.
-# Local development does NOT require this file — run Postgres yourself and use
-# real AWS SQS (leave SQS_ENDPOINT empty). App + processes run on the host:
+# Self-host / production-like stack for Peon.
 #
-#   pnpm dev
-#   pnpm worker     # SQS job consumer (scale freely)
-#   pnpm schedule   # cron → enqueue (run exactly one)
-#   pnpm socket     # terminal WebSocket
+#   docker compose up -d                  # Postgres + migrations + app + worker
+#   docker compose up -d postgres         # just the database (host-based development)
+#   docker compose --profile full up -d   # adds scheduler + terminal socket
 #
-# Full containerized deploy still needs DATABASE_URL and AWS credentials in
-# `.env` (SQS, SES, S3).
+# Requires a `.env` file — copy `.env.example` and fill in the REQUIRED block.
+#
+# Containerized services override DATABASE_URL to reach Postgres over the compose
+# network; `.env` keeps `localhost` so host-based `pnpm dev` still works.
+#
+# Migrations run once via the `migrate` service, which app and worker gate on.
+# Running them there rather than in each container's entrypoint stops replicas
+# from racing each other on `prisma migrate deploy`.
+
+x-app-env: &app-env
+  # Overrides DATABASE_URL from .env: inside the compose network the database
+  # host is `postgres`, not `localhost`.
+  DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql://postgres:postgres@postgres:5432/peon?schema=public}
 
 services:
   postgres:
@@ -16,20 +24,35 @@ services:
     container_name: peon-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: peon
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-peon}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - peon_pgdata:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 10
-    profiles: ["db"]
+
+  # One-shot schema migration. Exits 0 on success; app/worker gate on that.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: peon-migrate
+    restart: "no"
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   app:
     build:
@@ -40,9 +63,24 @@ services:
     command: ["pnpm", "start"]
     env_file:
       - .env
+    environment:
+      <<: *app-env
     ports:
-      - "3000:3000"
-    profiles: ["full"]
+      - "${PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # node:22 ships global fetch, so this needs no curl/wget in the image.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   worker:
     build:
@@ -53,8 +91,14 @@ services:
     command: ["node", "--import", "tsx", "worker/index.ts"]
     env_file:
       - .env
-    profiles: ["full"]
+    environment:
+      <<: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
+  # Cron scheduler. Run EXACTLY ONE instance — worker/scheduler.ts dedupes in
+  # memory, so a second process double-fires every backup and scheduled task.
   schedule:
     build:
       context: .
@@ -64,6 +108,11 @@ services:
     command: ["node", "--import", "tsx", "worker/schedule.ts"]
     env_file:
       - .env
+    environment:
+      <<: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     profiles: ["full"]
 
   socket:
@@ -75,8 +124,13 @@ services:
     command: ["node", "--import", "tsx", "worker/socket.ts"]
     env_file:
       - .env
+    environment:
+      <<: *app-env
     ports:
       - "${TERMINAL_WS_PORT:-8081}:${TERMINAL_WS_PORT:-8081}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     profiles: ["full"]
 
 volumes:
