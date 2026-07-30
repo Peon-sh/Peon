@@ -29,4 +29,20 @@ describe('assertAuthRateLimit', () => {
     }
     expect(() => assertAuthRateLimit('login', ipHeaders, 'other@peon.test')).toThrow(RateLimitError);
   });
+
+  it('skips the ip limit when no forwarded ip is present', () => {
+    const noIp = new Headers();
+    for (let i = 0; i < 25; i += 1) {
+      expect(() => assertAuthRateLimit('login', noIp, `user-${i}@peon.test`)).not.toThrow();
+    }
+  });
+
+  it('still rate limits by email when no forwarded ip is present', () => {
+    const noIp = new Headers();
+    const email = 'shared@peon.test';
+    for (let i = 0; i < 10; i += 1) {
+      assertAuthRateLimit('login', noIp, email);
+    }
+    expect(() => assertAuthRateLimit('login', noIp, email)).toThrow(RateLimitError);
+  });
 });

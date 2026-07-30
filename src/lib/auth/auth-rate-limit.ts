@@ -46,8 +46,8 @@ const LIMITS: Record<
   },
 };
 
-function clientIp(headers: Headers): string {
-  return extractSessionMeta(headers).ip ?? 'unknown';
+function clientIp(headers: Headers): string | null {
+  return extractSessionMeta(headers).ip;
 }
 
 function normalizeEmail(email: string): string {
@@ -61,7 +61,9 @@ export function assertAuthRateLimit(
 ): void {
   const limits = LIMITS[action];
   const ip = clientIp(headers);
-  assertRateLimit(`auth:${action}:ip:${ip}`, limits.ip.limit, limits.ip.windowMs);
+  if (ip) {
+    assertRateLimit(`auth:${action}:ip:${ip}`, limits.ip.limit, limits.ip.windowMs);
+  }
 
   if (limits.email && email) {
     assertRateLimit(

@@ -42,7 +42,7 @@ Ask Chat questions like “How do I add a domain?” Chat calls `lookup_user_man
 
 **Who:** anyone with registration enabled (or an invite).
 
-**Common errors:** Registration disabled → ask a workspace OWNER/ADMIN or the person who runs your Peon installation. Google button missing → Google sign-in is not enabled for this installation.
+**Common errors:** Registration disabled → ask a workspace OWNER/ADMIN or the person who runs your Peon installation. Google button missing → Google sign-in is not enabled for this installation. Too many attempts / HTTP 429 → wait a minute and try again; public auth endpoints are rate limited.
 
 ### Accept an invitation
 

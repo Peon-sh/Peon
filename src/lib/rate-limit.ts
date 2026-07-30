@@ -31,6 +31,8 @@ export function assertRateLimit(key: string, limit: number, windowMs: number): v
   const existing = buckets.get(key);
   const timestamps = prune(existing?.timestamps ?? [], windowStart);
 
+  buckets.delete(key);
+
   if (timestamps.length >= limit) {
     buckets.set(key, { timestamps });
     throw new RateLimitError();
