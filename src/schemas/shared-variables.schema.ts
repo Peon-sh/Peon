@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ENV_VAR_KEY, MAX_ENV_VAR_KEY_LENGTH } from '@/lib/env-var-key';
 
 export const SHARED_VARIABLE_SCOPES = ['WORKSPACE', 'PROJECT', 'SERVER'] as const;
 
@@ -8,8 +9,8 @@ export const createSharedVariableSchema = z
     key: z
       .string()
       .min(1)
-      .max(255)
-      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Must be a valid environment variable name'),
+      .max(MAX_ENV_VAR_KEY_LENGTH)
+      .regex(ENV_VAR_KEY, 'Must be a valid environment variable name'),
     value: z.string().max(100000),
     comment: z.string().max(500).nullable().optional(),
     isMultiline: z.boolean().optional(),
@@ -30,8 +31,8 @@ export const updateSharedVariableSchema = z.object({
   key: z
     .string()
     .min(1)
-    .max(255)
-    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Must be a valid environment variable name')
+    .max(MAX_ENV_VAR_KEY_LENGTH)
+    .regex(ENV_VAR_KEY, 'Must be a valid environment variable name')
     .optional(),
   value: z.string().max(100000).optional(),
   comment: z.string().max(500).nullable().optional(),

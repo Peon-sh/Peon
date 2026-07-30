@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidSshHost, normalizeSshHost } from '@/lib/ssh/host';
+import { normalizeHostKeyFingerprint } from '@/lib/ssh/host-key';
 
 // ---- Private keys ----
 export const createPrivateKeySchema = z
@@ -34,6 +35,19 @@ const serverHostSchema = z
     message: 'Enter a valid IPv4, IPv6, or DNS hostname',
   });
 
+/**
+ * Optional SSH host key pin. Accepts `SHA256:…`, the bare base64 digest, or a
+ * whole `ssh-keygen -lf` line. Left unset, the key is recorded on first connect.
+ */
+const hostKeyFingerprintSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .transform(normalizeHostKeyFingerprint)
+  .refine((v): v is string => v !== null, {
+    message: 'Enter a SHA256 host key fingerprint, e.g. SHA256:abc… (MD5 fingerprints are not supported)',
+  });
+
 export const createServerSchema = z.object({
   name: z.string().min(1).max(80),
   description: z.string().max(500).optional(),
@@ -42,6 +56,7 @@ export const createServerSchema = z.object({
   user: z.string().min(1).max(80).default('root'),
   privateKeyId: z.string().min(1),
   proxyType: z.enum(['TRAEFIK', 'CADDY', 'NONE']).default('TRAEFIK'),
+  hostKeyFingerprint: hostKeyFingerprintSchema.optional(),
 });
 
 export const updateServerSchema = z.object({
@@ -52,6 +67,8 @@ export const updateServerSchema = z.object({
   user: z.string().min(1).max(80).optional(),
   privateKeyId: z.string().min(1).nullable().optional(),
   proxyType: z.enum(['TRAEFIK', 'CADDY', 'NONE']).optional(),
+  /** Explicit null clears the trusted key, so a rebuilt server can be re-trusted. */
+  hostKeyFingerprint: hostKeyFingerprintSchema.nullable().optional(),
   isBuildServer: z.boolean().optional(),
   forceDisabled: z.boolean().optional(),
   wildcardDomain: z.string().max(255).nullable().optional(),

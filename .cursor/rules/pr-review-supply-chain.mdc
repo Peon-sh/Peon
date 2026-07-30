@@ -1,0 +1,58 @@
+---
+description: PR supply-chain and contribution integrity review — deps, lockfiles, CI, malicious OSS PRs, install scripts. Use when reviewing PRs, dependencies, lockfiles, workflows, or open-source contributions.
+alwaysApply: false
+---
+
+# PR supply-chain review
+
+Treat external / first-time contributor PRs as high risk. Supply-chain attacks often look like “helpful fixes.”
+
+## Mandatory scans on every PR
+
+1. **File set** — unexpected paths? (`.github/workflows/**`, `package.json`, lockfile, `Dockerfile*`, `scripts/**`, `postinstall`, native addons, `prisma/seed`, `.env*`)
+2. **Dependency delta** — new/updated packages, version ranges (`*`, `latest`), URL/git deps, `overrides` / `resolutions` changes
+3. **Install hooks** — `preinstall` / `postinstall` / `prepare` that download or execute remote code
+4. **Lockfile integrity** — lockfile updated consistently with `package.json`; no unexplained transitive jumps
+5. **CI/CD** — workflow `pull_request_target`, secrets in fork PRs, `curl | bash`, unpinned actions (`@main`), `permissions: write-all`
+6. **Binary / opaque payloads** — base64 blobs, minified one-liners, unexpected WASM/native `.node` files
+7. **Author signals** — first-time contributor, mass AI PRs same day, unrelated drive-by across many repos (not proof alone — raise scrutiny)
+
+## Red flags → Request changes or Reject
+
+| Signal | Why |
+|---|---|
+| Lockfile-only churn with no clear reason | Dependency confusion / malicious transitive |
+| New network calls in build/test scripts | Exfil during CI |
+| Weakening Dependabot / audit / secret-scan jobs | Blind the pipeline |
+| Pin removal or range widening on crypto/auth HTTP libs | Silent downgrade |
+| Encoding / obfuscation in “cleanup” commits | Hide payload |
+| Docs/typo PR that also touches `package.json` or workflows | Trojans ride trivial PRs |
+| Commit verifies fail / force-push history rewrite on sensitive files | Tamper |
+
+## Peon-specific dependency hotspots
+
+Extra review when the PR touches:
+
+- `ssh2` / `node-ssh` — RCE on managed hosts if connect options weaken
+- `jose` / auth cookies — session forgery
+- `@modelcontextprotocol/sdk`, MCP route — token-gated RCE-equivalent via tools
+- `axios` / `fetch` wrappers — SSRF helpers
+- `prisma` / migrations — data exposure, constraint drops
+- Stripe / AWS SDKs — billing or credential misuse
+
+## Safe contribution defaults
+
+- Prefer **no new dependencies**; if needed, well-known maintained packages with pinned versions.
+- Never merge secrets, `.env`, real private keys, or production hostnames with credentials.
+- Fork PRs must not run privileged workflows with repo secrets.
+- AI-coauthored PRs get the **same** review bar as human PRs — read every line.
+
+## Output
+
+```markdown
+### Supply-chain verdict: Clean | Suspicious | Reject
+- Dep/lock/CI changes: …
+- Obfuscation / install hooks: …
+- Contributor risk notes: …
+- Required before merge: …
+```

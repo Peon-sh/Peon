@@ -4,7 +4,13 @@ import { NodeSSH } from 'node-ssh';
 import type { ClientChannel } from 'ssh2';
 import { serverEnv } from '../src/lib/env';
 import { prisma } from '../src/lib/prisma';
-import { sshConnectHostOptions, sshTargetForServer } from '../src/lib/ssh';
+import {
+  createHostKeyVerifier,
+  HostKeyMismatchError,
+  sshConnectHostOptions,
+  sshTargetForServer,
+} from '../src/lib/ssh';
+import { rememberHostKey } from '../src/lib/ssh/host-key-store';
 import { dockerExecInteractiveCommand } from '../src/lib/terminal/service-shell';
 import { verifyTerminalTicket, type TerminalTicketPayload } from '../src/lib/terminal/ticket';
 import { ServiceRuntime } from '../src/services/internal/service/runtime';
@@ -13,14 +19,32 @@ import type { SshTarget } from '../src/lib/ssh/types';
 async function connectSsh(target: SshTarget): Promise<NodeSSH> {
   const ssh = new NodeSSH();
   const hostOpts = sshConnectHostOptions(target.host);
-  await ssh.connect({
-    ...hostOpts,
-    port: target.port,
-    username: target.username,
-    privateKey: target.privateKey,
-    readyTimeout: target.readyTimeoutMs ?? 30_000,
-    keepaliveInterval: 15_000,
-  });
+  const verifier = createHostKeyVerifier({ expected: target.hostKeyFingerprint });
+
+  try {
+    await ssh.connect({
+      ...hostOpts,
+      port: target.port,
+      username: target.username,
+      privateKey: target.privateKey,
+      readyTimeout: target.readyTimeoutMs ?? 30_000,
+      keepaliveInterval: 15_000,
+      hostVerifier: verifier.verify,
+    });
+  } catch (err) {
+    // ssh2 reports a rejected host key as a generic failure; say what actually happened.
+    if (verifier.mismatch) throw new HostKeyMismatchError(target.host, verifier.mismatch);
+    throw err;
+  }
+
+  if (verifier.learned) {
+    try {
+      await rememberHostKey(target.id, verifier.learned);
+    } catch {
+      // A failed write only means the key is learned again on the next connect.
+    }
+  }
+
   return ssh;
 }
 

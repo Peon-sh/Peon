@@ -1,5 +1,5 @@
 import { utils } from 'ssh2';
-import crypto from 'node:crypto';
+import { sha256Fingerprint } from './host-key';
 
 export interface GeneratedKeyPair {
   privateKey: string;
@@ -21,9 +21,7 @@ export function generateKeyPair(comment = 'peon'): GeneratedKeyPair {
 export function fingerprintFromPublicKey(publicKey: string): string {
   try {
     const base64 = publicKey.trim().split(/\s+/)[1];
-    const der = Buffer.from(base64, 'base64');
-    const hash = crypto.createHash('sha256').update(der).digest('base64').replace(/=+$/, '');
-    return `SHA256:${hash}`;
+    return sha256Fingerprint(Buffer.from(base64, 'base64'));
   } catch {
     return '';
   }

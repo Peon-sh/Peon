@@ -6,6 +6,7 @@ import type { SshTarget } from './types';
 
 export * from './types';
 export * from './host';
+export * from './host-key';
 export { sshPool } from './pool';
 
 /** Build an SSH target for a server, decrypting its private key. */
@@ -29,5 +30,6 @@ export async function sshTargetForServer(serverId: string): Promise<SshTarget> {
     username: server.user,
     privateKey: decrypt(server.privateKey.privateKey),
     readyTimeoutMs: Math.min(Math.max(timeoutSec, 5), 300) * 1000,
+    hostKeyFingerprint: server.hostKeyFingerprint,
   };
 }

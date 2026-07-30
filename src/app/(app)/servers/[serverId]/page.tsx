@@ -1,29 +1,30 @@
 "use client"
 
-import { use, useEffect, useRef, useState, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { use, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   Activity,
   Check,
   ChevronRight,
   HardDrive,
+  KeyRound,
   LoaderCircle,
   Terminal,
   Trash2,
   X,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { SearchableSelect } from "@/components/ui/searchable-select"
-import { PageContainer, Panel } from "@/components/app/page"
-import { DocCallout } from "@/components/app/doc-callout"
-import { StatusBadge } from "@/components/app/status-badge"
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { PageContainer, Panel } from '@/components/app/page';
+import { DocCallout } from '@/components/app/doc-callout';
+import { StatusBadge } from '@/components/app/status-badge';
 import {
   Modal,
   ModalBody,
@@ -201,8 +202,17 @@ function GeneralTab({
       onSaved()
       toast.success("Server updated")
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
-  })
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const forgetHostKeyMut = useMutation({
+    mutationFn: () => updateServer(server.id, { hostKeyFingerprint: null }),
+    onSuccess: async () => {
+      onSaved();
+      toast.success('Trusted host key cleared — it is recorded again on the next connection.');
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+  });
 
   const connectMut = useMutation({
     mutationFn: () =>
@@ -356,6 +366,32 @@ function GeneralTab({
               )}
             </span>
           </span>
+        </div>
+        <div className="text-muted-foreground flex flex-wrap items-center gap-2 border-t border-dashed pt-2.5 text-[11px]">
+          <KeyRound className="size-3 shrink-0 opacity-60" />
+          <span className="min-w-0">
+            Trusted host key{' '}
+            {server.hostKeyFingerprint ? (
+              <span className="text-foreground/85 font-mono break-all">
+                {server.hostKeyFingerprint}
+              </span>
+            ) : (
+              <span className="text-foreground/85">
+                not set — recorded on the next connection
+              </span>
+            )}
+          </span>
+          {server.hostKeyFingerprint ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto h-6 px-2 text-[11px]"
+              onClick={() => forgetHostKeyMut.mutate()}
+              disabled={forgetHostKeyMut.isPending}
+            >
+              Forget
+            </Button>
+          ) : null}
         </div>
       </Panel>
 

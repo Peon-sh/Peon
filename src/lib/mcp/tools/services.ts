@@ -79,7 +79,7 @@ export function registerServiceTools(server: McpServer, ctx: McpContext, access:
 
   server.tool(
     'delete_service',
-    'Delete a service. Requires manage access.',
+    'Delete a service from Peon. Does not stop or remove containers on the server — stop the service first. Requires manage access.',
     { serviceId: z.string().describe('The service ID') },
     safe(async ({ serviceId }) => {
       await serviceAccess(serviceId, true);
