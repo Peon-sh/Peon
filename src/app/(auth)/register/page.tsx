@@ -10,6 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GoogleButton } from '@/components/auth/google-button';
 import { initiateSignup, completeSignup, resendOtp } from '@/services/api/auth';
+import {
+  clearStashedAttribution,
+  collectAttributionForSignup,
+  readStashedAttribution,
+} from '@/lib/attribution';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -25,6 +30,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     try {
+      collectAttributionForSignup();
       await initiateSignup(email);
       setStep('verify');
       toast.success('We sent a verification code to your email.');
@@ -39,7 +45,9 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await completeSignup({ email, name, password, code });
+      const attribution = readStashedAttribution() ?? collectAttributionForSignup();
+      await completeSignup({ email, name, password, code, attribution });
+      clearStashedAttribution();
       await qc.invalidateQueries({ queryKey: ['auth', 'me'] });
       router.replace('/onboarding');
     } catch (err) {
