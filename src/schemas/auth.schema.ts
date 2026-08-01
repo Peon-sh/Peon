@@ -39,7 +39,10 @@ export const attributionSchema = z
       .max(40)
       .nullish()
       .transform((v) => (v && v.length > 0 ? v : undefined)),
-    rawQuery: z.record(z.string(), z.string().max(200)).nullish(),
+    rawQuery: z
+      .record(z.string(), z.string().max(200))
+      .nullish()
+      .transform((v) => v ?? undefined),
   })
   .nullish();
 

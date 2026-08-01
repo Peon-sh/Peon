@@ -54,4 +54,15 @@ describe('signupCompleteSchema attribution', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('normalizes rawQuery null to undefined', () => {
+    const result = signupCompleteSchema.safeParse({
+      ...base,
+      attribution: { utmSource: 'ph', rawQuery: null },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.attribution?.rawQuery).toBeUndefined();
+    }
+  });
 });
