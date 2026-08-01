@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-const attributionField = z.string().trim().min(1).max(200).optional();
+const attributionField = z
+  .string()
+  .trim()
+  .max(200)
+  .nullish()
+  .transform((v) => (v && v.length > 0 ? v : undefined));
 
 /** Optional first-touch campaign attribution (strict allowlist). */
 export const attributionSchema = z
@@ -16,12 +21,27 @@ export const attributionSchema = z
     msclkid: attributionField,
     campaign: attributionField,
     landingPath: attributionField,
-    landingUrl: z.string().trim().min(1).max(500).optional(),
-    referrer: z.string().trim().min(1).max(500).optional(),
-    capturedAt: z.string().trim().min(1).max(40).optional(),
-    rawQuery: z.record(z.string(), z.string().max(200)).optional(),
+    landingUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .nullish()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    referrer: z
+      .string()
+      .trim()
+      .max(500)
+      .nullish()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    capturedAt: z
+      .string()
+      .trim()
+      .max(40)
+      .nullish()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    rawQuery: z.record(z.string(), z.string().max(200)).nullish(),
   })
-  .optional();
+  .nullish();
 
 export const signupInitiateSchema = z.object({
   email: z.string().email(),

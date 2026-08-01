@@ -40,7 +40,16 @@ export function completeSignup(input: {
   code: string;
   attribution?: AttributionInput | null;
 }) {
-  return unwrap<{ user: SessionUser }>(api.post('/auth/verify-signup', input));
+  return unwrap<{ user: SessionUser }>(
+    api.post('/auth/verify-signup', {
+      email: input.email,
+      name: input.name,
+      password: input.password,
+      code: input.code,
+      // Omit null — Zod optional rejects null and returns 422.
+      attribution: input.attribution ?? undefined,
+    }),
+  );
 }
 
 export function login(email: string, password: string) {
