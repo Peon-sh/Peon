@@ -117,6 +117,22 @@ describe('service API', () => {
     expect(backup.status).toBe(201);
     expect(backup.body.data.dumpAll).toBe(true);
     const backupPath = `${path}/backups/${backup.body.data.id as string}`;
+
+    // Enable S3, then patch only dumpAll — Zod defaults must not reset saveS3.
+    expect(
+      (
+        await http.patch(backupPath, {
+          body: { saveS3: true },
+        })
+      ).status,
+    ).toBe(200);
+    const dumpOnly = await http.patch(backupPath, {
+      body: { dumpAll: false },
+    });
+    expect(dumpOnly.status).toBe(200);
+    expect(dumpOnly.body.data.dumpAll).toBe(false);
+    expect(dumpOnly.body.data.saveS3).toBe(true);
+
     expect(
       (
         await http.patch(backupPath, {
