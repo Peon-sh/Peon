@@ -1,4 +1,5 @@
 import { api, unwrap } from '@/lib/http/axios';
+import type { AttributionInput } from '@/lib/attribution';
 import type { SessionUser, WorkspaceSummary } from '@/store/auth';
 
 export interface MeResponse {
@@ -32,7 +33,13 @@ export function initiateSignup(email: string) {
   return unwrap<{ message: string }>(api.post('/auth/signup', { email }));
 }
 
-export function completeSignup(input: { email: string; name: string; password: string; code: string }) {
+export function completeSignup(input: {
+  email: string;
+  name: string;
+  password: string;
+  code: string;
+  attribution?: AttributionInput | null;
+}) {
   return unwrap<{ user: SessionUser }>(api.post('/auth/verify-signup', input));
 }
 
@@ -40,8 +47,10 @@ export function login(email: string, password: string) {
   return unwrap<{ user: SessionUser }>(api.post('/auth/login', { email, password }));
 }
 
-export function loginWithGoogle(accessToken: string) {
-  return unwrap<{ user: SessionUser }>(api.post('/auth/google/verify', { accessToken }));
+export function loginWithGoogle(accessToken: string, attribution?: AttributionInput | null) {
+  return unwrap<{ user: SessionUser }>(
+    api.post('/auth/google/verify', { accessToken, attribution: attribution ?? undefined }),
+  );
 }
 
 export function resendOtp(email: string, purpose: 'SIGNUP' | 'RESET_PASSWORD' = 'SIGNUP') {

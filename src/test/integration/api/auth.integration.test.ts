@@ -17,6 +17,41 @@ describe('authentication API', () => {
     expect(await prisma.user.findUnique({ where: { email } })).toMatchObject({ name: 'New User' });
   });
 
+  it('persists first-touch attribution once on signup', async () => {
+    const email = `attr-${crypto.randomUUID()}@peon.test`;
+    expect((await http.post('/api/auth/signup', { body: { email } })).status).toBe(200);
+    await plantOtp(email, 'SIGNUP');
+
+    const result = await http.post('/api/auth/verify-signup', {
+      body: {
+        email,
+        name: 'Attr User',
+        password: 'Test1234!',
+        code: '123456',
+        attribution: {
+          utmSource: 'producthunt',
+          utmMedium: 'social',
+          utmCampaign: 'launch',
+          ref: 'ph',
+          landingPath: '/',
+          capturedAt: '2026-08-01T00:00:00.000Z',
+          rawQuery: { utm_source: 'producthunt', ref: 'ph' },
+        },
+      },
+    });
+
+    expect(result.status).toBe(200);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const row = await prisma.userAttribution.findUnique({ where: { userId: user.id } });
+    expect(row).toMatchObject({
+      utmSource: 'producthunt',
+      utmMedium: 'social',
+      utmCampaign: 'launch',
+      ref: 'ph',
+      landingPath: '/',
+    });
+  });
+
   it('rejects invalid signup and login input', async () => {
     expect((await http.post('/api/auth/signup', { body: { email: 'bad' } })).status).toBe(422);
     expect((await http.post('/api/auth/login', { body: { email: 'bad', password: '' } })).status).toBe(422);

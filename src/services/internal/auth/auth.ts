@@ -14,6 +14,8 @@ import {
   updateUserById,
   countUsers,
 } from '@/services/internal/auth/users';
+import { writeUserAttributionOnce } from '@/services/internal/auth/attribution';
+import type { AttributionInput } from '@/lib/attribution';
 import { isInstanceOwnerEmail } from '@/lib/auth/instance-owner';
 import { enqueueEmail } from '@/lib/email/enqueue';
 import { welcomeEmailTemplate } from '@/lib/email/templates/welcome';
@@ -98,6 +100,7 @@ export const AuthService = {
       name: string;
       password: string;
       code: string;
+      attribution?: AttributionInput | null;
     },
     meta: SessionRequestMeta,
   ): Promise<AuthenticatedUser> {
@@ -119,6 +122,7 @@ export const AuthService = {
       emailVerifiedAt: new Date(),
       isInstanceAdmin: isFirstUser,
     });
+    await writeUserAttributionOnce(user.id, input.attribution);
     await createPersonalWorkspace(user);
     await sendWelcomeEmail(user);
     return issue(user, meta);
@@ -141,6 +145,7 @@ export const AuthService = {
   async loginWithGoogle(
     accessToken: string,
     meta: SessionRequestMeta,
+    attribution?: AttributionInput | null,
   ): Promise<AuthenticatedUser> {
     const info = await verifyGoogleToken(accessToken);
     const normalized = normalizeGoogleUser(info);
@@ -151,7 +156,7 @@ export const AuthService = {
       (await getUserByEmail(normalized.email));
 
     if (user) {
-      // Link Google id if missing.
+      // Link Google id if missing. Do not attach attribution on returning logins.
       if (!user.googleId && normalized.googleId) {
         user = await updateUserById(user.id, {
           googleId: normalized.googleId,
@@ -171,6 +176,7 @@ export const AuthService = {
       emailVerifiedAt: new Date(),
       isInstanceAdmin: isFirstUser,
     });
+    await writeUserAttributionOnce(user.id, attribution);
     await createPersonalWorkspace(user);
     await sendWelcomeEmail(user);
     return issue(user, meta);

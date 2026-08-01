@@ -1,5 +1,6 @@
 import { GitBranch, Server, ShieldCheck } from 'lucide-react';
 import { LogoMark } from '@/components/logo';
+import { AttributionCapture } from '@/components/auth/attribution-capture';
 import { marketingHref } from '@/lib/env';
 
 const HIGHLIGHTS = [
@@ -19,6 +20,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               Peon
             </span>
           </a>
+          <AttributionCapture />
           {children}
         </div>
       </div>

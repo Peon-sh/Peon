@@ -81,8 +81,33 @@ model User {
   chatThreads         ChatThread[]
   authSessions        AuthSession[]
   workspaceAuditLogs  WorkspaceAuditLog[]   @relation("WorkspaceAuditActor")
+  attribution         UserAttribution?
 
   @@index([email])
+}
+
+/** First-touch marketing attribution, written once at user creation. */
+model UserAttribution {
+  userId      String   @id
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  ref         String?
+  gclid       String?
+  fbclid      String?
+  msclkid     String?
+  campaign    String?
+  landingPath String?
+  landingUrl  String?
+  referrer    String?
+  rawQuery    Json?
+  capturedAt  DateTime?
+
+  createdAt   DateTime @default(now())
 }
 
 /** Browser login session — JWT `sid` maps to this row for revoke / device list. */

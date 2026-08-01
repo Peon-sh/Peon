@@ -8,6 +8,11 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { getMe, loginWithGoogle } from '@/services/api/auth';
+import {
+  clearStashedAttribution,
+  collectAttributionForSignup,
+  readStashedAttribution,
+} from '@/lib/attribution';
 import { publicEnv } from '@/lib/env';
 import { postAuthPath } from '@/lib/auth/post-auth-path';
 
@@ -27,7 +32,9 @@ function GoogleButtonInner({ label }: { label: string }) {
     onSuccess: async (resp) => {
       setLoading(true);
       try {
-        const result = await loginWithGoogle(resp.access_token);
+        const attribution = readStashedAttribution() ?? collectAttributionForSignup();
+        const result = await loginWithGoogle(resp.access_token, attribution);
+        clearStashedAttribution();
         // Wait for a successful /me (sets the auth store) before navigating so
         // the app shell never lands on dashboard with a null user + stale 401.
         await qc.fetchQuery({ queryKey: ['auth', 'me'], queryFn: getMe });
