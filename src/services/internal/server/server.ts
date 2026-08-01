@@ -143,7 +143,7 @@ export const ServerService = {
 
     const existing = await prisma.server.findUnique({
       where: { id: serverId },
-      select: { workspaceId: true, privateKeyId: true },
+      select: { workspaceId: true, privateKeyId: true ,proxyType: true,proxyStatus: true, },
     });
     if (!existing) throw new NotFoundError('Server not found.');
 
@@ -171,7 +171,16 @@ export const ServerService = {
 
     const keyChanged = privateKeyId !== undefined && privateKeyId !== existing.privateKeyId;
 
+    const proxyTypeChanged = serverInput.proxyType !== undefined && serverInput.proxyType !== existing.proxyType;
+
+    if (proxyTypeChanged && existing.proxyStatus === 'running') {
+      throw new ConflictError(
+        'Current gateway is running. Turn it off first, then change gateway type.',
+      );
+    }
+
     const server = await prisma.server.update({
+
       where: { id: serverId },
       data: {
         ...serverInput,
