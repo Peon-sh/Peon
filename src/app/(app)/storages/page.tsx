@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Database, Trash2 } from 'lucide-react';
+import { Plus, Database, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,9 +21,12 @@ import { ConfirmButton } from '@/components/app/confirm';
 import { useAuthStore } from '@/store/auth';
 import {
   listStorages,
+  getStorage,
   createStorage,
+  updateStorage,
   deleteStorage,
   testStorage,
+  type Storage,
   type CreateStoragePayload,
 } from '@/services/api/storages';
 
@@ -41,7 +44,9 @@ export default function StoragesPage() {
   const wsId = currentWorkspaceId!;
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<CreateStoragePayload>(EMPTY);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingStorageId, setLoadingStorageId] = useState<string | null>(null);
+  const [form, setForm] = useState<CreateStoragePayload>({ ...EMPTY });
 
   const { data: storages, isLoading } = useQuery({
     queryKey: ['storages', wsId],
@@ -51,14 +56,81 @@ export default function StoragesPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['storages', wsId] });
   const set = (k: keyof CreateStoragePayload, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const isEditing = editingId !== null;
+
+  const resetForm = () => {
+    setEditingId(null);
+    setLoadingStorageId(null);
+    setForm({ ...EMPTY });
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setOpen(true);
+  };
+
+  const openEdit = async (storage: Storage) => {
+    setEditingId(storage.id);
+    setForm({
+      name: storage.name,
+      region: storage.region,
+      endpoint: storage.endpoint ?? '',
+      bucket: storage.bucket,
+      accessKey: '',
+      secretKey: '',
+    });
+    setOpen(true);
+    setLoadingStorageId(storage.id);
+
+    try {
+      const details = await getStorage(storage.id);
+      setForm({
+        name: details.name,
+        region: details.region,
+        endpoint: details.endpoint ?? '',
+        bucket: details.bucket,
+        accessKey: details.accessKey,
+        secretKey: '',
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load storage');
+      setOpen(false);
+      resetForm();
+    } finally {
+      setLoadingStorageId((id) => (id === storage.id ? null : id));
+    }
+  };
 
   const createMut = useMutation({
     mutationFn: () => createStorage(wsId, form),
     onSuccess: async () => {
       await invalidate();
       setOpen(false);
-      setForm(EMPTY);
+      resetForm();
       toast.success('Storage created');
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: () => {
+      if (!editingId) {
+        throw new Error('No storage selected');
+      }
+      return updateStorage(editingId, {
+        name: form.name,
+        region: form.region,
+        endpoint: form.endpoint || null,
+        bucket: form.bucket,
+        accessKey: form.accessKey,
+        ...(form.secretKey ? { secretKey: form.secretKey } : {}),
+      });
+    },
+    onSuccess: async () => {
+      await invalidate();
+      setOpen(false);
+      resetForm();
+      toast.success('Storage updated');
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
@@ -80,10 +152,16 @@ export default function StoragesPage() {
   });
 
   const createDialog = (
-    <Modal open={open} onOpenChange={setOpen}>
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) resetForm();
+      }}
+    >
       <ModalContent>
         <ModalHeader>
-          <ModalTitle>Create S3 storage</ModalTitle>
+          <ModalTitle>{isEditing ? 'Edit S3 storage' : 'Create S3 storage'}</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
           {(
@@ -97,28 +175,43 @@ export default function StoragesPage() {
             ] as const
           ).map(([k, label]) => (
             <div key={k} className="space-y-2">
-              <Label htmlFor={`st-${k}`}>{label}</Label>
+              <Label htmlFor={`st-${k}`}>
+                {isEditing && k === 'secretKey' ? 'Secret key (replace)' : label}
+              </Label>
               <Input
                 id={`st-${k}`}
                 type={k === 'secretKey' ? 'password' : 'text'}
+                placeholder={
+                  isEditing && k === 'secretKey'
+                    ? 'Leave blank to keep the current secret key'
+                    : undefined
+                }
                 value={(form[k] as string) ?? ''}
                 onChange={(e) => set(k, e.target.value)}
+                disabled={isEditing && loadingStorageId === editingId && k === 'accessKey'}
               />
+              {isEditing && k === 'secretKey' ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Leave this blank unless you want to replace the stored secret key.
+                </p>
+              ) : null}
             </div>
           ))}
         </ModalBody>
         <ModalFooter>
           <Button
-            onClick={() => createMut.mutate()}
+            onClick={() => (isEditing ? updateMut.mutate() : createMut.mutate())}
             disabled={
               !form.name ||
               !form.bucket ||
               !form.accessKey ||
-              !form.secretKey ||
-              createMut.isPending
+              (!isEditing && !form.secretKey) ||
+              createMut.isPending ||
+              updateMut.isPending ||
+              (isEditing && loadingStorageId === editingId)
             }
           >
-            Create
+            {isEditing ? 'Save changes' : 'Create'}
           </Button>
         </ModalFooter>
       </ModalContent>
@@ -141,7 +234,7 @@ export default function StoragesPage() {
           title="No storages yet"
           description="add an s3-compatible bucket to store backups and assets."
           action={
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus className="size-4" /> New storage
             </Button>
           }
@@ -167,6 +260,14 @@ export default function StoragesPage() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => openEdit(s)}
+                  disabled={loadingStorageId === s.id}
+                >
+                  <Pencil className="size-4" /> Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => testMut.mutate(s.id)}
                   disabled={testMut.isPending}
                 >
@@ -187,7 +288,7 @@ export default function StoragesPage() {
           ))}
           <button
             type="button"
-            onClick={() => setOpen(true)}
+            onClick={openCreate}
             className="border-border-bright text-muted-foreground hover:text-phosphor hover:border-phosphor-dim grid min-h-40 place-items-center rounded-lg border border-dashed transition-colors"
           >
             <span className="flex flex-col items-center gap-2 text-[12.5px]">
