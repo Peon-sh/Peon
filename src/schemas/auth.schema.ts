@@ -1,5 +1,51 @@
 import { z } from 'zod';
 
+const attributionField = z
+  .string()
+  .trim()
+  .max(200)
+  .nullish()
+  .transform((v) => (v && v.length > 0 ? v : undefined));
+
+/** Optional first-touch campaign attribution (strict allowlist). */
+export const attributionSchema = z
+  .object({
+    utmSource: attributionField,
+    utmMedium: attributionField,
+    utmCampaign: attributionField,
+    utmContent: attributionField,
+    utmTerm: attributionField,
+    ref: attributionField,
+    gclid: attributionField,
+    fbclid: attributionField,
+    msclkid: attributionField,
+    campaign: attributionField,
+    landingPath: attributionField,
+    landingUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .nullish()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    referrer: z
+      .string()
+      .trim()
+      .max(500)
+      .nullish()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    capturedAt: z
+      .string()
+      .trim()
+      .max(40)
+      .nullish()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    rawQuery: z
+      .record(z.string(), z.string().max(200))
+      .nullish()
+      .transform((v) => v ?? undefined),
+  })
+  .nullish();
+
 export const signupInitiateSchema = z.object({
   email: z.string().email(),
 });
@@ -9,6 +55,7 @@ export const signupCompleteSchema = z.object({
   name: z.string().min(1).max(100),
   password: z.string().min(8),
   code: z.string().length(6),
+  attribution: attributionSchema,
 });
 
 export const loginSchema = z.object({
@@ -18,6 +65,7 @@ export const loginSchema = z.object({
 
 export const googleVerifySchema = z.object({
   accessToken: z.string().min(1),
+  attribution: attributionSchema,
 });
 
 export const resendOtpSchema = z.object({

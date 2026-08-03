@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { engineSpec } from '@/lib/docker/databases';
 import { enqueue } from '@/lib/queue/sqs';
 import { NotFoundError, ValidationError } from '@/lib/errors';
-import type { UpsertBackupInput } from '@/schemas/service.schema';
+import type { UpdateBackupInput, UpsertBackupInput } from '@/schemas/service.schema';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 
 /**
@@ -57,7 +57,7 @@ export const BackupModule = {
     return backup;
   },
 
-  async update(serviceId: string, backupId: string, input: Partial<UpsertBackupInput>) {
+  async update(serviceId: string, backupId: string, input: UpdateBackupInput) {
     const backup = await prisma.scheduledBackup.findFirst({ where: { id: backupId, serviceId } });
     if (!backup) throw new NotFoundError('Backup schedule not found.');
     const updated = await prisma.scheduledBackup.update({

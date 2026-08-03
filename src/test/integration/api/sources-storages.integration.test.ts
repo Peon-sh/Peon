@@ -8,6 +8,7 @@ import {
 } from '@/test/integration/fixtures';
 import { http } from '@/test/integration/http';
 import { prisma } from '@/lib/prisma';
+import { decrypt } from '@/lib/crypto/encryption';
 
 describe('sources, storage, and workspace settings APIs', () => {
   it('manages GitHub sources and uses mocked repository APIs', async () => {
@@ -95,8 +96,25 @@ describe('sources, storage, and workspace settings APIs', () => {
     expect(created.status).toBe(201);
     const storagePath = `/api/storages/${created.body.data.id as string}`;
 
-    expect((await http.get(storagePath)).status).toBe(200);
-    expect((await http.patch(storagePath, { body: { name: 'archive' } })).status).toBe(200);
+    const detail = await http.get(storagePath);
+    expect(detail.status).toBe(200);
+    expect(detail.body.data.accessKey).toBe('key');
+    expect(detail.body.data.secretKey).toBeUndefined();
+
+    expect(
+      (
+        await http.patch(storagePath, {
+          body: { name: 'archive', accessKey: 'key-2' },
+        })
+      ).status,
+    ).toBe(200);
+    const stored = await prisma.s3Storage.findUniqueOrThrow({
+      where: { id: created.body.data.id as string },
+      select: { accessKey: true, secretKey: true },
+    });
+    expect(decrypt(stored.accessKey)).toBe('key-2');
+    expect(decrypt(stored.secretKey)).toBe('secret');
+
     expect((await http.post(`${storagePath}/test`)).status).toBe(200);
     expect((await http.delete(storagePath)).status).toBe(200);
   });

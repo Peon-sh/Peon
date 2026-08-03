@@ -13,6 +13,10 @@ export interface Storage {
   createdAt: string;
 }
 
+export interface StorageDetails extends Storage {
+  accessKey: string;
+}
+
 export interface CreateStoragePayload {
   name: string;
   description?: string | null;
@@ -25,6 +29,10 @@ export interface CreateStoragePayload {
 
 export function listStorages(workspaceId: string) {
   return unwrap<Storage[]>(api.get(`/workspaces/${workspaceId}/storages`));
+}
+
+export function getStorage(storageId: string) {
+  return unwrap<StorageDetails>(api.get(`/storages/${storageId}`));
 }
 
 export function createStorage(workspaceId: string, input: CreateStoragePayload) {

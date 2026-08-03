@@ -1,4 +1,5 @@
 import { api, unwrap } from '@/lib/http/axios';
+import type { AttributionInput } from '@/lib/attribution';
 import type { SessionUser, WorkspaceSummary } from '@/store/auth';
 
 export interface MeResponse {
@@ -32,16 +33,33 @@ export function initiateSignup(email: string) {
   return unwrap<{ message: string }>(api.post('/auth/signup', { email }));
 }
 
-export function completeSignup(input: { email: string; name: string; password: string; code: string }) {
-  return unwrap<{ user: SessionUser }>(api.post('/auth/verify-signup', input));
+export function completeSignup(input: {
+  email: string;
+  name: string;
+  password: string;
+  code: string;
+  attribution?: AttributionInput | null;
+}) {
+  return unwrap<{ user: SessionUser }>(
+    api.post('/auth/verify-signup', {
+      email: input.email,
+      name: input.name,
+      password: input.password,
+      code: input.code,
+      // Omit null — Zod optional rejects null and returns 422.
+      attribution: input.attribution ?? undefined,
+    }),
+  );
 }
 
 export function login(email: string, password: string) {
   return unwrap<{ user: SessionUser }>(api.post('/auth/login', { email, password }));
 }
 
-export function loginWithGoogle(accessToken: string) {
-  return unwrap<{ user: SessionUser }>(api.post('/auth/google/verify', { accessToken }));
+export function loginWithGoogle(accessToken: string, attribution?: AttributionInput | null) {
+  return unwrap<{ user: SessionUser }>(
+    api.post('/auth/google/verify', { accessToken, attribution: attribution ?? undefined }),
+  );
 }
 
 export function resendOtp(email: string, purpose: 'SIGNUP' | 'RESET_PASSWORD' = 'SIGNUP') {

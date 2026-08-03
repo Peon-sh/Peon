@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { encrypt } from '@/lib/crypto/encryption';
+import { decrypt, encrypt } from '@/lib/crypto/encryption';
 import { NotFoundError } from '@/lib/errors';
 import type { CreateStorageInput, UpdateStorageInput } from '@/schemas/storages.schema';
 import { AuditService } from '@/services/internal/audit/audit';
@@ -15,6 +15,11 @@ const listSelect = {
   bucket: true,
   isUsable: true,
   createdAt: true,
+} as const;
+
+const detailSelect = {
+  ...listSelect,
+  accessKey: true,
 } as const;
 
 export const StorageService = {
@@ -51,10 +56,13 @@ export const StorageService = {
   async get(storageId: string) {
     const storage = await prisma.s3Storage.findUnique({
       where: { id: storageId },
-      select: listSelect,
+      select: detailSelect,
     });
     if (!storage) throw new NotFoundError('Storage not found.');
-    return storage;
+    return {
+      ...storage,
+      accessKey: decrypt(storage.accessKey),
+    };
   },
 
   async getRaw(storageId: string) {

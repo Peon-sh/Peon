@@ -218,7 +218,22 @@ export const upsertBackupSchema = z.object({
   dumpAll: z.boolean().default(true),
 });
 
+/**
+ * PATCH body: all fields optional, no Zod defaults.
+ * `.partial()` on the create schema still applies `.default()` for omitted keys
+ * (e.g. saving only `dumpAll` would reset `saveS3` to false).
+ */
+export const updateBackupSchema = z.object({
+  frequency: z.string().min(1).optional(),
+  enabled: z.boolean().optional(),
+  saveS3: z.boolean().optional(),
+  s3StorageId: z.string().nullable().optional(),
+  retentionAmountLocal: z.number().int().min(0).max(1000).optional(),
+  dumpAll: z.boolean().optional(),
+});
+
 export type UpsertBackupInput = z.infer<typeof upsertBackupSchema>;
+export type UpdateBackupInput = z.infer<typeof updateBackupSchema>;
 
 export const execCommandSchema = z.object({
   command: z.string().min(1).max(4000),
