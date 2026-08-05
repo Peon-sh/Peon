@@ -44,9 +44,11 @@ function periodEndFromSubscription(sub: Stripe.Subscription): Date | null {
 
 function intervalFromSubscription(sub: Stripe.Subscription): BillingInterval | null {
   const interval = sub.items.data[0]?.price?.recurring?.interval;
-  if (interval === 'month' || interval === 'year') return interval;
+  if (interval === 'month') return 'month';
+  if (interval === 'year') return 'year';
   return null;
 }
+
 
 function nextPeriodPaidQuantity(opts: {
   previousPaid: number | null | undefined;
