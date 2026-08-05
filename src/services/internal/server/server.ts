@@ -14,7 +14,8 @@ import { AuditService } from '@/services/internal/audit/audit';
 
 function publicSettings<T extends Record<string, unknown> | null | undefined>(settings: T) {
   if (!settings) return null;
-  const { sentinelToken: _omit, ...rest } = settings as T & { sentinelToken?: string | null };
+  const rest = { ...(settings as Record<string, unknown>) };
+  delete rest.sentinelToken;
   return {
     ...rest,
     isAgentLive: isAgentLive(

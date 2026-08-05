@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   formatLocalDateTime,
   parseApiDate,
@@ -23,12 +23,23 @@ export function LocalDateTime({
   className?: string;
   placeholder?: string;
 }) {
-  const [label, setLabel] = useState<string | null>(null);
   const instant = parseApiDate(value);
+  const [label, setLabel] = useState<string | null>(null);
+  const [prevSource, setPrevSource] = useState<{
+    value: typeof value;
+    style: LocalDateTimeStyle;
+    mounted: boolean;
+  }>({ value, style, mounted: false });
 
-  useEffect(() => {
-    setLabel(formatLocalDateTime(value, style));
-  }, [value, style]);
+  const mounted = typeof window !== 'undefined';
+  if (
+    value !== prevSource.value ||
+    style !== prevSource.style ||
+    mounted !== prevSource.mounted
+  ) {
+    setPrevSource({ value, style, mounted });
+    setLabel(mounted ? formatLocalDateTime(value, style) : null);
+  }
 
   return (
     <time

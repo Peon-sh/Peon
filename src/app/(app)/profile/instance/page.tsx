@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -30,18 +30,20 @@ export default function InstanceSettingsPage() {
   const [oauthEnabled, setOauthEnabled] = useState(false);
   const [oauthClientId, setOauthClientId] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  const [prevData, setPrevData] = useState(data);
 
-  useEffect(() => {
+  if (data !== prevData) {
+    setPrevData(data);
     if (!data) {
       setHydrated(false);
-      return;
+    } else {
+      setSettings(data.settings);
+      const google = data.oauth.find((o) => o.provider === 'google');
+      setOauthEnabled(google?.enabled ?? false);
+      setOauthClientId(google?.clientId ?? '');
+      setHydrated(true);
     }
-    setSettings(data.settings);
-    const google = data.oauth.find((o) => o.provider === 'google');
-    setOauthEnabled(google?.enabled ?? false);
-    setOauthClientId(google?.clientId ?? '');
-    setHydrated(true);
-  }, [data]);
+  }
 
   const set = <K extends keyof InstanceSettings>(k: K, v: InstanceSettings[K]) =>
     setSettings((s) => ({ ...s, [k]: v }));

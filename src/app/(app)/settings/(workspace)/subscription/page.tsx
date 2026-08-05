@@ -109,6 +109,11 @@ export default function SubscriptionSettingsPage() {
   });
 
   const [seatQty, setSeatQty] = useState(1);
+  const [prevBillingSeats, setPrevBillingSeats] = useState(billing?.seats);
+  if (billing?.seats !== prevBillingSeats) {
+    setPrevBillingSeats(billing?.seats);
+    if (billing?.seats) setSeatQty(billing.seats);
+  }
   const debouncedSeatQty = useDebouncedValue(seatQty, 400);
   const [yearlyOpen, setYearlyOpen] = useState(false);
   const [seatsOpen, setSeatsOpen] = useState(false);
@@ -117,10 +122,6 @@ export default function SubscriptionSettingsPage() {
   const [primaryPmId, setPrimaryPmId] = useState<string | null>(null);
   const periodEndCancel = useCancelReasonState();
   const immediateCancel = useCancelReasonState();
-
-  useEffect(() => {
-    if (billing?.seats) setSeatQty(billing.seats);
-  }, [billing?.seats]);
 
   const seatPreviewEnabled =
     !!wsId && canManage && !!billing?.entitled && debouncedSeatQty !== (billing?.seats ?? 0);

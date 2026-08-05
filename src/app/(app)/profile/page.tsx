@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   ArrowRight,
@@ -31,7 +32,6 @@ import {
   revokeAuthSession,
   revokeOtherAuthSessions,
   updateProfile,
-  type AuthSessionDto,
 } from '@/services/api/auth';
 import { useAuthStore } from '@/store/auth';
 
@@ -63,6 +63,11 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, setSession, workspaces, clear } = useAuthStore();
   const [name, setName] = useState(user?.name ?? '');
+  const [prevUserName, setPrevUserName] = useState(user?.name);
+  if (user?.name !== prevUserName) {
+    setPrevUserName(user?.name);
+    setName(user?.name ?? '');
+  }
   const [savingName, setSavingName] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -71,28 +76,21 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const [sessions, setSessions] = useState<AuthSessionDto[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(true);
-
-  useEffect(() => {
-    setName(user?.name ?? '');
-  }, [user?.name]);
-
-  const refreshSessions = useCallback(async () => {
-    setLoadingSessions(true);
-    try {
-      const data = await listAuthSessions();
-      setSessions(data.sessions);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not load sessions');
-    } finally {
-      setLoadingSessions(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshSessions();
-  }, [refreshSessions]);
+  const {
+    data: sessions = [],
+    isLoading: loadingSessions,
+    refetch: refreshSessions,
+  } = useQuery({
+    queryKey: ['auth-sessions'],
+    queryFn: async () => {
+      try {
+        return (await listAuthSessions()).sessions;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not load sessions');
+        throw err;
+      }
+    },
+  });
 
   function applyUser(next: NonNullable<typeof user>) {
     setSession(next, workspaces);
