@@ -13,7 +13,6 @@ export async function getCurrentAuth(): Promise<JWTPayload | null> {
   if (!token) return null;
   try {
     const payload = await verifyJWT(token);
-    const headers = new Headers();
     // cookies() path has no request; lastSeen IP update skipped here.
     const session = await AuthSessionService.assertActive(payload.sid);
     if (!session) return null;

@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { ok, route } from '@/lib/http/response';
-import { requireProjectDelete, requireProjectManage } from '@/lib/auth/access';
+import { requireProjectDelete } from '@/lib/auth/access';
 import { ServiceModule } from '@/services/internal/service/service';
 
 type Ctx = { params: Promise<{ serviceId: string; volumeId: string }> };

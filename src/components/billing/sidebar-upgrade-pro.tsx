@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Crown, X } from 'lucide-react';
 import { PlanPaywallDialog } from '@/components/billing/plan-paywall-dialog';
@@ -23,21 +23,24 @@ function dismissKey(workspaceId: string) {
   return `peon.sidebarUpgradePro.dismissed.${workspaceId}`;
 }
 
+function readDismissed(workspaceId: string | null): boolean {
+  if (!workspaceId || typeof window === 'undefined') return false;
+  return localStorage.getItem(dismissKey(workspaceId)) === '1';
+}
+
 export function SidebarUpgradePro() {
   const currentWorkspaceId = useAuthStore((s) => s.currentWorkspaceId);
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const [open, setOpen] = useState(false);
+  // Same initial false as before (effect hydrated after mount); sync when workspace changes.
   const [dismissed, setDismissed] = useState(false);
+  const [prevWorkspaceId, setPrevWorkspaceId] = useState<string | null | undefined>(undefined);
+  if (currentWorkspaceId !== prevWorkspaceId) {
+    setPrevWorkspaceId(currentWorkspaceId);
+    setDismissed(readDismissed(currentWorkspaceId));
+  }
   const discount = yearlyDiscountPercent();
-
-  useEffect(() => {
-    if (!currentWorkspaceId || typeof window === 'undefined') {
-      setDismissed(false);
-      return;
-    }
-    setDismissed(localStorage.getItem(dismissKey(currentWorkspaceId)) === '1');
-  }, [currentWorkspaceId]);
 
   const { data: billing } = useQuery({
     queryKey: ['billing', currentWorkspaceId],
