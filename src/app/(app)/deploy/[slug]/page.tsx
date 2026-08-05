@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -18,6 +18,16 @@ import {
 import { useAuthStore } from '@/store/auth';
 import { marketingHref } from '@/lib/env';
 
+function resolveListedId(
+  selected: string,
+  options: { id: string }[] | undefined,
+): string {
+  if (!options?.length) return '';
+  if (selected && options.some((option) => option.id === selected)) return selected;
+  if (options.length === 1) return options[0]!.id;
+  return '';
+}
+
 /**
  * One-click deploy target for the public marketplace. User picks workspace
  * (updates current workspace), project, and server, then creates the template
@@ -33,9 +43,6 @@ export default function OneClickDeployPage({
   const workspaces = useAuthStore((s) => s.workspaces);
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
   const setCurrentWorkspace = useAuthStore((s) => s.setCurrentWorkspace);
-
-  const [projectId, setProjectId] = useState('');
-  const [serverId, setServerId] = useState('');
 
   const { data: templatesData } = useQuery({
     queryKey: ['templates'],
@@ -57,52 +64,6 @@ export default function OneClickDeployPage({
     queryKey: ['servers', workspaceId],
     queryFn: () => listServers(workspaceId!),
     enabled: !!workspaceId,
-  });
-
-  // Reset dependent picks when workspace changes; preselect sole options.
-  useEffect(() => {
-    setProjectId('');
-    setServerId('');
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (!projectId && projects?.length === 1) {
-      setProjectId(projects[0].id);
-    }
-  }, [projects, projectId]);
-
-  useEffect(() => {
-    if (!serverId && servers?.length === 1) {
-      setServerId(servers[0].id);
-    }
-  }, [servers, serverId]);
-
-  // Drop stale selections if the list no longer contains them.
-  useEffect(() => {
-    if (projectId && projects && !projects.some((p) => p.id === projectId)) {
-      setProjectId('');
-    }
-  }, [projects, projectId]);
-
-  useEffect(() => {
-    if (serverId && servers && !servers.some((s) => s.id === serverId)) {
-      setServerId('');
-    }
-  }, [servers, serverId]);
-
-  const deployMut = useMutation({
-    mutationFn: async () => {
-      if (!projectId || !serverId) {
-        throw new Error('Select a project and server');
-      }
-      const service = await createServiceFromTemplate(projectId, { slug, serverId });
-      return { projectId, serviceId: service.id };
-    },
-    onSuccess: ({ projectId: pid, serviceId }) => {
-      toast.success(`${template?.name ?? slug} created`);
-      router.push(`/projects/${pid}/services/${serviceId}`);
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Deploy failed'),
   });
 
   function onWorkspaceChange(id: string) {
@@ -159,83 +120,138 @@ export default function OneClickDeployPage({
         </div>
       </div>
 
-      <div className="border-border bg-card mt-8 space-y-4 rounded-lg border p-5">
-        <div className="space-y-1.5">
-          <Label>Workspace</Label>
-          <SearchableSelect
-            value={workspaceId}
-            onValueChange={onWorkspaceChange}
-            placeholder="Select a workspace"
-            searchPlaceholder="Search workspaces…"
-            options={workspaces.map((w) => ({
-              value: w.id,
-              label: w.name,
-              keywords: w.slug,
-            }))}
-          />
-        </div>
+      <DeployTargetForm
+        key={workspaceId ?? 'none'}
+        slug={slug}
+        templateName={template?.name}
+        workspaceId={workspaceId}
+        projects={projects}
+        servers={servers}
+        onWorkspaceChange={onWorkspaceChange}
+        workspaces={workspaces}
+      />
+    </div>
+  );
+}
 
-        <div className="space-y-1.5">
-          <Label>Project</Label>
-          <SearchableSelect
-            value={projectId || null}
-            onValueChange={setProjectId}
-            placeholder="Select a project"
-            searchPlaceholder="Search projects…"
-            disabled={!workspaceId || !projects?.length}
-            options={(projects ?? []).map((p) => ({ value: p.id, label: p.name }))}
-          />
-          {projects && projects.length === 0 && (
-            <p className="text-muted-foreground text-xs">
-              No projects in this workspace yet.{' '}
-              <Link href="/projects" className="text-phosphor hover:underline">
-                Create a project
-              </Link>{' '}
-              and come back.
-            </p>
-          )}
-        </div>
+function DeployTargetForm({
+  slug,
+  templateName,
+  workspaceId,
+  workspaces,
+  projects,
+  servers,
+  onWorkspaceChange,
+}: {
+  slug: string;
+  templateName?: string;
+  workspaceId: string | null;
+  workspaces: ReturnType<typeof useAuthStore.getState>['workspaces'];
+  projects: Awaited<ReturnType<typeof listProjects>> | undefined;
+  servers: Awaited<ReturnType<typeof listServers>> | undefined;
+  onWorkspaceChange: (id: string) => void;
+}) {
+  const router = useRouter();
+  const [projectId, setProjectId] = useState('');
+  const [serverId, setServerId] = useState('');
+  const resolvedProjectId = resolveListedId(projectId, projects);
+  const resolvedServerId = resolveListedId(serverId, servers);
 
-        <div className="space-y-1.5">
-          <Label>Server</Label>
-          <SearchableSelect
-            value={serverId || null}
-            onValueChange={setServerId}
-            placeholder="Select a server"
-            searchPlaceholder="Search servers…"
-            disabled={!workspaceId || !servers?.length}
-            options={(servers ?? []).map((s) => ({
-              value: s.id,
-              label: `${s.name} (${s.ip})`,
-              keywords: s.ip,
-            }))}
-          />
-          {servers && servers.length === 0 && (
-            <p className="text-muted-foreground text-xs">
-              You need a connected server in this workspace.{' '}
-              <Link href="/servers" className="text-phosphor hover:underline">
-                Add a server
-              </Link>{' '}
-              and come back; this page will pick it up.
-            </p>
-          )}
-        </div>
+  const deployMut = useMutation({
+    mutationFn: async () => {
+      if (!resolvedProjectId || !resolvedServerId) {
+        throw new Error('Select a project and server');
+      }
+      const service = await createServiceFromTemplate(resolvedProjectId, {
+        slug,
+        serverId: resolvedServerId,
+      });
+      return { projectId: resolvedProjectId, serviceId: service.id };
+    },
+    onSuccess: ({ projectId: pid, serviceId }) => {
+      toast.success(`${templateName ?? slug} created`);
+      router.push(`/projects/${pid}/services/${serviceId}`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Deploy failed'),
+  });
 
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          Secrets and hostnames are generated for you; you can review everything
-          before the first deployment. Changing workspace also switches your
-          current workspace in Peon.
-        </p>
-
-        <Button
-          className="w-full"
-          disabled={!workspaceId || !projectId || !serverId || deployMut.isPending}
-          onClick={() => deployMut.mutate()}
-        >
-          <Rocket className="size-4" />
-          {deployMut.isPending ? 'Creating service…' : 'Deploy'}
-        </Button>
+  return (
+    <div className="border-border bg-card mt-8 space-y-4 rounded-lg border p-5">
+      <div className="space-y-1.5">
+        <Label>Workspace</Label>
+        <SearchableSelect
+          value={workspaceId}
+          onValueChange={onWorkspaceChange}
+          placeholder="Select a workspace"
+          searchPlaceholder="Search workspaces…"
+          options={workspaces.map((w) => ({
+            value: w.id,
+            label: w.name,
+            keywords: w.slug,
+          }))}
+        />
       </div>
+
+      <div className="space-y-1.5">
+        <Label>Project</Label>
+        <SearchableSelect
+          value={resolvedProjectId || null}
+          onValueChange={setProjectId}
+          placeholder="Select a project"
+          searchPlaceholder="Search projects…"
+          disabled={!workspaceId || !projects?.length}
+          options={(projects ?? []).map((p) => ({ value: p.id, label: p.name }))}
+        />
+        {projects && projects.length === 0 && (
+          <p className="text-muted-foreground text-xs">
+            No projects in this workspace yet.{' '}
+            <Link href="/projects" className="text-phosphor hover:underline">
+              Create a project
+            </Link>{' '}
+            and come back.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Server</Label>
+        <SearchableSelect
+          value={resolvedServerId || null}
+          onValueChange={setServerId}
+          placeholder="Select a server"
+          searchPlaceholder="Search servers…"
+          disabled={!workspaceId || !servers?.length}
+          options={(servers ?? []).map((s) => ({
+            value: s.id,
+            label: `${s.name} (${s.ip})`,
+            keywords: s.ip,
+          }))}
+        />
+        {servers && servers.length === 0 && (
+          <p className="text-muted-foreground text-xs">
+            You need a connected server in this workspace.{' '}
+            <Link href="/servers" className="text-phosphor hover:underline">
+              Add a server
+            </Link>{' '}
+            and come back; this page will pick it up.
+          </p>
+        )}
+      </div>
+
+      <p className="text-muted-foreground text-xs leading-relaxed">
+        Secrets and hostnames are generated for you; you can review everything
+        before the first deployment. Changing workspace also switches your
+        current workspace in Peon.
+      </p>
+
+      <Button
+        className="w-full"
+        disabled={!workspaceId || !resolvedProjectId || !resolvedServerId || deployMut.isPending}
+        onClick={() => deployMut.mutate()}
+      >
+        <Rocket className="size-4" />
+        {deployMut.isPending ? 'Creating service…' : 'Deploy'}
+      </Button>
     </div>
   );
 }

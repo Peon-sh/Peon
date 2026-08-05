@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatAddToolApproveResponseFunction, UIMessage } from 'ai';
 import { LoadingBubble } from '@/components/chat/loading-bubble';
 import { MessageBubble } from '@/components/chat/message-bubble';
@@ -18,20 +18,15 @@ function useFrozenHistory(messages: UIMessage[]): {
     .slice(0, -1)
     .map((message) => message.id)
     .join('\0');
-  const cacheRef = useRef<{ ids: string; items: UIMessage[] }>({
-    ids: '',
-    items: [],
-  });
-
-  if (cacheRef.current.ids !== historyIds) {
-    cacheRef.current = {
-      ids: historyIds,
-      items: messages.slice(0, -1),
-    };
-  }
+  const history = useMemo(
+    () => messages.slice(0, -1),
+    // historyIds tracks prior messages; messages is read when ids change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable history until ids change
+    [historyIds],
+  );
 
   return {
-    history: cacheRef.current.items,
+    history,
     live: messages[messages.length - 1] ?? null,
   };
 }
@@ -81,11 +76,17 @@ export function MessageList({
   const nearBottomRef = useRef(true);
   const scrollFrameRef = useRef(0);
   const loadingOlderRef = useRef(false);
-  const [visibleCount, setVisibleCount] = useState(CHAT_MESSAGE_PAGE_SIZE);
+  const [pageState, setPageState] = useState({
+    threadId,
+    visibleCount: CHAT_MESSAGE_PAGE_SIZE,
+  });
+  if (pageState.threadId !== threadId) {
+    setPageState({ threadId, visibleCount: CHAT_MESSAGE_PAGE_SIZE });
+  }
+  const visibleCount = pageState.visibleCount;
 
-  // New thread → reset to the latest page.
+  // Match previous behavior: new thread resets near-bottom tracking (ref only).
   useEffect(() => {
-    setVisibleCount(CHAT_MESSAGE_PAGE_SIZE);
     nearBottomRef.current = true;
   }, [threadId]);
 
@@ -111,7 +112,14 @@ export function MessageList({
     const previousHeight = container.scrollHeight;
     const previousTop = container.scrollTop;
 
-    setVisibleCount((count) => Math.min(count + CHAT_MESSAGE_PAGE_SIZE, messages.length));
+    setPageState((state) =>
+      state.threadId === threadId
+        ? {
+            ...state,
+            visibleCount: Math.min(state.visibleCount + CHAT_MESSAGE_PAGE_SIZE, messages.length),
+          }
+        : state,
+    );
 
     requestAnimationFrame(() => {
       const next = containerRef.current;
@@ -120,7 +128,7 @@ export function MessageList({
       }
       loadingOlderRef.current = false;
     });
-  }, [hasOlder, messages.length]);
+  }, [hasOlder, messages.length, threadId]);
 
   useEffect(() => {
     const container = containerRef.current;

@@ -10,7 +10,6 @@ import {
   scheduleQueuedDeployment,
 } from '@/services/internal/deploy/server-queue';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
-import { setAuditActor } from '@/services/internal/audit/context';
 
 async function wildcardDomainForService(serviceId: string): Promise<string | null> {
   const svc = await prisma.service.findUnique({

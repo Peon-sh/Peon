@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,9 +35,6 @@ export default function SettingsAuditPage() {
   const [q, setQ] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [items, setItems] = useState<AuditLogItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selected, setSelected] = useState<AuditLogItem | null>(null);
 
   const { data: membersData } = useQuery({
@@ -54,32 +51,27 @@ export default function SettingsAuditPage() {
       q: q || undefined,
       from: from ? new Date(from).toISOString() : undefined,
       to: to ? new Date(to).toISOString() : undefined,
-      cursor: cursor || undefined,
       limit: 50,
     }),
-    [action, actorUserId, resourceType, q, from, to, cursor],
+    [action, actorUserId, resourceType, q, from, to],
   );
 
-  const { data, isLoading, isFetching } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
     queryKey: ['ws-audit', wsId, filters],
-    queryFn: () => listWorkspaceAudit(wsId, filters),
+    queryFn: ({ pageParam }) =>
+      listWorkspaceAudit(wsId, { ...filters, cursor: pageParam as string | undefined }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: !!wsId,
   });
 
-  useEffect(() => {
-    setCursor(null);
-    setItems([]);
-  }, [action, actorUserId, resourceType, q, from, to]);
-
-  useEffect(() => {
-    if (!data) return;
-    if (cursor) {
-      setItems((prev) => [...prev, ...data.items]);
-    } else {
-      setItems(data.items);
-    }
-    setNextCursor(data.nextCursor);
-  }, [data, cursor]);
+  const items = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <div className="space-y-4">
@@ -192,12 +184,12 @@ export default function SettingsAuditPage() {
         </Panel>
       )}
 
-      {nextCursor ? (
+      {hasNextPage ? (
         <Button
           size="sm"
           variant="outline"
           disabled={isFetching}
-          onClick={() => setCursor(nextCursor)}
+          onClick={() => void fetchNextPage()}
         >
           Load more
         </Button>

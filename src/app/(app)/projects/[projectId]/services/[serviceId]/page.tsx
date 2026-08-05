@@ -634,23 +634,31 @@ function ConfigurationTab({
         : '';
   const currentRepoSlug = githubRepoSlug(val('gitRepository', svc.gitRepository ?? ''));
 
-  useEffect(() => {
-    if (
-      gitSourceType === 'GITHUB_APP' &&
-      !val('githubAppId', svc.githubAppId ?? '') &&
-      connectedGithubSources[0]?.id
-    ) {
-      set('githubAppId', connectedGithubSources[0].id);
-    }
-    if (
-      gitSourceType === 'GITLAB_APP' &&
-      !val('gitlabAppId', svc.gitlabAppId ?? '') &&
-      gitlabSources[0]?.id
-    ) {
-      set('gitlabAppId', gitlabSources[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gitSourceType, connectedGithubSources, gitlabSources, svc.githubAppId, svc.gitlabAppId]);
+  // Same defaults the previous effect applied when sources load (keeps Save dirtyable).
+  const defaultGithubAppId =
+    gitSourceType === 'GITHUB_APP' &&
+    !val('githubAppId', svc.githubAppId ?? '') &&
+    connectedGithubSources[0]?.id
+      ? connectedGithubSources[0].id
+      : null;
+  const defaultGitlabAppId =
+    gitSourceType === 'GITLAB_APP' &&
+    !val('gitlabAppId', svc.gitlabAppId ?? '') &&
+    gitlabSources[0]?.id
+      ? gitlabSources[0].id
+      : null;
+  const [prevGitDefaults, setPrevGitDefaults] = useState({
+    defaultGithubAppId,
+    defaultGitlabAppId,
+  });
+  if (
+    defaultGithubAppId !== prevGitDefaults.defaultGithubAppId ||
+    defaultGitlabAppId !== prevGitDefaults.defaultGitlabAppId
+  ) {
+    setPrevGitDefaults({ defaultGithubAppId, defaultGitlabAppId });
+    if (defaultGithubAppId) set('githubAppId', defaultGithubAppId);
+    if (defaultGitlabAppId) set('gitlabAppId', defaultGitlabAppId);
+  }
 
   const { data: githubRepos, isLoading: reposLoading, isError: reposError } = useQuery({
     queryKey: ['github-source-repos', selectedGithubAppId],
@@ -1401,11 +1409,13 @@ function DomainsField({
     const parsed = parseDomains(value);
     return parsed.length ? parsed : [''];
   });
+  const [prevServiceId, setPrevServiceId] = useState(serviceId);
 
-  useEffect(() => {
+  if (serviceId !== prevServiceId) {
+    setPrevServiceId(serviceId);
     const parsed = parseDomains(value);
     setDomains(parsed.length ? parsed : ['']);
-  }, [serviceId]);
+  }
 
   const commit = (next: string[]) => {
     const rows = next.length ? next : [''];
