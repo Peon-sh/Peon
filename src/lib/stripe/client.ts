@@ -12,7 +12,7 @@ export function getStripe(): Stripe {
   }
   cached = new Stripe(key, {
     // ui_mode: 'elements' requires >= 2026-03-25.dahlia (not available on basil).
-    apiVersion: '2026-06-24.dahlia',
+    apiVersion: '2026-07-29.dahlia',
     typescript: true,
   });
   return cached;
