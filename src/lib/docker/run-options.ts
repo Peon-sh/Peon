@@ -198,7 +198,7 @@ export function mergeDockerRunIntoService(
   delete custom.ip;
   delete custom.ip6;
 
-  let result = { ...service };
+  const result = { ...service };
   if (ipv4 || ipv6) {
     result.networks = {
       [network]: {

@@ -82,9 +82,9 @@ export async function api<T = { success?: boolean; data?: unknown; message?: str
 }
 
 export const http = {
-  get: <T = any>(path: string, opts?: RequestOpts) => api<T>('GET', path, opts),
-  post: <T = any>(path: string, opts?: RequestOpts) => api<T>('POST', path, opts),
-  put: <T = any>(path: string, opts?: RequestOpts) => api<T>('PUT', path, opts),
-  patch: <T = any>(path: string, opts?: RequestOpts) => api<T>('PATCH', path, opts),
-  delete: <T = any>(path: string, opts?: RequestOpts) => api<T>('DELETE', path, opts),
+  get: <T = unknown>(path: string, opts?: RequestOpts) => api<T>('GET', path, opts),
+  post: <T = unknown>(path: string, opts?: RequestOpts) => api<T>('POST', path, opts),
+  put: <T = unknown>(path: string, opts?: RequestOpts) => api<T>('PUT', path, opts),
+  patch: <T = unknown>(path: string, opts?: RequestOpts) => api<T>('PATCH', path, opts),
+  delete: <T = unknown>(path: string, opts?: RequestOpts) => api<T>('DELETE', path, opts),
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Rocket, X } from 'lucide-react';
@@ -23,7 +23,10 @@ export function ActiveDeploymentsToast() {
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [hidden, setHidden] = useState(false);
-  const knownIdsRef = useRef<Set<string>>(new Set());
+  const [tracked, setTracked] = useState<{ activeKey: string; knownIds: string[] }>({
+    activeKey: '',
+    knownIds: [],
+  });
 
   const { data } = useQuery({
     queryKey: ['active-deployments', workspaceId],
@@ -38,20 +41,18 @@ export function ActiveDeploymentsToast() {
   const active = data ?? EMPTY_ACTIVE;
   const activeKey = active.map((d) => d.id).join(',');
 
-  useEffect(() => {
+  if (activeKey !== tracked.activeKey) {
     if (!activeKey) {
-      knownIdsRef.current = new Set();
-      // Only reset when needed — unconditional setState(new Set()) re-renders forever
-      // when `active` was a fresh `[]` default each render.
-      setHidden((h) => (h ? false : h));
+      setTracked({ activeKey, knownIds: [] });
+      setHidden((current) => (current ? false : current));
       setDismissedIds((prev) => (prev.size === 0 ? prev : new Set()));
-      return;
+    } else {
+      const nextIds = activeKey.split(',');
+      const hasNew = nextIds.some((id) => !tracked.knownIds.includes(id));
+      setTracked({ activeKey, knownIds: nextIds });
+      if (hasNew) setHidden(false);
     }
-    const nextIds = new Set(activeKey.split(','));
-    const hasNew = [...nextIds].some((id) => !knownIdsRef.current.has(id));
-    knownIdsRef.current = nextIds;
-    if (hasNew) setHidden(false);
-  }, [activeKey]);
+  }
 
   const visible = active.filter((d) => !dismissedIds.has(d.id));
 

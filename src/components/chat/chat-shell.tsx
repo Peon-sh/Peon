@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Composer } from '@/components/chat/composer';
@@ -36,30 +36,25 @@ export function ChatShell() {
     text: string;
   } | null>(null);
   const [startingChat, setStartingChat] = useState(false);
-  const [modelSelection, setModelSelection] = useState<ModelSelection | null>(null);
+  const [userModelSelection, setUserModelSelection] = useState<ModelSelection | null>(null);
 
   const availableModels = chatStatus?.models ?? EMPTY_MODELS;
   const chatReady = !!chatStatus?.ready;
-
-  useEffect(() => {
-    if (!availableModels.length) {
-      setModelSelection(null);
-      return;
+  const modelSelection = useMemo(() => {
+    if (!availableModels.length) return null;
+    if (
+      userModelSelection &&
+      availableModels.some(
+        (model) =>
+          model.provider === userModelSelection.provider &&
+          model.modelId === userModelSelection.modelId,
+      )
+    ) {
+      return userModelSelection;
     }
-    setModelSelection((current) => {
-      if (
-        current &&
-        availableModels.some(
-          (model) =>
-            model.provider === current.provider && model.modelId === current.modelId,
-        )
-      ) {
-        return current;
-      }
-      const first = availableModels[0]!;
-      return { provider: first.provider, modelId: first.modelId };
-    });
-  }, [availableModels]);
+    const first = availableModels[0]!;
+    return { provider: first.provider, modelId: first.modelId };
+  }, [availableModels, userModelSelection]);
 
   function selectThread(nextThreadId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -150,7 +145,7 @@ export function ChatShell() {
                 <ModelPicker
                   models={availableModels}
                   value={modelSelection}
-                  onChange={setModelSelection}
+                  onChange={setUserModelSelection}
                   disabled={startingChat}
                 />
               }

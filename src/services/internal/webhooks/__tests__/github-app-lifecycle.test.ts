@@ -66,12 +66,13 @@ describe('github app installation webhooks', () => {
     vi.mocked(prisma.githubApp.updateMany).mockResolvedValue({ count: 1 });
     vi.mocked(prisma.project.findUnique).mockResolvedValue({ workspaceId: 'ws1' } as never);
     vi.mocked(BillingService.assertProjectWritable).mockResolvedValue(undefined);
-    vi.mocked(prisma.service.findUnique).mockImplementation(async ({ where }) =>
-      ({
-        id: where.id,
-        name: where.id === 'svc-worker' ? 'worker' : 'webapp',
-        project: { workspaceId: 'ws1' },
-      }) as never,
+    vi.mocked(prisma.service.findUnique).mockImplementation(
+      (({ where }: { where: { id: string } }) =>
+        Promise.resolve({
+          id: where.id,
+          name: where.id === 'svc-worker' ? 'worker' : 'webapp',
+          project: { workspaceId: 'ws1' },
+        })) as never,
     );
     vi.mocked(prisma.workspaceAuditLog.create).mockResolvedValue({} as never);
   });

@@ -60,13 +60,19 @@ export function PlanPaywallDialog({
     enabled: open && !!workspaceId,
   });
 
+  const billingKey = billing
+    ? `${billing.projectCount ?? 0}:${billing.seats ?? 0}`
+    : null;
+  const [prevBillingKey, setPrevBillingKey] = useState(billingKey);
+  if (billingKey !== prevBillingKey) {
+    setPrevBillingKey(billingKey);
+    if (billing) {
+      setSeats(Math.max((billing.projectCount ?? 0) + 1, (billing.seats ?? 0) + 1));
+    }
+  }
+
   const entitled = !!billing?.entitled;
   const showSeats = reason === 'seats' || entitled;
-
-  useEffect(() => {
-    if (!billing) return;
-    setSeats(Math.max((billing.projectCount ?? 0) + 1, (billing.seats ?? 0) + 1));
-  }, [billing]);
 
   const seatPreviewEnabled =
     open &&

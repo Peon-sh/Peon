@@ -64,6 +64,36 @@ export function ConversationPane({
   const hydratedThreadRef = useRef<string | null>(null);
   const sentPromptRef = useRef<string | null>(null);
   const [modelSelection, setModelSelection] = useState<ModelSelection | null>(null);
+  const [prevModelSource, setPrevModelSource] = useState({
+    thread,
+    availableModels,
+  });
+  if (
+    thread !== prevModelSource.thread ||
+    availableModels !== prevModelSource.availableModels
+  ) {
+    setPrevModelSource({ thread, availableModels });
+    if (thread) {
+      if (
+        thread.modelProvider &&
+        thread.modelId &&
+        availableModels.some(
+          (model) =>
+            model.provider === thread.modelProvider && model.modelId === thread.modelId,
+        )
+      ) {
+        setModelSelection({
+          provider: thread.modelProvider as ModelSelection['provider'],
+          modelId: thread.modelId,
+        });
+      } else {
+        const first = availableModels[0];
+        if (first) {
+          setModelSelection({ provider: first.provider, modelId: first.modelId });
+        }
+      }
+    }
+  }
 
   const {
     messages,
@@ -89,28 +119,6 @@ export function ConversationPane({
     hydratedThreadRef.current = threadId;
     setMessages(toUiMessages(thread.messages));
   }, [setMessages, thread, threadId]);
-
-  useEffect(() => {
-    if (!thread) return;
-    if (
-      thread.modelProvider &&
-      thread.modelId &&
-      availableModels.some(
-        (model) =>
-          model.provider === thread.modelProvider && model.modelId === thread.modelId,
-      )
-    ) {
-      setModelSelection({
-        provider: thread.modelProvider as ModelSelection['provider'],
-        modelId: thread.modelId,
-      });
-      return;
-    }
-    const first = availableModels[0];
-    if (first) {
-      setModelSelection({ provider: first.provider, modelId: first.modelId });
-    }
-  }, [thread, availableModels]);
 
   useEffect(() => {
     if (

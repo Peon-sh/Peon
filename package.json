@@ -90,6 +90,7 @@
     "@types/react-dom": "^19",
     "@types/ssh2": "^1.15.5",
     "@types/ws": "^8.18.1",
+    "@typescript-eslint/parser": "^8.66.0",
     "eslint": "^10",
     "eslint-config-next": "16.2.12",
     "openai": "7.3.0",
@@ -109,6 +110,13 @@
       "postcss": ">=8.5.18",
       "valibot": ">=1.4.2",
       "brace-expansion": ">=5.0.8"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "eslint-plugin-react>eslint": "10",
+        "eslint-plugin-import>eslint": "10",
+        "eslint-plugin-jsx-a11y>eslint": "10"
+      }
     }
   }
 }
