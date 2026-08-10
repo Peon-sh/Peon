@@ -10,6 +10,7 @@ export const PATCH = route(async (request: NextRequest) => {
   const user = await requireUser();
   const body = updateProfileSchema.parse(await request.json());
   const result = await ProfileService.updateName(user, session.sid!, body.name);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });
