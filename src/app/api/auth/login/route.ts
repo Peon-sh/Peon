@@ -9,6 +9,7 @@ export const POST = route(async (request: NextRequest) => {
   const body = loginSchema.parse(await request.json());
   const meta = extractSessionMeta(request.headers);
   const result = await AuthService.login(body.email, body.password, meta);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });
