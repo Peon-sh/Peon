@@ -10,6 +10,7 @@ export const POST = route(async (request: NextRequest) => {
   const user = await requireUser();
   const body = changePasswordSchema.parse(await request.json());
   const result = await ProfileService.setPassword(user, session.sid!, body);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });
