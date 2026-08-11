@@ -9,6 +9,7 @@ export const POST = route(async (request: NextRequest) => {
   const body = signupCompleteSchema.parse(await request.json());
   const meta = extractSessionMeta(request.headers);
   const result = await AuthService.completeSignup(body, meta);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });

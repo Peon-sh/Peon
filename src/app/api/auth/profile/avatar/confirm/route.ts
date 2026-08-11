@@ -10,6 +10,7 @@ export const POST = route(async (request: NextRequest) => {
   const user = await requireUser();
   const body = avatarConfirmSchema.parse(await request.json());
   const result = await ProfileService.confirmAvatar(user, session.sid!, body.key);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });
