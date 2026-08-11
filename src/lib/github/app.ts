@@ -2,6 +2,7 @@ import { createSign } from 'node:crypto';
 import { decrypt } from '@/lib/crypto/encryption';
 import { AppError } from '@/lib/errors';
 import { isE2eMode } from '@/lib/e2e';
+import { assertSafeEgressUrl } from '@/lib/net/egress';
 import {
   isPlatformGithubConfigured,
   platformGithubPrivateKeyPem,
@@ -82,6 +83,10 @@ function githubJwt(app: GithubAppAuthInput): string {
 }
 
 async function githubFetch<T>(url: string, init: RequestInit): Promise<T> {
+  // `apiUrl` is operator-supplied, and calls here carry an App JWT and return
+  // the response body to the caller.
+  await assertSafeEgressUrl(url, { label: 'GitHub API URL' });
+
   const res = await fetch(url, {
     ...init,
     headers: {

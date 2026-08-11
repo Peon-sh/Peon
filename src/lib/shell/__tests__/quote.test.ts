@@ -26,7 +26,23 @@ describe('dockerExecShellCommand', () => {
     );
     // Outer argument to sh -c is single-quoted, so remote bash won't expand $.
     expect(cmd).toBe(
-      `docker exec webapp-abc sh -c 'curl -H "Authorization: Bearer $CRON_SECRET" https://example.com'`,
+      `docker exec 'webapp-abc' sh -c 'curl -H "Authorization: Bearer $CRON_SECRET" https://example.com'`,
     );
+  });
+
+  it('quotes an operator-supplied container name', () => {
+    const cmd = dockerExecShellCommand('web; id > /tmp/pwned; #', 'echo hi');
+
+    expect(cmd).toBe(`docker exec 'web; id > /tmp/pwned; #' sh -c 'echo hi'`);
+    expect(cmd.split("'")[0]).toBe('docker exec ');
+  });
+
+  it('neutralises a container name that closes its own quoting', () => {
+    const cmd = dockerExecShellCommand(`x'; id; echo '`, 'echo hi');
+
+    // Once `'\''` escapes are accounted for, only the delimiting quotes remain.
+    const bareQuotes = cmd.split(`'\\''`).join('|').match(/'/g) ?? [];
+    expect(bareQuotes).toHaveLength(4);
+    expect(cmd).toBe(`docker exec 'x'\\''; id; echo '\\''' sh -c 'echo hi'`);
   });
 });

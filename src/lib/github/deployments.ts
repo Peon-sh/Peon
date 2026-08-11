@@ -4,6 +4,7 @@ import {
   type GithubAppForAuth,
 } from '@/lib/github/app';
 import { asGithubId, githubIdPath } from '@/lib/github/ids';
+import { assertSafeEgressUrl } from '@/lib/net/egress';
 import type { PreviewCommentPhase } from '@/lib/github/pr-comments';
 
 export const PREVIEW_DEPLOYMENT_ENVIRONMENT = 'Preview';
@@ -107,7 +108,9 @@ async function githubApi<T>(
   const auth = resolveGithubAuth(app);
   const token = await githubInstallationToken(auth);
   const base = auth.apiUrl.replace(/\/$/, '');
-  const res = await fetch(`${base}${path}`, {
+  const url = `${base}${path}`;
+  await assertSafeEgressUrl(url, { label: 'GitHub API URL' });
+  const res = await fetch(url, {
     ...init,
     headers: {
       Accept: 'application/vnd.github+json',

@@ -7,6 +7,7 @@ import { enqueueEmail } from '@/lib/email/enqueue';
 import { invitationEmailTemplate } from '@/lib/email/templates/invitation';
 import { serverEnv } from '@/lib/env';
 import { resolveProfilePictureUrl } from '@/lib/auth/profile-picture';
+import { assertInvitedUser, type InviteeIdentity } from '@/lib/auth/invitation';
 import { AppError, ConflictError, NotFoundError } from '@/lib/errors';
 import { AuditService } from '@/services/internal/audit/audit';
 import { setAuditActor } from '@/services/internal/audit/context';
@@ -343,7 +344,8 @@ export const WorkspaceService = {
     });
   },
 
-  async acceptInvitation(token: string, userId: string) {
+  async acceptInvitation(token: string, user: InviteeIdentity) {
+    const userId = user.id;
     const invite = await prisma.workspaceInvitation.findUnique({ where: { token } });
     if (!invite || invite.status !== 'PENDING') throw new NotFoundError('Invitation not found.');
     if (invite.expiresAt < new Date()) {
@@ -353,6 +355,7 @@ export const WorkspaceService = {
       });
       throw new AppError('Invitation has expired.');
     }
+    assertInvitedUser(invite.email, user);
     // Never elevate to OWNER via invitation acceptance.
     const role = invite.role === 'OWNER' ? 'MEMBER' : invite.role;
     await prisma.$transaction([

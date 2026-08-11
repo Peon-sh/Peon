@@ -6,7 +6,10 @@ export function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-/** Build `docker exec <container> sh -c '<command>'` with safe quoting. */
+/**
+ * Build `docker exec <container> sh -c '<command>'` with safe quoting. The
+ * container is quoted too — scheduled tasks and raw compose files supply it.
+ */
 export function dockerExecShellCommand(container: string, command: string): string {
-  return `docker exec ${container} sh -c ${shellSingleQuote(command)}`;
+  return `docker exec ${shellSingleQuote(container)} sh -c ${shellSingleQuote(command)}`;
 }
