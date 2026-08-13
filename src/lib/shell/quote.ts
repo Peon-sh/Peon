@@ -16,5 +16,5 @@ export function dockerExecShellCommand(
   opts?: { interactive?: boolean },
 ): string {
   const flags = opts?.interactive ? ' -i' : '';
-  return `docker exec${flags} ${container} sh -c ${shellSingleQuote(command)}`;
+  return `docker exec${flags} ${shellSingleQuote(container)} sh -c ${shellSingleQuote(command)}`;
 }

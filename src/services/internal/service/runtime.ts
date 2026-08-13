@@ -110,7 +110,7 @@ export const ServiceRuntime = {
     const tailArg = tail ? ` --tail ${tail}` : '';
     const res = await sshPool.exec(
       target,
-      `docker logs${tailArg}${since} --timestamps ${container} 2>&1 || true`,
+      `docker logs${tailArg}${since} --timestamps ${shellSingleQuote(container)} 2>&1 || true`,
     );
     return { container, lines: res.stdout.split('\n').filter(Boolean) };
   },
@@ -130,7 +130,7 @@ export const ServiceRuntime = {
     const { target, container } = await containerContext(serviceId);
     const res = await sshPool.exec(
       target,
-      `docker ps -a --filter name=^${container}$ --format '{{.Status}}|{{.Image}}' | head -1`,
+      `docker ps -a --filter ${shellSingleQuote(`name=^${container}$`)} --format '{{.Status}}|{{.Image}}' | head -1`,
     );
     const [status, image] = res.stdout.trim().split('|');
     return { container, status: status || 'not created', image: image || null };
