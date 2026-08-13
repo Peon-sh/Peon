@@ -1,4 +1,5 @@
 import type { DatabaseEngine } from '@/lib/prisma';
+import { shellSingleQuote } from '@/lib/shell/quote';
 
 export type DbCredentialColumn = 'dbUsername' | 'dbPassword' | 'dbName' | 'dbRootPassword';
 
@@ -40,6 +41,26 @@ export interface DbCredentials {
   password?: string | null;
   database?: string | null;
   rootPassword?: string | null;
+}
+
+/**
+ * Credentials are operator-supplied and reach these builders unvalidated, so
+ * every interpolation must be quoted. The result is additionally quoted as a
+ * whole by `dockerExecShellCommand` before it reaches the remote shell; both
+ * layers are required, since outer quoting alone still leaves the container
+ * shell to word-split on spaces inside a value.
+ */
+const q = shellSingleQuote;
+
+/**
+ * MySQL/MariaDB auth flags. The password must stay attached to `-p` with no
+ * space, and `-p` must be omitted entirely when there is none — an empty
+ * quoted value collapses to a bare `-p`, which makes the client prompt for a
+ * password and hang on a non-interactive SSH channel.
+ */
+function mysqlAuth(c: DbCredentials): string {
+  const password = c.rootPassword ?? c.password;
+  return password ? `-u root -p${q(password)}` : '-u root';
 }
 
 /**
@@ -94,12 +115,12 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
       `postgres://${c.username ?? 'postgres'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'postgres'}`,
     dumpCommand: (c, opts) =>
       opts?.dumpAll
-        ? `pg_dumpall -U ${c.username ?? 'postgres'}`
-        : `pg_dump -U ${c.username ?? 'postgres'} ${c.database ?? 'postgres'}`,
+        ? `pg_dumpall -U ${q(c.username ?? 'postgres')}`
+        : `pg_dump -U ${q(c.username ?? 'postgres')} ${q(c.database ?? 'postgres')}`,
     restoreCommand: (c, opts) =>
       opts?.dumpAll
-        ? `psql -U ${c.username ?? 'postgres'} -d postgres`
-        : `psql -U ${c.username ?? 'postgres'} ${c.database ?? 'postgres'}`,
+        ? `psql -U ${q(c.username ?? 'postgres')} -d postgres`
+        : `psql -U ${q(c.username ?? 'postgres')} ${q(c.database ?? 'postgres')}`,
   },
   MYSQL: {
     engine: 'MYSQL',
@@ -122,14 +143,14 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
     connectionUrl: (c, host, port) =>
       `mysql://${c.username ?? 'mysql'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'app'}`,
     dumpCommand: (c, opts) => {
-      const auth = `-u root -p${c.rootPassword ?? c.password}`;
+      const auth = mysqlAuth(c);
       return opts?.dumpAll
         ? `mysqldump ${auth} --all-databases`
-        : `mysqldump ${auth} ${c.database ?? 'app'}`;
+        : `mysqldump ${auth} ${q(c.database ?? 'app')}`;
     },
     restoreCommand: (c, opts) => {
-      const auth = `-u root -p${c.rootPassword ?? c.password}`;
-      return opts?.dumpAll ? `mysql ${auth}` : `mysql ${auth} ${c.database ?? 'app'}`;
+      const auth = mysqlAuth(c);
+      return opts?.dumpAll ? `mysql ${auth}` : `mysql ${auth} ${q(c.database ?? 'app')}`;
     },
   },
   MARIADB: {
@@ -153,14 +174,14 @@ export const DATABASE_ENGINES: Record<DatabaseEngine, DatabaseEngineSpec> = {
     connectionUrl: (c, host, port) =>
       `mysql://${c.username ?? 'mariadb'}:${c.password ?? ''}@${host}:${port}/${c.database ?? 'app'}`,
     dumpCommand: (c, opts) => {
-      const auth = `-u root -p${c.rootPassword ?? c.password}`;
+      const auth = mysqlAuth(c);
       return opts?.dumpAll
         ? `mariadb-dump ${auth} --all-databases`
-        : `mariadb-dump ${auth} ${c.database ?? 'app'}`;
+        : `mariadb-dump ${auth} ${q(c.database ?? 'app')}`;
     },
     restoreCommand: (c, opts) => {
-      const auth = `-u root -p${c.rootPassword ?? c.password}`;
-      return opts?.dumpAll ? `mariadb ${auth}` : `mariadb ${auth} ${c.database ?? 'app'}`;
+      const auth = mysqlAuth(c);
+      return opts?.dumpAll ? `mariadb ${auth}` : `mariadb ${auth} ${q(c.database ?? 'app')}`;
     },
   },
   MONGODB: {
