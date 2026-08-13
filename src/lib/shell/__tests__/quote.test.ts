@@ -32,7 +32,7 @@ describe('dockerExecShellCommand', () => {
 
   it('adds -i for stdin-fed commands (restore path)', () => {
     expect(dockerExecShellCommand('db-abc', 'psql -U peon', { interactive: true })).toBe(
-      `docker exec -i db-abc sh -c 'psql -U peon'`,
+      `docker exec -i 'db-abc' sh -c 'psql -U peon'`,
     );
   });
 
@@ -40,13 +40,12 @@ describe('dockerExecShellCommand', () => {
     const cmd = dockerExecShellCommand('db-abc', `mysqldump -px'; id > /tmp/pwned; echo '`);
 
     expect(cmd).toBe(
-      `docker exec db-abc sh -c 'mysqldump -px'\\''; id > /tmp/pwned; echo '\\'''`,
+      `docker exec 'db-abc' sh -c 'mysqldump -px'\\''; id > /tmp/pwned; echo '\\'''`,
     );
 
-    // Property: once the `'\''` escape sequences are accounted for, exactly two
-    // bare quotes remain — the pair delimiting the sh -c argument. Any third
-    // would let the payload escape into the host shell.
+    // Property: once the `'\''` escape sequences are accounted for, exactly four
+    // bare quotes remain — container delimiters plus the sh -c argument pair.
     const bareQuotes = cmd.split(`'\\''`).join('|').match(/'/g) ?? [];
-    expect(bareQuotes).toHaveLength(2);
+    expect(bareQuotes).toHaveLength(4);
   });
 });
