@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCompose,
   detectComposeServicePort,
+  ensureNamedVolumes,
   escapeComposeDollars,
+  namedVolumeSource,
   prepareRawCompose,
   pickPrimaryComposeService,
 } from '../compose';
@@ -113,5 +115,51 @@ volumes:
     // Documented contract: raw mode skips prepareRawCompose and uses the file as-is.
     expect(raw.trim().startsWith('services:')).toBe(true);
     expect(raw).not.toContain('container_name:');
+  });
+
+  it('declares named volumes that services mount but omit from top-level volumes', () => {
+    const compose = `
+services:
+  app:
+    image: example/app:latest
+    volumes:
+      - 'app-data:/var/lib/app'
+`;
+    const prepared = prepareRawCompose(compose, {
+      serviceName: 'app',
+      serviceUuid: 'cmrkt1yy4000f1ynp6y3ys8oj',
+    });
+    expect(prepared.yaml).toMatch(/volumes:\s*\n\s*app-data:/);
+    expect(prepared.yaml).toContain('app-data:/var/lib/app');
+  });
+
+  it('preserves existing top-level volume entries', () => {
+    const prepared = prepareRawCompose(raw, {
+      serviceName: 'documenso',
+      serviceUuid: 'cmrkt1yy4000f1ynp6y3ys8oj',
+    });
+    expect(prepared.yaml).toContain('documenso_certs:');
+    expect(prepared.yaml).toContain('documenso_postgresql_data:');
+  });
+});
+
+describe('namedVolumeSource / ensureNamedVolumes', () => {
+  it('recognises named volumes and skips bind mounts', () => {
+    expect(namedVolumeSource('app-data:/var/lib/app')).toBe('app-data');
+    expect(namedVolumeSource('/host/path:/var/lib/app')).toBeNull();
+    expect(namedVolumeSource('./data:/var/lib/app')).toBeNull();
+    expect(namedVolumeSource('${VOLUME_NAME}:/data')).toBeNull();
+    expect(namedVolumeSource({ type: 'volume', source: 'data', target: '/data' })).toBe('data');
+    expect(namedVolumeSource({ type: 'bind', source: '/host', target: '/data' })).toBeNull();
+  });
+
+  it('fills missing top-level volume keys', () => {
+    const doc = {
+      services: {
+        app: { volumes: ['app-data:/var/lib/app', '/tmp/x:/tmp/x'] },
+      },
+    };
+    ensureNamedVolumes(doc);
+    expect(doc).toMatchObject({ volumes: { 'app-data': null } });
   });
 });

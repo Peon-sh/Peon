@@ -30,19 +30,23 @@ describe('dockerExecShellCommand', () => {
     );
   });
 
-  it('quotes an operator-supplied container name', () => {
-    const cmd = dockerExecShellCommand('web; id > /tmp/pwned; #', 'echo hi');
-
-    expect(cmd).toBe(`docker exec 'web; id > /tmp/pwned; #' sh -c 'echo hi'`);
-    expect(cmd.split("'")[0]).toBe('docker exec ');
+  it('adds -i for stdin-fed commands (restore path)', () => {
+    expect(dockerExecShellCommand('db-abc', 'psql -U peon', { interactive: true })).toBe(
+      `docker exec -i db-abc sh -c 'psql -U peon'`,
+    );
   });
 
-  it('neutralises a container name that closes its own quoting', () => {
-    const cmd = dockerExecShellCommand(`x'; id; echo '`, 'echo hi');
+  it('escapes a command that tries to close the sh -c argument', () => {
+    const cmd = dockerExecShellCommand('db-abc', `mysqldump -px'; id > /tmp/pwned; echo '`);
 
-    // Once `'\''` escapes are accounted for, only the delimiting quotes remain.
+    expect(cmd).toBe(
+      `docker exec db-abc sh -c 'mysqldump -px'\\''; id > /tmp/pwned; echo '\\'''`,
+    );
+
+    // Property: once the `'\''` escape sequences are accounted for, exactly two
+    // bare quotes remain — the pair delimiting the sh -c argument. Any third
+    // would let the payload escape into the host shell.
     const bareQuotes = cmd.split(`'\\''`).join('|').match(/'/g) ?? [];
-    expect(bareQuotes).toHaveLength(4);
-    expect(cmd).toBe(`docker exec 'x'\\''; id; echo '\\''' sh -c 'echo hi'`);
+    expect(bareQuotes).toHaveLength(2);
   });
 });

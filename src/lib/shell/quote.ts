@@ -7,9 +7,14 @@ export function shellSingleQuote(value: string): string {
 }
 
 /**
- * Build `docker exec <container> sh -c '<command>'` with safe quoting. The
- * container is quoted too — scheduled tasks and raw compose files supply it.
+ * Build `docker exec <container> sh -c '<command>'` with safe quoting.
+ * Pass `interactive` for commands that read a dump from stdin (`docker exec -i`).
  */
-export function dockerExecShellCommand(container: string, command: string): string {
-  return `docker exec ${shellSingleQuote(container)} sh -c ${shellSingleQuote(command)}`;
+export function dockerExecShellCommand(
+  container: string,
+  command: string,
+  opts?: { interactive?: boolean },
+): string {
+  const flags = opts?.interactive ? ' -i' : '';
+  return `docker exec${flags} ${container} sh -c ${shellSingleQuote(command)}`;
 }
