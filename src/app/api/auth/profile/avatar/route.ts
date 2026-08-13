@@ -7,6 +7,7 @@ export const DELETE = route(async () => {
   const session = await requireSession();
   const user = await requireUser();
   const result = await ProfileService.removeAvatar(user, session.sid!);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });

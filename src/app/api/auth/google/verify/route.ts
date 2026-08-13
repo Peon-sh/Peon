@@ -9,6 +9,7 @@ export const POST = route(async (request: NextRequest) => {
   const body = googleVerifySchema.parse(await request.json());
   const meta = extractSessionMeta(request.headers);
   const result = await AuthService.loginWithGoogle(body.accessToken, meta, body.attribution);
-  await setAuthCookie(result.token);
-  return ok(result);
+  const { token, ...data } = result;
+  await setAuthCookie(token);
+  return ok(data);
 });
