@@ -63,24 +63,78 @@ describe('dumpCommand dumpAll', () => {
   };
 
   it('defaults Postgres to single-DB dump when dumpAll is unset', () => {
-    expect(DATABASE_ENGINES.POSTGRESQL.dumpCommand?.(creds)).toBe('pg_dump -U peon appdb');
+    expect(DATABASE_ENGINES.POSTGRESQL.dumpCommand?.(creds)).toBe(`pg_dump -U 'peon' 'appdb'`);
   });
 
   it('uses pg_dumpall for Postgres when dumpAll is true', () => {
     expect(DATABASE_ENGINES.POSTGRESQL.dumpCommand?.(creds, { dumpAll: true })).toBe(
-      'pg_dumpall -U peon',
+      `pg_dumpall -U 'peon'`,
     );
     expect(DATABASE_ENGINES.POSTGRESQL.restoreCommand?.(creds, { dumpAll: true })).toBe(
-      'psql -U peon -d postgres',
+      `psql -U 'peon' -d postgres`,
     );
   });
 
   it('uses --all-databases for MySQL/MariaDB when dumpAll is true', () => {
     expect(DATABASE_ENGINES.MYSQL.dumpCommand?.(creds, { dumpAll: true })).toBe(
-      'mysqldump -u root -prootsecret --all-databases',
+      `mysqldump -u root -p'rootsecret' --all-databases`,
     );
     expect(DATABASE_ENGINES.MARIADB.dumpCommand?.(creds, { dumpAll: true })).toBe(
-      'mariadb-dump -u root -prootsecret --all-databases',
+      `mariadb-dump -u root -p'rootsecret' --all-databases`,
+    );
+  });
+});
+
+describe('credential quoting', () => {
+  // A credential that terminates the `sh -c '...'` argument and appends a
+  // second host-level command. Unquoted, this yields RCE on the managed
+  // server as the SSH user. See runBackup / runRestore in backup/engine.ts.
+  const INJECTION = String.raw`x'; id > /tmp/pwned; echo '`;
+
+  it('neutralises a quote-escape payload in the MySQL root password', () => {
+    const cmd = DATABASE_ENGINES.MYSQL.dumpCommand?.(
+      { rootPassword: INJECTION },
+      { dumpAll: true },
+    );
+    expect(cmd).not.toContain(`-px'; id`);
+    expect(cmd).toBe(`mysqldump -u root -p'x'\\''; id > /tmp/pwned; echo '\\''' --all-databases`);
+  });
+
+  it('neutralises a quote-escape payload in the Postgres username', () => {
+    const cmd = DATABASE_ENGINES.POSTGRESQL.dumpCommand?.(
+      { username: INJECTION },
+      { dumpAll: true },
+    );
+    expect(cmd).not.toContain(`-U x'; id`);
+    expect(cmd).toBe(`pg_dumpall -U 'x'\\''; id > /tmp/pwned; echo '\\'''`);
+  });
+
+  it('neutralises a payload in the database name on the restore path', () => {
+    const cmd = DATABASE_ENGINES.POSTGRESQL.restoreCommand?.({
+      username: 'peon',
+      database: INJECTION,
+    });
+    expect(cmd).not.toContain(`psql -U 'peon' x'; id`);
+    expect(cmd).toContain(`'x'\\''; id > /tmp/pwned; echo '\\'''`);
+  });
+
+  it('quotes credentials containing spaces so the container shell cannot split them', () => {
+    // Outer `sh -c` quoting alone would not fix this — the inner shell splits.
+    expect(DATABASE_ENGINES.MYSQL.dumpCommand?.({ rootPassword: 'my pass' }, { dumpAll: true }))
+      .toBe(`mysqldump -u root -p'my pass' --all-databases`);
+  });
+
+  it('omits -p entirely when no password is set', () => {
+    // `-p''` would collapse to a bare `-p`, making the client prompt for a
+    // password and hang on the non-interactive SSH channel.
+    const cmd = DATABASE_ENGINES.MYSQL.dumpCommand?.({}, { dumpAll: true });
+    expect(cmd).toBe('mysqldump -u root --all-databases');
+    expect(cmd).not.toMatch(/-p(\s|$)/);
+  });
+
+  it('falls back to the app password when no root password is set', () => {
+    expect(DATABASE_ENGINES.MARIADB.dumpCommand?.({ password: 'apppw' }, { dumpAll: true })).toBe(
+      `mariadb-dump -u root -p'apppw' --all-databases`,
     );
   });
 });

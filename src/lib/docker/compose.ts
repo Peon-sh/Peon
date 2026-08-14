@@ -235,15 +235,74 @@ function ensureServiceOnNetwork(svc: Record<string, unknown>, network: string): 
 }
 
 /**
+ * Named volume left of `name:/path` (not a bind mount / env-interpolated source).
+ * Compose V2 rejects service mounts that are not declared under top-level `volumes:`.
+ */
+export function namedVolumeSource(entry: unknown): string | null {
+  if (typeof entry === 'string') {
+    const source = entry.split(':')[0]?.trim() ?? '';
+    if (!source) return null;
+    // Bind mounts and env-expanded sources must not become top-level volume keys.
+    if (
+      source.startsWith('/') ||
+      source.startsWith('./') ||
+      source.startsWith('../') ||
+      source.startsWith('~') ||
+      source.includes('/') ||
+      source.includes('$')
+    ) {
+      return null;
+    }
+    return source;
+  }
+  if (entry && typeof entry === 'object') {
+    const vol = entry as { type?: string; source?: string };
+    if (vol.type && vol.type !== 'volume') return null;
+    if (typeof vol.source !== 'string') return null;
+    return namedVolumeSource(`${vol.source}:/`);
+  }
+  return null;
+}
+
+/** Ensure every named volume mount is present under the document's top-level `volumes`. */
+export function ensureNamedVolumes(doc: {
+  services?: Record<string, Record<string, unknown>>;
+  volumes?: Record<string, unknown> | null;
+}): void {
+  const services = doc.services;
+  if (!services) return;
+
+  const volumes: Record<string, unknown> = { ...(doc.volumes ?? {}) };
+  let changed = false;
+
+  for (const svc of Object.values(services)) {
+    const mounts = svc.volumes;
+    if (!Array.isArray(mounts)) continue;
+    for (const mount of mounts) {
+      const name = namedVolumeSource(mount);
+      if (!name || name in volumes) continue;
+      volumes[name] = null;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    doc.volumes = volumes;
+  }
+}
+
+/**
  * Rewrite of a marketplace/raw compose file before `docker compose up`:
  * deterministic container_name per service (so logs/status/readiness match Peon),
  * attach the shared proxy network, and merge Traefik/Caddy labels onto the primary app.
+ * Also declares any named volumes referenced by services (marketplace templates often omit them).
  */
 export function prepareRawCompose(raw: string, opts: PrepareRawComposeOptions): PreparedCompose {
   const network = opts.network ?? DEFAULT_NETWORK;
   const doc = parse(raw) as {
     services?: Record<string, Record<string, unknown>>;
     networks?: Record<string, unknown>;
+    volumes?: Record<string, unknown>;
   };
   const services = doc.services;
   if (!services || Object.keys(services).length === 0) {
@@ -266,6 +325,7 @@ export function prepareRawCompose(raw: string, opts: PrepareRawComposeOptions): 
     }
   }
 
+  ensureNamedVolumes(doc);
   doc.networks = { ...(doc.networks ?? {}), [network]: { external: true } };
 
   return {

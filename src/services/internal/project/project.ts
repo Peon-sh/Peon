@@ -7,6 +7,7 @@ import { enqueueEmail } from '@/lib/email/enqueue';
 import { invitationEmailTemplate } from '@/lib/email/templates/invitation';
 import { serverEnv } from '@/lib/env';
 import { resolveProfilePictureUrl } from '@/lib/auth/profile-picture';
+import { assertInvitedUser, type InviteeIdentity } from '@/lib/auth/invitation';
 import { AppError, ConflictError, NotFoundError } from '@/lib/errors';
 import { AuditService } from '@/services/internal/audit/audit';
 
@@ -284,7 +285,8 @@ export const ProjectService = {
     return { added: false, invitation };
   },
 
-  async acceptInvitation(token: string, userId: string) {
+  async acceptInvitation(token: string, user: InviteeIdentity) {
+    const userId = user.id;
     const invite = await prisma.projectInvitation.findUnique({ where: { token } });
     if (!invite || invite.status !== 'PENDING') throw new NotFoundError('Invitation not found.');
     if (invite.expiresAt < new Date()) {
@@ -294,6 +296,7 @@ export const ProjectService = {
       });
       throw new AppError('Invitation has expired.');
     }
+    assertInvitedUser(invite.email, user);
     await prisma.$transaction([
       prisma.workspaceMembership.upsert({
         where: { workspaceId_userId: { workspaceId: invite.workspaceId, userId } },

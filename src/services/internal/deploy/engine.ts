@@ -342,7 +342,7 @@ async function waitUntilReady(
       inspect: async () => {
         const res = await sshPool.exec(
           target,
-          `docker inspect --format='${CONTAINER_INSPECT_FORMAT}' ${container}`,
+          `docker inspect --format='${CONTAINER_INSPECT_FORMAT}' ${shellSingleQuote(container)}`,
         );
         if (res.code !== 0) {
           throw new Error(`Container "${container}" not found after start.`);
@@ -364,7 +364,9 @@ async function waitUntilReady(
     log('----------------------------------------');
     log('Container logs:');
     await sshPool
-      .execStream(target, `docker logs -n 100 ${container} 2>&1 || true`, (c) => log(c.trimEnd()))
+      .execStream(target, `docker logs -n 100 ${shellSingleQuote(container)} 2>&1 || true`, (c) =>
+        log(c.trimEnd()),
+      )
       .catch(() => undefined);
     log('----------------------------------------');
     if (err instanceof Error && err.message === 'Deployment cancelled') {

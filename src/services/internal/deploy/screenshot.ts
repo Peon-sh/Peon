@@ -7,6 +7,7 @@ import {
   uploadPlatformObject,
 } from '@/services/external/s3/assets';
 import { PlatformS3Keys } from '@/services/external/s3/keys';
+import { assertSafeEgressUrl } from '@/lib/net/egress';
 
 const PREVIEW_DIR = path.join(process.cwd(), '.data', 'deployment-previews');
 
@@ -14,6 +15,27 @@ function serviceUrl(fqdn: string): string {
   const host = fqdn.split(',')[0]?.trim();
   if (!host) throw new Error('No domain configured for screenshot.');
   return host.startsWith('http') ? host : `https://${host}`;
+}
+
+/**
+ * The URL to screenshot, or null when it must not be fetched. `fqdn` is
+ * free-form and the capture is stored behind a public URL, so an internal
+ * address would publish internal content. Rejection skips the preview.
+ */
+async function resolvePreviewTarget(fqdn: string, deploymentId: string): Promise<string | null> {
+  try {
+    const url = await assertSafeEgressUrl(serviceUrl(fqdn), {
+      // Deployments serve plain http until TLS is issued.
+      allowHttp: true,
+      label: 'Deployment preview URL',
+    });
+    return url.toString();
+  } catch (err) {
+    console.warn(
+      `[deployment-preview] skipped for ${deploymentId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
 }
 
 function isHttpUrl(value: string): boolean {
@@ -36,6 +58,9 @@ export async function captureDeploymentPreview(
 
   let localPath: string | null = null;
   try {
+    const targetUrl = await resolvePreviewTarget(fqdn, deploymentId);
+    if (!targetUrl) return;
+
     const deployment = await prisma.deployment.findUnique({
       where: { id: deploymentId },
       select: {
@@ -56,7 +81,7 @@ export async function captureDeploymentPreview(
     });
     try {
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-      await page.goto(serviceUrl(fqdn), { waitUntil: 'networkidle', timeout: 45_000 });
+      await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 45_000 });
       await page.screenshot({ path: localPath, type: 'png', fullPage: false });
     } finally {
       await browser.close();

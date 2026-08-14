@@ -8,6 +8,7 @@ import { sshPool, sshTargetForServer } from '@/lib/ssh';
 import { decrypt } from '@/lib/crypto/encryption';
 import { engineSpec } from '@/lib/docker/databases';
 import { containerName } from '@/lib/docker/naming';
+import { dockerExecShellCommand, shellSingleQuote } from '@/lib/shell/quote';
 import { uploadFileFromServer } from '@/services/external/s3/backup';
 import { notifyService } from '@/services/internal/notifications/events';
 import { ValidationError, NotFoundError } from '@/lib/errors';
@@ -43,7 +44,9 @@ export async function runBackup(backupId: string, executionId: string): Promise<
   const remotePath = `/data/peon/backups/${filename}`;
 
   try {
-    const script = `mkdir -p /data/peon/backups && docker exec ${name} sh -c '${spec.dumpCommand(creds, { dumpAll })}' > ${remotePath} && ls -la ${remotePath}`;
+    const quotedPath = shellSingleQuote(remotePath);
+    const dump = dockerExecShellCommand(name, spec.dumpCommand(creds, { dumpAll }));
+    const script = `mkdir -p /data/peon/backups && ${dump} > ${quotedPath} && ls -la ${quotedPath}`;
     const res = await sshPool.exec(target, script);
     if (res.code !== 0) throw new Error(res.stderr || 'Dump failed.');
 
@@ -53,7 +56,10 @@ export async function runBackup(backupId: string, executionId: string): Promise<
       s3Uploaded = true;
     }
 
-    const sizeRes = await sshPool.exec(target, `stat -c %s ${remotePath} 2>/dev/null || stat -f %z ${remotePath}`);
+    const sizeRes = await sshPool.exec(
+      target,
+      `stat -c %s ${quotedPath} 2>/dev/null || stat -f %z ${quotedPath}`,
+    );
     const sizeBytes = sizeRes.code === 0 ? sizeRes.stdout.trim() : null;
 
     await prisma.scheduledBackupExecution.update({
@@ -125,11 +131,14 @@ export async function runRestore(serviceId: string, filename: string): Promise<v
   };
 
   const remotePath = `/data/peon/backups/${filename}`;
-  const check = await sshPool.exec(target, `test -f ${remotePath} && echo ok || echo missing`);
+  const quotedPath = shellSingleQuote(remotePath);
+  const check = await sshPool.exec(target, `test -f ${quotedPath} && echo ok || echo missing`);
   if (!check.stdout.includes('ok')) throw new NotFoundError(`Backup file not found: ${filename}`);
 
-  const script = `docker exec -i ${name} sh -c '${spec.restoreCommand(creds, { dumpAll })}' < ${remotePath}`;
-  const res = await sshPool.exec(target, script);
+  const restore = dockerExecShellCommand(name, spec.restoreCommand(creds, { dumpAll }), {
+    interactive: true,
+  });
+  const res = await sshPool.exec(target, `${restore} < ${quotedPath}`);
   if (res.code !== 0) throw new Error(res.stderr || 'Restore failed.');
 }
 
@@ -154,7 +163,10 @@ export async function openBackupDownload(
 
   const target = await sshTargetForServer(svc.serverId);
   const remotePath = `/data/peon/backups/${filename}`;
-  const check = await sshPool.exec(target, `test -f ${remotePath} && echo ok || echo missing`);
+  const check = await sshPool.exec(
+    target,
+    `test -f ${shellSingleQuote(remotePath)} && echo ok || echo missing`,
+  );
   if (!check.stdout.includes('ok')) throw new NotFoundError(`Backup file not found: ${filename}`);
 
   const dir = await mkdtemp(join(tmpdir(), 'peon-backup-'));
