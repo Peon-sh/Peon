@@ -569,6 +569,7 @@ enum ServiceStatus {
   DEGRADED
   EXITED
   UNKNOWN
+  SUSPENDED
 }
 
 enum GitSourceType {
@@ -650,6 +651,9 @@ model Service {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
+  /// Desired state: set when the service is intentionally scaled to zero.
+  /// Blocks deploys, webhooks, and scheduled tasks/backups until resumed.
+  suspendedAt DateTime?
 
   project       Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   server        Server?            @relation(fields: [serverId], references: [id])
@@ -671,6 +675,7 @@ model Service {
   @@index([projectId])
   @@index([serverId])
   @@index([githubAppId, repositoryProjectId])
+  @@index([suspendedAt])
 }
 
 model ServiceSetting {
