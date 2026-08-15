@@ -27,7 +27,8 @@ export interface ProxyJob {
 export interface ServiceControlJob {
   type: 'service.control';
   serviceId: string;
-  action: 'start' | 'stop' | 'restart';
+  /** `suspend`/`resume` also flip the durable Service.suspendedAt desired state. */
+  action: 'start' | 'stop' | 'restart' | 'suspend' | 'resume';
 }
 
 export interface DatabaseProvisionJob {

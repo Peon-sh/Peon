@@ -260,7 +260,7 @@ export const deployOptsSchema = z.object({
 });
 
 export const controlSchema = z.object({
-  action: z.enum(['start', 'stop', 'restart']),
+  action: z.enum(['start', 'stop', 'restart', 'suspend', 'resume']),
 });
 
 export const rollbackSchema = z.object({
