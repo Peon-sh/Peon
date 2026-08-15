@@ -404,10 +404,43 @@ Create does **not** ask for description, destination, or DB username/password (c
 | **Deploy** / **Redeploy** | Queue a new production deployment |
 | **Force rebuild** | Deploy and clear build/source cache |
 | **Start** / **Stop** / **Restart** | Control the running container(s) |
+| **Suspend** / **Resume** | Scale the service to zero and keep it there — see below |
 | **Visit** | Open the primary domain when configured |
 | Activity | Recent deployments; jump to Deployments section |
 
 **Who:** manage for mutating controls; read for viewing.
+
+### Suspend a service
+
+**Where:** Service → **Overview** → **Suspend**
+
+Suspend stops a service's containers and keeps them stopped. Use it for staging
+or demo services you don't want running 24/7 — it frees the server's CPU and RAM
+without losing any configuration.
+
+**What suspension pauses:**
+
+- Manual deploys, force rebuilds, and rollbacks are refused until you resume
+- Git pushes (GitHub App and webhook token) no longer trigger deployments
+- Scheduled tasks and scheduled backups stop firing
+- **Start** / **Stop** / **Restart** are unavailable — **Resume** is the only way back
+
+**What suspension keeps:** domains, environment variables, volumes and their data,
+scheduled task and backup definitions, webhooks, and deployment history. Nothing is
+deleted.
+
+A suspended service shows a banner on Overview explaining this, and its status
+reads `suspended`. Restarting the server does not bring it back — the containers
+stay down until you press **Resume**.
+
+**Resume** starts the containers again. If the server ran a Docker cleanup while
+the service was suspended, the old image may have been pruned; Peon detects that
+and automatically queues a full rebuild instead of failing.
+
+**Note:** suspending does not free disk space (images and volumes are kept) and
+does not change your plan's service count.
+
+**Who:** project manage.
 
 ---
 

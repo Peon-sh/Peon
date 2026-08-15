@@ -352,6 +352,14 @@ Kind ↔ field rules: [SERVICE_KIND_INVARIANTS.md](./SERVICE_KIND_INVARIANTS.md)
 
 `DeploymentStatus` tracks queue/run lifecycle (`QUEUED`, `IN_PROGRESS`, `FINISHED`, `FAILED`, `CANCELLED`, …). Active deploys are listed for the toast UI and concurrency accounting.
 
+### Desired state vs. observed state
+
+`Service.status` is **observed** state: `reconcileServiceStatus` (`src/services/internal/deploy/status.ts`) recomputes it from deployment history, so a `FINISHED` deploy resolves the service back to `RUNNING`.
+
+`Service.suspendedAt` is **desired** state — set when an operator scales the service to zero. Because the reconciler rewrites `status` from history, suspension cannot live in `status` alone; the reconciler checks `suspendedAt` first and returns `SUSPENDED` ahead of every other rule.
+
+The API layer writes `suspendedAt` synchronously before enqueueing the `service.control` job, so the guards below apply the moment the request returns rather than when the worker reaches the host.
+
 ---
 
 ## 10. Service layer
@@ -415,6 +423,20 @@ sequenceDiagram
   Eng->>Eng: status FINISHED / FAILED
   Eng->>Eng: notifications + optional screenshot
 ```
+
+### Suspension guards
+
+A suspended service (`Service.suspendedAt`) must not be brought back up by anything except an explicit resume. Every path that can start a deployment consults it:
+
+| Path | Behavior |
+|------|----------|
+| `ServiceModule.deploy` / `rollback` / `control` | `409 Conflict` |
+| GitHub App push (`webhooks/github-app.ts`) | skipped with reason `service suspended` |
+| Token deploy webhook (`webhooks/token-deploy.ts`) | `{ triggered: false }` |
+| Cron scheduler (`worker/scheduler.ts`) | tasks and backups filtered to live services |
+| Host reboot | no guard needed — compose renders `restart: unless-stopped` |
+
+`controlService` maps `suspend` to `docker compose stop` and `resume` to `docker compose up -d`. `up -d` rather than `start` is deliberate: `server.cleanup` runs `docker container prune -f`, which removes stopped containers, so a suspended container may no longer exist. If the image was pruned too, the engine raises `ResumeFailedError` and the worker falls back to a forced rebuild.
 
 ### Engine responsibilities (`src/services/internal/deploy/engine.ts`)
 
