@@ -279,7 +279,7 @@ export async function getDeployment(deploymentId: string) {
   if (!deployment) throw new NotFoundError('Deployment not found.');
   const logs = (deployment.logs as unknown as LogLine[] | null) ?? [];
   const userLabels = await resolveTriggeredByLabels([deployment.triggeredBy]);
-  const { service, ...rest } = deployment;
+  const { service, leaseOwner: _leaseOwner, leaseUntil: _leaseUntil, ...rest } = deployment;
   const wildcardDomain = service.server?.settings?.wildcardDomain?.trim() || null;
   return {
     ...rest,
@@ -310,7 +310,7 @@ export async function cancelDeployment(deploymentId: string) {
 
   const updated = await prisma.deployment.updateMany({
     where: { id: deploymentId, status: { in: ['QUEUED', 'IN_PROGRESS'] } },
-    data: { status: 'CANCELLED', finishedAt: new Date() },
+    data: { status: 'CANCELLED', finishedAt: new Date(), leaseOwner: null, leaseUntil: null },
   });
   if (updated.count === 0) {
     throw new AppError('Deployment can no longer be cancelled.');

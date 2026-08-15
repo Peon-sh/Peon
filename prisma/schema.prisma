@@ -812,6 +812,10 @@ model Deployment {
   startedAt   DateTime?
   finishedAt  DateTime?
   createdAt   DateTime         @default(now())
+  /// Worker that currently holds the in-progress lease (SQS redelivery guard).
+  leaseOwner  String?
+  /// Lease expiry; another worker may take over only after this instant.
+  leaseUntil  DateTime?
 
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
