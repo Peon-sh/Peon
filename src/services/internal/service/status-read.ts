@@ -37,11 +37,17 @@ export async function deploymentHintsForServices(
   return map;
 }
 
-export function applyReconciledStatus<T extends { id: string; status: ServiceStatus }>(
-  service: T,
-  hint: DeployHint | undefined,
-): T {
-  if (!hint) return service;
-  const status = reconcileServiceStatus(service.status, hint);
+export function applyReconciledStatus<
+  T extends { id: string; status: ServiceStatus; suspendedAt?: Date | null },
+>(service: T, hint: DeployHint | undefined): T {
+  const isSuspended = service.suspendedAt != null;
+  // A suspended service still reconciles even without deployment hints.
+  if (!hint && !isSuspended) return service;
+  const status = reconcileServiceStatus(service.status, {
+    latestNonPreviewStatus: hint?.latestNonPreviewStatus ?? null,
+    hasFinishedProduction: hint?.hasFinishedProduction ?? false,
+    hasActiveDeploy: hint?.hasActiveDeploy ?? false,
+    isSuspended,
+  });
   return status === service.status ? service : { ...service, status };
 }

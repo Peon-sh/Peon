@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   DeploymentCancelledError,
+  ResumeFailedError,
   isCancellableStatus,
   reconcileServiceStatus,
   statusAfterCancelledDeploy,
+  statusAfterControl,
   statusAfterFailedDeploy,
 } from '../status';
 
@@ -79,5 +81,75 @@ describe('reconcileServiceStatus', () => {
         hasActiveDeploy: false,
       }),
     ).toBe('RUNNING');
+  });
+
+  it('reports SUSPENDED over a finished deployment history', () => {
+    expect(
+      reconcileServiceStatus('RUNNING', {
+        latestNonPreviewStatus: 'FINISHED',
+        hasFinishedProduction: true,
+        hasActiveDeploy: false,
+        isSuspended: true,
+      }),
+    ).toBe('SUSPENDED');
+  });
+
+  it('reports SUSPENDED over an active deploy', () => {
+    expect(
+      reconcileServiceStatus('STARTING', {
+        latestNonPreviewStatus: 'IN_PROGRESS',
+        hasFinishedProduction: false,
+        hasActiveDeploy: true,
+        isSuspended: true,
+      }),
+    ).toBe('SUSPENDED');
+  });
+
+  it('reports SUSPENDED over a stored STOPPED status', () => {
+    expect(
+      reconcileServiceStatus('STOPPED', {
+        latestNonPreviewStatus: 'FINISHED',
+        hasFinishedProduction: true,
+        hasActiveDeploy: false,
+        isSuspended: true,
+      }),
+    ).toBe('SUSPENDED');
+  });
+
+  it('is unchanged when the service is not suspended', () => {
+    expect(
+      reconcileServiceStatus('RUNNING', {
+        latestNonPreviewStatus: 'FINISHED',
+        hasFinishedProduction: true,
+        hasActiveDeploy: false,
+        isSuspended: false,
+      }),
+    ).toBe('RUNNING');
+  });
+});
+
+describe('statusAfterControl', () => {
+  it('parks the service in SUSPENDED after a suspend', () => {
+    expect(statusAfterControl('suspend')).toBe('SUSPENDED');
+  });
+
+  it('marks STOPPED after a stop', () => {
+    expect(statusAfterControl('stop')).toBe('STOPPED');
+  });
+
+  it('marks RUNNING after start, restart, and resume', () => {
+    expect(statusAfterControl('start')).toBe('RUNNING');
+    expect(statusAfterControl('restart')).toBe('RUNNING');
+    expect(statusAfterControl('resume')).toBe('RUNNING');
+  });
+});
+
+describe('ResumeFailedError', () => {
+  it('is identifiable by name and instanceof', () => {
+    const err = new ResumeFailedError('no such image');
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(ResumeFailedError);
+    expect(err.name).toBe('ResumeFailedError');
+    expect(err.message).toBe('no such image');
   });
 });

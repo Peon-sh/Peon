@@ -8,6 +8,28 @@ export class DeploymentCancelledError extends Error {
   }
 }
 
+/**
+ * Thrown when `docker compose up -d` fails while resuming a suspended service —
+ * typically because docker cleanup pruned the image while it was suspended.
+ * The worker catches this and falls back to a full deployment.
+ */
+export class ResumeFailedError extends Error {
+  constructor(message = 'Resume failed') {
+    super(message);
+    this.name = 'ResumeFailedError';
+  }
+}
+
+/** Actions accepted by the service control endpoint and the `service.control` job. */
+export type ServiceControlAction = 'start' | 'stop' | 'restart' | 'suspend' | 'resume';
+
+/** Status to persist once the worker has applied a control action on the host. */
+export function statusAfterControl(action: ServiceControlAction): ServiceStatus {
+  if (action === 'suspend') return 'SUSPENDED';
+  if (action === 'stop') return 'STOPPED';
+  return 'RUNNING';
+}
+
 export function isCancellableStatus(status: DeploymentStatus): boolean {
   return status === 'QUEUED' || status === 'IN_PROGRESS';
 }
@@ -37,8 +59,12 @@ export function reconcileServiceStatus(
     latestNonPreviewStatus?: DeploymentStatus | null;
     hasFinishedProduction: boolean;
     hasActiveDeploy: boolean;
+    isSuspended?: boolean;
   },
 ): ServiceStatus {
+  // Suspension is desired state and outranks anything deployment history implies:
+  // a FINISHED deploy from before the suspension must not read back as RUNNING.
+  if (opts.isSuspended) return 'SUSPENDED';
   if (opts.hasActiveDeploy) return 'STARTING';
   if (stored === 'STOPPED') return 'STOPPED';
 
