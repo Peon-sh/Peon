@@ -140,10 +140,15 @@ export function registerServiceTools(server: McpServer, ctx: McpContext, access:
 
   server.tool(
     'control_service',
-    'Start, stop, or restart a service container. Requires manage access to the project.',
+    'Start, stop, restart, suspend, or resume a service container. Suspend stops the containers '
+      + 'and keeps them stopped, blocking deploys, git webhooks, and scheduled tasks and backups '
+      + 'until the service is resumed; configuration, domains, and volumes are kept. '
+      + 'Requires manage access to the project.',
     {
       serviceId: z.string().describe('The service ID'),
-      action: z.enum(['start', 'stop', 'restart']).describe('Container action'),
+      action: z
+        .enum(['start', 'stop', 'restart', 'suspend', 'resume'])
+        .describe('Container action'),
     },
     safe(async ({ serviceId, action }) => {
       await serviceAccess(serviceId, true);

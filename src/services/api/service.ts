@@ -15,7 +15,11 @@ export type ServiceStatus =
   | 'STOPPED'
   | 'DEGRADED'
   | 'EXITED'
-  | 'UNKNOWN';
+  | 'UNKNOWN'
+  | 'SUSPENDED';
+
+/** Actions accepted by POST /services/:id/control. */
+export type ServiceControlAction = 'start' | 'stop' | 'restart' | 'suspend' | 'resume';
 
 export type BuildPack =
   | 'NIXPACKS'
@@ -47,6 +51,8 @@ export interface ServiceListItem {
   fqdn: string | null;
   serverId: string | null;
   databaseEngine: DatabaseEngine | null;
+  /** Set while the service is intentionally scaled to zero. */
+  suspendedAt: string | null;
   createdAt: string;
   _count: { deployments: number; environmentVars: number; persistentVolumes: number };
 }
@@ -201,8 +207,8 @@ export function deployService(serviceId: string, input: { force?: boolean; resta
   return unwrap<{ id: string }>(api.post(`/services/${serviceId}/deploy`, input));
 }
 
-export function controlService(serviceId: string, action: 'start' | 'stop' | 'restart') {
-  return unwrap<{ queued: true; action: typeof action; status: ServiceStatus }>(
+export function controlService(serviceId: string, action: ServiceControlAction) {
+  return unwrap<{ queued: boolean; action: ServiceControlAction; status: ServiceStatus }>(
     api.post(`/services/${serviceId}/control`, { action }),
   );
 }
