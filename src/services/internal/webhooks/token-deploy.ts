@@ -9,6 +9,7 @@ import {
 import { setAuditActor } from '@/services/internal/audit/context';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 import { BillingService } from '@/services/internal/billing/billing';
+import { SUSPENDED_REASON } from '@/services/internal/service/suspension';
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -96,6 +97,10 @@ export async function handleTokenDeployWebhook(opts: {
   }
 
   const svc = webhook.service;
+
+  if (svc.suspendedAt) {
+    return { triggered: false, reason: SUSPENDED_REASON };
+  }
 
   if (svc.settings && svc.settings.isAutoDeployEnabled === false) {
     return { triggered: false, reason: 'auto-deploy disabled' };
