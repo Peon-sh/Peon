@@ -303,7 +303,12 @@ function OverviewTab({
   const productionDeployment =
     deployments?.find((d) => !d.isPreview && d.status === 'FINISHED') ?? null;
   const hasDeployment = !!productionDeployment;
-  const isSuspended = svc.status === 'SUSPENDED' || !!svc.suspendedAt;
+  // Status alone, not suspendedAt: the API reconciles status to SUSPENDED exactly
+  // when suspendedAt is set, and the optimistic cache patch after a control
+  // action only updates status. Reading suspendedAt here would keep the
+  // suspended UI on screen until the refetch lands, and a second Resume click
+  // would 409. suspendedAt is still used below for the "suspended since" label.
+  const isSuspended = svc.status === 'SUSPENDED';
   const isRunning = !isSuspended && ['RUNNING', 'STARTING'].includes(svc.status);
 
   const domains = (svc.fqdn ?? '')
