@@ -150,6 +150,8 @@ export const AuthService = {
     const info = await verifyGoogleToken(accessToken);
     const normalized = normalizeGoogleUser(info);
     if (!normalized.email) throw new AppError('Google account has no email.');
+    // Accounts below are matched by email, so an unverified address cannot reach them.
+    if (!normalized.verified) throw new UnauthorizedError('Google account email is not verified');
 
     let user =
       (normalized.googleId ? await getUserByGoogleId(normalized.googleId) : null) ??

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { NotFoundError } from '@/lib/errors';
 import { sshPool, sshTargetForServer, type SshTarget } from '@/lib/ssh';
@@ -50,6 +51,11 @@ import {
   type ServiceControlAction,
 } from '@/services/internal/deploy/status';
 import { promoteServerAfterSlotFreed } from '@/services/internal/deploy/server-queue';
+import {
+  releaseDeployLease,
+  startDeployLeaseHeartbeat,
+  tryAcquireDeployLease,
+} from '@/services/internal/deploy/lease';
 import { notifyPreviewDeployOutcome } from '@/services/internal/deploy/preview';
 import {
   buildEnvMap,
@@ -345,7 +351,7 @@ async function waitUntilReady(
       inspect: async () => {
         const res = await sshPool.exec(
           target,
-          `docker inspect --format='${CONTAINER_INSPECT_FORMAT}' ${container}`,
+          `docker inspect --format='${CONTAINER_INSPECT_FORMAT}' ${shellSingleQuote(container)}`,
         );
         if (res.code !== 0) {
           throw new Error(`Container "${container}" not found after start.`);
@@ -367,7 +373,9 @@ async function waitUntilReady(
     log('----------------------------------------');
     log('Container logs:');
     await sshPool
-      .execStream(target, `docker logs -n 100 ${container} 2>&1 || true`, (c) => log(c.trimEnd()))
+      .execStream(target, `docker logs -n 100 ${shellSingleQuote(container)} 2>&1 || true`, (c) =>
+        log(c.trimEnd()),
+      )
       .catch(() => undefined);
     log('----------------------------------------');
     if (err instanceof Error && err.message === 'Deployment cancelled') {
@@ -452,28 +460,41 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     return;
   }
 
+  // SQS redelivers after VisibilityTimeout unless the worker heartbeats.
+  // A second worker must not run the same IN_PROGRESS row in parallel.
+  const leaseOwner = randomUUID();
+  if (!(await tryAcquireDeployLease(deploymentId, leaseOwner))) {
+    await logger.info('Another worker is already running this deployment; skipping duplicate.');
+    return;
+  }
+  const leaseHeartbeat = startDeployLeaseHeartbeat(deploymentId, leaseOwner, (m) => {
+    void logger.info(m);
+  });
+
   const isPreview = deployment.isPreview && deployment.pullRequestId != null;
-  const preview = isPreview
-    ? await prisma.servicePreview.findUnique({
+  let preview: Awaited<ReturnType<typeof prisma.servicePreview.findUnique>> = null;
+
+  try {
+    if (isPreview) {
+      preview = await prisma.servicePreview.findUnique({
         where: {
           serviceId_pullRequestId: {
             serviceId: svc.id,
             pullRequestId: deployment.pullRequestId!,
           },
         },
-      })
-    : null;
+      });
+    }
 
-  if (!isPreview) {
-    await prisma.service.update({ where: { id: svc.id }, data: { status: 'STARTING' } });
-  } else if (preview) {
-    await prisma.servicePreview.update({
-      where: { id: preview.id },
-      data: { status: 'STARTING' },
-    });
-  }
+    if (!isPreview) {
+      await prisma.service.update({ where: { id: svc.id }, data: { status: 'STARTING' } });
+    } else if (preview) {
+      await prisma.servicePreview.update({
+        where: { id: preview.id },
+        data: { status: 'STARTING' },
+      });
+    }
 
-  try {
     await assertNotCancelled(deploymentId);
 
     const target = await sshTargetForServer(svc.serverId);
@@ -804,7 +825,17 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       where: { id: deploymentId, status: 'IN_PROGRESS' },
       data: { status: 'FINISHED', finishedAt: new Date() },
     });
-    if (finished.count === 0) throw new DeploymentCancelledError();
+    if (finished.count === 0) {
+      const row = await prisma.deployment.findUnique({
+        where: { id: deploymentId },
+        select: { status: true },
+      });
+      if (row?.status === 'CANCELLED') throw new DeploymentCancelledError();
+      await logger.info(
+        `Not marking finished; deployment is already ${row?.status ?? 'missing'}.`,
+      );
+      return;
+    }
 
     if (isPreview && deployment.pullRequestId != null) {
       try {
@@ -916,6 +947,8 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
     throw err;
   } finally {
+    leaseHeartbeat.stop();
+    await releaseDeployLease(deploymentId, leaseOwner);
     await promoteServerAfterSlotFreed(svc.serverId);
   }
 }

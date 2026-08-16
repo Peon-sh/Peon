@@ -478,7 +478,7 @@ model GithubApp {
   customUser     String          @default("git")
   customPort     Int             @default(22)
   appId          String?
-  installationId String?         @unique
+  installationId String?
   clientId       String?
   clientSecret   String? // encrypted
   webhookSecret  String? // encrypted
@@ -495,8 +495,10 @@ model GithubApp {
   privateKey PrivateKey? @relation(fields: [privateKeyId], references: [id])
   services   Service[]
 
+  @@unique([workspaceId, installationId])
   @@index([workspaceId])
   @@index([appId])
+  @@index([installationId])
 }
 
 model GitlabApp {
@@ -815,6 +817,10 @@ model Deployment {
   startedAt   DateTime?
   finishedAt  DateTime?
   createdAt   DateTime         @default(now())
+  /// Worker that currently holds the in-progress lease (SQS redelivery guard).
+  leaseOwner  String?
+  /// Lease expiry; another worker may take over only after this instant.
+  leaseUntil  DateTime?
 
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 

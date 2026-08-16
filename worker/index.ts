@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { serverEnv } from '../src/lib/env';
-import { receiveMessages, deleteMessage } from '../src/lib/queue/sqs';
+import { receiveMessages, deleteMessage, withVisibilityHeartbeat } from '../src/lib/queue/sqs';
 import type { QueueMessage, QueueName } from '../src/lib/queue/messages';
 import { dispatch, loadHandlers } from './handlers';
 import { NotFoundError } from '../src/lib/errors';
@@ -27,8 +27,17 @@ async function handleMessage(name: QueueName, raw: Message): Promise<void> {
 
   const log = (m: string) => console.log(`[worker:${name}:${parsed.type}] ${m}`);
   try {
-    await dispatch(parsed, { log });
-    await deleteMessage(name, raw.ReceiptHandle);
+    await withVisibilityHeartbeat(
+      name,
+      raw.ReceiptHandle,
+      () => dispatch(parsed, { log }),
+      (m) => console.warn(`[worker:${name}:${parsed.type}] ${m}`),
+    );
+    try {
+      await deleteMessage(name, raw.ReceiptHandle);
+    } catch (err) {
+      log(`delete failed: ${err instanceof Error ? err.message : err}`);
+    }
     log('done');
   } catch (err) {
     console.error(`[worker:${name}:${parsed.type}] failed:`, err instanceof Error ? err.message : err);
