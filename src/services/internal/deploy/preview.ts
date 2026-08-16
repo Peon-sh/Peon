@@ -20,6 +20,7 @@ import {
   ServerDeployQueueFullError,
 } from '@/services/internal/deploy/server-queue';
 import { BillingService } from '@/services/internal/billing/billing';
+import { SUSPENDED_REASON } from '@/services/internal/service/suspension';
 import { sshPool, sshTargetForServer } from '@/lib/ssh';
 import type { GithubAppForAuth } from '@/lib/github/app';
 
@@ -231,6 +232,16 @@ export async function handlePreviewPullRequest(opts: {
       await teardownPreview(svc, pr.pullRequestId, pr);
       continue;
     }
+    // A suspended service is intentionally scaled to zero. Tearing down an
+    // existing preview above is still allowed (it frees resources); starting a
+    // new one is not.
+    if (svc.suspendedAt) {
+      skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: SUSPENDED_REASON });
+      continue;
+    }
+    // A suspended service is intentionally scaled to zero. Tearing down an
+    // existing preview above is still allowed (it frees resources); starting a
+    // new one is not.
     if (!deployActions.has(pr.action ?? '')) {
       skipped.push({
         serviceId: svc.id,

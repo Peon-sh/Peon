@@ -436,6 +436,19 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     await logger.info('Deployment was cancelled before start.');
     return;
   }
+  // Desired state can flip between queueing and running: a deployment waiting on
+  // a server slot must not deploy a service that was suspended in the meantime.
+  // The creation-time guards cannot cover this, so re-check here.
+  if (svc.suspendedAt) {
+    await logger.info('Service is suspended; skipping deployment. Resume the service to deploy.');
+    await prisma.deployment.updateMany({
+      where: { id: deploymentId, status: { in: ['QUEUED', 'IN_PROGRESS'] } },
+      data: { status: 'CANCELLED', finishedAt: new Date() },
+    });
+    // Release the server-queue slot this deployment may already hold.
+    await promoteServerAfterSlotFreed(svc.serverId);
+    return;
+  }
   if (deployment.status === 'QUEUED') {
     const claimed = await prisma.deployment.updateMany({
       where: { id: deploymentId, status: 'QUEUED' },
