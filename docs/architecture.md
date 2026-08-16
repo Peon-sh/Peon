@@ -433,8 +433,14 @@ A suspended service (`Service.suspendedAt`) must not be brought back up by anyth
 | `ServiceModule.deploy` / `rollback` / `control` | `409 Conflict` |
 | GitHub App push (`webhooks/github-app.ts`) | skipped with reason `service suspended` |
 | Token deploy webhook (`webhooks/token-deploy.ts`) | `{ triggered: false }` |
+| PR preview (`deploy/preview.ts`) | skipped; teardown on PR close is still allowed |
 | Cron scheduler (`worker/scheduler.ts`) | tasks and backups filtered to live services |
+| `runDeployment` entry (`deploy/engine.ts`) | cancels and releases the server slot |
 | Host reboot | no guard needed — compose renders `restart: unless-stopped` |
+
+The first four guards sit at `Deployment` creation time. `runDeployment` re-checks on entry
+because desired state can flip while a deployment waits for a server-queue slot, which is the
+one window the creation-time guards cannot cover.
 
 `controlService` maps `suspend` to `docker compose stop` and `resume` to `docker compose up -d`. `up -d` rather than `start` is deliberate: `server.cleanup` runs `docker container prune -f`, which removes stopped containers, so a suspended container may no longer exist. If the image was pruned too, the engine raises `ResumeFailedError` and the worker falls back to a forced rebuild.
 
