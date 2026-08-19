@@ -1,5 +1,10 @@
 import { api, unwrap } from '@/lib/http/axios';
 
+import type { ServiceControlAction } from '@/lib/service-control';
+
+/** Re-exported so UI code can keep importing service types from one module. */
+export type { ServiceControlAction };
+
 export type ServiceKind =
   | 'GIT_APP'
   | 'DOCKERFILE'
@@ -17,9 +22,6 @@ export type ServiceStatus =
   | 'EXITED'
   | 'UNKNOWN'
   | 'SUSPENDED';
-
-/** Actions accepted by POST /services/:id/control. */
-export type ServiceControlAction = 'start' | 'stop' | 'restart' | 'suspend' | 'resume';
 
 export type BuildPack =
   | 'NIXPACKS'

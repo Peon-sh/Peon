@@ -13,7 +13,7 @@ import {
   findServicesForPullRequest,
   handlePreviewPullRequest,
 } from '@/services/internal/deploy/preview';
-import { SUSPENDED_REASON } from '@/services/internal/service/suspension';
+import { isSuspended, SUSPENDED_REASON } from '@/services/internal/service/suspension';
 import {
   assertServerCanAcceptQueuedDeployment,
   scheduleQueuedDeployment,
@@ -222,7 +222,7 @@ async function handlePushEvent(opts: {
   const skipped: NonNullable<GithubAppWebhookResult['skipped']> = [];
 
   for (const svc of services) {
-    if (svc.suspendedAt) {
+    if (isSuspended(svc)) {
       skipped.push({ serviceId: svc.id, serviceName: svc.name, reason: SUSPENDED_REASON });
       continue;
     }

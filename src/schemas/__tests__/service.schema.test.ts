@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
+import { SERVICE_CONTROL_ACTIONS } from '@/lib/service-control';
 import { controlSchema } from '../service.schema';
 
 describe('controlSchema', () => {
-  it('accepts the container lifecycle actions', () => {
-    for (const action of ['start', 'stop', 'restart'] as const) {
+  // Driven off the shared list so an action added there is validated here too.
+  it('accepts every shared control action', () => {
+    for (const action of SERVICE_CONTROL_ACTIONS) {
       expect(controlSchema.parse({ action }).action).toBe(action);
     }
   });
 
-  it('accepts suspend and resume', () => {
-    expect(controlSchema.parse({ action: 'suspend' }).action).toBe('suspend');
-    expect(controlSchema.parse({ action: 'resume' }).action).toBe('resume');
+  it('covers the container lifecycle plus suspend and resume', () => {
+    expect([...SERVICE_CONTROL_ACTIONS]).toEqual([
+      'start',
+      'stop',
+      'restart',
+      'suspend',
+      'resume',
+    ]);
   });
 
   it('rejects an unknown action', () => {

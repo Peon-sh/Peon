@@ -6,6 +6,7 @@ import { createServiceSchema, updateServiceSchema } from '@/schemas/service.sche
 import { buildCatalogFromLegacy } from '@/lib/mcp/catalog/legacy';
 import type { CatalogTool } from '@/lib/mcp/catalog/types';
 import { json, safe, type McpContext } from '@/lib/mcp/helpers';
+import { SERVICE_CONTROL_ACTIONS } from '@/lib/service-control';
 import type { McpAccess } from '@/lib/mcp/access';
 
 export function registerServiceTools(server: McpServer, ctx: McpContext, access: McpAccess) {
@@ -146,9 +147,7 @@ export function registerServiceTools(server: McpServer, ctx: McpContext, access:
       + 'Requires manage access to the project.',
     {
       serviceId: z.string().describe('The service ID'),
-      action: z
-        .enum(['start', 'stop', 'restart', 'suspend', 'resume'])
-        .describe('Container action'),
+      action: z.enum(SERVICE_CONTROL_ACTIONS).describe('Container action'),
     },
     safe(async ({ serviceId, action }) => {
       await serviceAccess(serviceId, true);

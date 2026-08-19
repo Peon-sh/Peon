@@ -1,4 +1,5 @@
 import type { DeploymentStatus, ServiceStatus } from '@/lib/prisma';
+import type { ServiceControlAction } from '@/lib/service-control';
 
 /** Thrown when a deployment is cancelled mid-run; must not be recorded as FAILED. */
 export class DeploymentCancelledError extends Error {
@@ -19,9 +20,6 @@ export class ResumeFailedError extends Error {
     this.name = 'ResumeFailedError';
   }
 }
-
-/** Actions accepted by the service control endpoint and the `service.control` job. */
-export type ServiceControlAction = 'start' | 'stop' | 'restart' | 'suspend' | 'resume';
 
 /** Status to persist once the worker has applied a control action on the host. */
 export function statusAfterControl(action: ServiceControlAction): ServiceStatus {

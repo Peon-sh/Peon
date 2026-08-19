@@ -9,7 +9,7 @@ import {
 import { setAuditActor } from '@/services/internal/audit/context';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 import { BillingService } from '@/services/internal/billing/billing';
-import { SUSPENDED_REASON } from '@/services/internal/service/suspension';
+import { isSuspended, SUSPENDED_REASON } from '@/services/internal/service/suspension';
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
@@ -98,7 +98,7 @@ export async function handleTokenDeployWebhook(opts: {
 
   const svc = webhook.service;
 
-  if (svc.suspendedAt) {
+  if (isSuspended(svc)) {
     return { triggered: false, reason: SUSPENDED_REASON };
   }
 

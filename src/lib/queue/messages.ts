@@ -1,5 +1,7 @@
 /** Message contracts exchanged between the app (producer) and worker (consumer). */
 
+import type { ServiceControlAction } from '@/lib/service-control';
+
 export interface DeployJob {
   type: 'deploy';
   deploymentId: string;
@@ -28,7 +30,7 @@ export interface ServiceControlJob {
   type: 'service.control';
   serviceId: string;
   /** `suspend`/`resume` also flip the durable Service.suspendedAt desired state. */
-  action: 'start' | 'stop' | 'restart' | 'suspend' | 'resume';
+  action: ServiceControlAction;
 }
 
 export interface DatabaseProvisionJob {

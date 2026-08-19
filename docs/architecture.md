@@ -442,7 +442,17 @@ The first four guards sit at `Deployment` creation time. `runDeployment` re-chec
 because desired state can flip while a deployment waits for a server-queue slot, which is the
 one window the creation-time guards cannot cover.
 
-`controlService` maps `suspend` to `docker compose stop` and `resume` to `docker compose up -d`. `up -d` rather than `start` is deliberate: `server.cleanup` runs `docker container prune -f`, which removes stopped containers, so a suspended container may no longer exist. If the image was pruned too, the engine raises `ResumeFailedError` and the worker falls back to a forced rebuild.
+Every one of those paths reads `Service.suspendedAt` through `service/suspension.ts` rather than
+inline: `assertNotSuspended(svc, activity)` for the paths that answer a user (one `409` wording),
+`isSuspended(svc)` plus `SUSPENDED_REASON` for the paths that skip silently. The guards take the
+already-loaded service, so consolidating them costs no extra query.
+
+`controlService` maps `suspend` to `docker compose stop` and `resume` to `docker compose up -d`. `up -d` rather than `start` is deliberate: `server.cleanup` runs `docker container prune -f`, which removes stopped containers, so a suspended container may no longer exist. If the image was pruned too, the engine raises `ResumeFailedError` and the worker falls back to a forced rebuild — recorded as a `service.resume_rebuild` audit entry so the user can see why a build started from a Resume click.
+
+The set of control actions itself lives in `src/lib/service-control.ts` (`SERVICE_CONTROL_ACTIONS`
+plus the `ServiceControlAction` type). The request schema, the MCP tool enum, the queue message,
+the engine, and the API client all derive from it, so a new action cannot reach one layer and miss
+another.
 
 ### Engine responsibilities (`src/services/internal/deploy/engine.ts`)
 

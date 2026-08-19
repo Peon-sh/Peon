@@ -48,9 +48,10 @@ import {
   statusAfterCancelledDeploy,
   statusAfterControl,
   statusAfterFailedDeploy,
-  type ServiceControlAction,
 } from '@/services/internal/deploy/status';
+import type { ServiceControlAction } from '@/lib/service-control';
 import { promoteServerAfterSlotFreed } from '@/services/internal/deploy/server-queue';
+import { isSuspended } from '@/services/internal/service/suspension';
 import {
   releaseDeployLease,
   startDeployLeaseHeartbeat,
@@ -439,7 +440,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   // Desired state can flip between queueing and running: a deployment waiting on
   // a server slot must not deploy a service that was suspended in the meantime.
   // The creation-time guards cannot cover this, so re-check here.
-  if (svc.suspendedAt) {
+  if (isSuspended(svc)) {
     await logger.info('Service is suspended; skipping deployment. Resume the service to deploy.');
     await prisma.deployment.updateMany({
       where: { id: deploymentId, status: { in: ['QUEUED', 'IN_PROGRESS'] } },

@@ -4,16 +4,15 @@ import { enqueue } from '@/lib/queue/sqs';
 import { NotFoundError, AppError, ConflictError } from '@/lib/errors';
 import { buildPreviewFqdn } from '@/lib/deploy/preview-fqdn';
 import { appendDeploymentLog, type LogLine } from '@/services/internal/deploy/logs';
-import {
-  isCancellableStatus,
-  type ServiceControlAction,
-} from '@/services/internal/deploy/status';
+import { isCancellableStatus } from '@/services/internal/deploy/status';
+import type { ServiceControlAction } from '@/lib/service-control';
 import {
   assertServerCanAcceptQueuedDeployment,
   promoteServerAfterSlotFreed,
   scheduleQueuedDeployment,
 } from '@/services/internal/deploy/server-queue';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
+import { assertNotSuspended, isSuspended } from '@/services/internal/service/suspension';
 
 async function wildcardDomainForService(serviceId: string): Promise<string | null> {
   const svc = await prisma.service.findUnique({
@@ -77,9 +76,7 @@ export async function deploy(
 ) {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc) throw new NotFoundError('Service not found.');
-  if (svc.suspendedAt) {
-    throw new ConflictError('Service is suspended. Resume it before deploying.');
-  }
+  assertNotSuspended(svc, 'deploying');
 
   if (svc.serverId) {
     await assertServerCanAcceptQueuedDeployment(svc.serverId);
@@ -138,9 +135,9 @@ export async function control(serviceId: string, action: ServiceControlAction) {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc) throw new NotFoundError('Service not found.');
 
-  const suspended = svc.suspendedAt != null;
-  if (suspended && action !== 'suspend' && action !== 'resume') {
-    throw new ConflictError('Service is suspended. Resume it first.');
+  const suspended = isSuspended(svc);
+  if (action !== 'suspend' && action !== 'resume') {
+    assertNotSuspended(svc, `you can ${action} it`);
   }
   // Idempotent so a double-click cannot re-stamp suspendedAt.
   if (suspended && action === 'suspend') {
@@ -180,9 +177,7 @@ export async function rollback(serviceId: string, deploymentId: string, userId: 
 
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc) throw new NotFoundError('Service not found.');
-  if (svc.suspendedAt) {
-    throw new ConflictError('Service is suspended. Resume it before rolling back.');
-  }
+  assertNotSuspended(svc, 'rolling back');
 
   if (svc.serverId) {
     await assertServerCanAcceptQueuedDeployment(svc.serverId);

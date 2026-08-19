@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import type { DeploymentStatus, ServiceStatus } from '@/lib/prisma';
 import { reconcileServiceStatus } from '@/services/internal/deploy/status';
+import { isSuspended } from '@/services/internal/service/suspension';
 
 export type DeployHint = {
   latestNonPreviewStatus: DeploymentStatus | null;
@@ -40,14 +41,14 @@ export async function deploymentHintsForServices(
 export function applyReconciledStatus<
   T extends { id: string; status: ServiceStatus; suspendedAt?: Date | null },
 >(service: T, hint: DeployHint | undefined): T {
-  const isSuspended = service.suspendedAt != null;
+  const suspended = isSuspended(service);
   // A suspended service still reconciles even without deployment hints.
-  if (!hint && !isSuspended) return service;
+  if (!hint && !suspended) return service;
   const status = reconcileServiceStatus(service.status, {
     latestNonPreviewStatus: hint?.latestNonPreviewStatus ?? null,
     hasFinishedProduction: hint?.hasFinishedProduction ?? false,
     hasActiveDeploy: hint?.hasActiveDeploy ?? false,
-    isSuspended,
+    isSuspended: suspended,
   });
   return status === service.status ? service : { ...service, status };
 }

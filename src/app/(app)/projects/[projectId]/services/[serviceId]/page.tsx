@@ -192,7 +192,17 @@ function ServiceDetail_({ params }: { params: Promise<{ projectId: string; servi
         status: res.status,
       });
       await invalidate();
-      toast.success(`${action} queued`);
+      // Resume can end up rebuilding instead of just starting the containers
+      // (docker cleanup prunes stopped containers and unused images), so say so
+      // up front rather than letting an unexplained build appear.
+      if (action === 'resume') {
+        toast.success('resume queued', {
+          description:
+            'If the image was cleaned up while suspended, Peon rebuilds the service automatically.',
+        });
+      } else {
+        toast.success(`${action} queued`);
+      }
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
@@ -339,6 +349,8 @@ function OverviewTab({
             <span>
               Containers are stopped. Deploys, git webhooks, scheduled tasks, and backups stay
               paused until you resume. Domains, environment variables, and volumes are kept.
+              Resuming starts the containers again, or rebuilds the service if its image was
+              cleaned up in the meantime.
               {svc.suspendedAt && (
                 <>
                   {' '}

@@ -418,6 +418,23 @@ Suspend stops a service's containers and keeps them stopped. Use it for staging
 or demo services you don't want running 24/7 — it frees the server's CPU and RAM
 without losing any configuration.
 
+**Stop vs Suspend** — both stop the containers; they differ in what is allowed to
+start them again:
+
+| | **Stop** | **Suspend** |
+|---|---|---|
+| Containers | Stopped | Stopped |
+| Next git push | Deploys and starts the service again | Ignored until you resume |
+| Manual deploy / rollback | Allowed | Refused (409) |
+| Scheduled tasks and backups | Keep firing | Paused |
+| Server reboot | Containers stay down | Containers stay down |
+| Back up via | **Start**, a deploy, or a git push | **Resume** only |
+| Status shown | `stopped` | `suspended` |
+
+Use **Stop** for a short pause you expect a deploy or push to undo. Use **Suspend**
+when the service should stay down until you deliberately bring it back — an idle
+staging stack, a finished demo, a template service nobody is using yet.
+
 **What suspension pauses:**
 
 - Manual deploys, force rebuilds, and rollbacks are refused until you resume
@@ -435,7 +452,10 @@ stay down until you press **Resume**.
 
 **Resume** starts the containers again. If the server ran a Docker cleanup while
 the service was suspended, the old image may have been pruned; Peon detects that
-and automatically queues a full rebuild instead of failing.
+and automatically queues a full rebuild instead of failing. Resume therefore
+sometimes takes as long as a deploy: the confirmation toast says so, the rebuild
+shows up under **Deployments**, and **Settings → Audit log** records it as
+`service.resume_rebuild` with the reason.
 
 **Note:** suspending does not free disk space (images and volumes are kept) and
 does not change your plan's service count.
