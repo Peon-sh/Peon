@@ -36,13 +36,6 @@ export function createSharedVariable(workspaceId: string, input: CreateSharedVar
   return unwrap(api.post(`/workspaces/${workspaceId}/shared-variables`, input));
 }
 
-export function updateSharedVariable(
-  variableId: string,
-  input: Partial<Pick<CreateSharedVariablePayload, 'key' | 'value' | 'comment' | 'isMultiline' | 'isLiteral'>>,
-) {
-  return unwrap(api.patch(`/shared-variables/${variableId}`, input));
-}
-
 export function deleteSharedVariable(variableId: string) {
   return unwrap(api.delete(`/shared-variables/${variableId}`));
 }

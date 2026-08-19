@@ -36,10 +36,6 @@ export function createPrivateKey(workspaceId: string, input: CreatePrivateKeyPay
   return unwrap<PrivateKeyDetail>(api.post(`/workspaces/${workspaceId}/private-keys`, input));
 }
 
-export function getPrivateKey(keyId: string) {
-  return unwrap<PrivateKeyDetail>(api.get(`/private-keys/${keyId}`));
-}
-
 export function deletePrivateKey(keyId: string) {
   return unwrap(api.delete(`/private-keys/${keyId}`));
 }
