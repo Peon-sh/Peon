@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { decrypt, encrypt } from '@/lib/crypto/encryption';
 import { NotFoundError } from '@/lib/errors';
+import { assertSafeS3Endpoint } from '@/lib/net/egress';
 import type { CreateStorageInput, UpdateStorageInput } from '@/schemas/storages.schema';
 import { AuditService } from '@/services/internal/audit/audit';
 
@@ -32,6 +33,7 @@ export const StorageService = {
   },
 
   async create(workspaceId: string, input: CreateStorageInput) {
+    await assertSafeS3Endpoint(input.endpoint);
     const { accessKey, secretKey, ...rest } = input;
     const storage = await prisma.s3Storage.create({
       data: {
@@ -81,6 +83,7 @@ export const StorageService = {
   },
 
   async update(storageId: string, input: UpdateStorageInput) {
+    if (input.endpoint !== undefined) await assertSafeS3Endpoint(input.endpoint);
     const { accessKey, secretKey, ...rest } = input;
     const storage = await prisma.s3Storage.update({
       where: { id: storageId },

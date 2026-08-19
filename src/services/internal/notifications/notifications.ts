@@ -3,6 +3,7 @@ import { encrypt, decrypt } from '@/lib/crypto/encryption';
 import { enqueueEmail } from '@/lib/email/enqueue';
 import { notificationEmailTemplate } from '@/lib/email/templates/notification';
 import { NotFoundError, ValidationError } from '@/lib/errors';
+import { assertSafeEgressUrl } from '@/lib/net/egress';
 import type { NotificationChannelType } from '@/lib/prisma';
 import type { UpsertChannelInput } from '@/schemas/notifications.schema';
 import {
@@ -92,6 +93,26 @@ function decryptConfig(channel: NotificationChannelType, config: ConfigRecord): 
   return out;
 }
 
+async function assertChannelEgress(channel: NotificationChannelType, config: ConfigRecord) {
+  const raw =
+    channel === 'DISCORD' || channel === 'SLACK'
+      ? config.webhookUrl
+      : channel === 'WEBHOOK'
+        ? config.url
+        : null;
+  if (typeof raw !== 'string' || !raw.trim()) return;
+  const label =
+    channel === 'DISCORD'
+      ? 'Discord webhook URL'
+      : channel === 'SLACK'
+        ? 'Slack webhook URL'
+        : 'Webhook URL';
+  await assertSafeEgressUrl(raw.trim(), {
+    allowHttp: true,
+    label,
+  });
+}
+
 export const NotificationService = {
   async list(workspaceId: string) {
     const channels = await prisma.notificationChannel.findMany({
@@ -115,6 +136,7 @@ export const NotificationService = {
       input.config as ConfigRecord,
       (existing?.config as ConfigRecord) ?? null,
     );
+    await assertChannelEgress(input.channel, decryptConfig(input.channel, config));
     const saved = await prisma.notificationChannel.upsert({
       where: { workspaceId_channel: { workspaceId, channel: input.channel } },
       create: {
@@ -235,14 +257,16 @@ async function sendToChannel(
       return;
     }
     case 'DISCORD': {
-      const url = String(config.webhookUrl ?? '');
+      const url = String(config.webhookUrl ?? '').trim();
       if (!url) throw new ValidationError('No Discord webhook URL configured.');
+      await assertChannelEgress('DISCORD', config);
       await postJson(url, buildDiscordPayload(message));
       return;
     }
     case 'SLACK': {
-      const url = String(config.webhookUrl ?? '');
+      const url = String(config.webhookUrl ?? '').trim();
       if (!url) throw new ValidationError('No Slack webhook URL configured.');
+      await assertChannelEgress('SLACK', config);
       await postJson(url, buildSlackPayload(message));
       return;
     }
@@ -270,8 +294,9 @@ async function sendToChannel(
       return;
     }
     case 'WEBHOOK': {
-      const url = String(config.url ?? '');
+      const url = String(config.url ?? '').trim();
       if (!url) throw new ValidationError('No webhook URL configured.');
+      await assertChannelEgress('WEBHOOK', config);
       await postJson(url, {
         event: message.subject,
         message: body,

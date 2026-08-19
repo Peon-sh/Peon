@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { prisma } from '@/lib/prisma';
+import { encrypt } from '@/lib/crypto/encryption';
 import {
   createPrivateKeyFor,
   createProjectFor,
@@ -233,5 +234,52 @@ describe('service API', () => {
     expect((await http.get(`/api/deployments/${deployment.id}`)).status).toBe(200);
     expect((await http.get(`/api/deployments/${deployment.id}/preview`)).status).toBe(200);
     expect((await http.get(`/api/deployments/${crypto.randomUUID()}/preview`)).status).toBe(404);
+  });
+
+  it('rejects cross-workspace server and S3 storage bindings', async () => {
+    const { owner, workspace, service } = await setupService('DATABASE');
+    const other = await createWorkspaceFor(owner);
+    const foreignKey = await createPrivateKeyFor(other.id);
+    const foreignServer = await createServerFor(other.id, foreignKey.id);
+    const foreignStorage = await prisma.s3Storage.create({
+      data: {
+        workspaceId: other.id,
+        name: 'exfil',
+        region: 'us-east-1',
+        bucket: 'stolen',
+        accessKey: encrypt('key'),
+        secretKey: encrypt('secret'),
+      },
+    });
+
+    const moved = await http.patch(`/api/services/${service.id}`, {
+      body: { serverId: foreignServer.id, destinationId: foreignServer.destinations[0].id },
+    });
+    expect(moved.status).toBe(403);
+
+    const backup = await http.post(`/api/services/${service.id}/backups`, {
+      body: { frequency: '0 0 * * *', enabled: true, saveS3: true, s3StorageId: foreignStorage.id },
+    });
+    expect(backup.status).toBe(403);
+
+    const allowed = await http.post(`/api/workspaces/${workspace.id}/storages`, {
+      body: {
+        name: 'backups',
+        region: 'us-east-1',
+        bucket: 'peon',
+        accessKey: 'key',
+        secretKey: 'secret',
+      },
+    });
+    expect(allowed.status).toBe(201);
+    const okBackup = await http.post(`/api/services/${service.id}/backups`, {
+      body: {
+        frequency: '0 0 * * *',
+        enabled: true,
+        saveS3: true,
+        s3StorageId: allowed.body.data.id as string,
+      },
+    });
+    expect(okBackup.status).toBe(201);
   });
 });

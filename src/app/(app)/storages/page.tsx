@@ -190,6 +190,12 @@ export default function StoragesPage() {
                 onChange={(e) => set(k, e.target.value)}
                 disabled={isEditing && loadingStorageId === editingId && k === 'accessKey'}
               />
+              {k === 'endpoint' ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Leave blank for Amazon S3. For MinIO, paste its URL (for example
+                  http://192.168.1.10:9000). Localhost and cloud-metadata addresses are blocked.
+                </p>
+              ) : null}
               {isEditing && k === 'secretKey' ? (
                 <p className="text-[11px] text-muted-foreground">
                   Leave this blank unless you want to replace the stored secret key.

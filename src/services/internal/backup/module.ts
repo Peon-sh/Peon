@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { engineSpec } from '@/lib/docker/databases';
 import { enqueue } from '@/lib/queue/sqs';
 import { NotFoundError, ValidationError } from '@/lib/errors';
+import { assertStorageInWorkspace, workspaceIdForService } from '@/lib/auth/workspace-resources';
 import type { UpdateBackupInput, UpsertBackupInput } from '@/schemas/service.schema';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 
@@ -38,6 +39,7 @@ export const BackupModule = {
 
   async create(serviceId: string, input: UpsertBackupInput) {
     await this.assertBackupable(serviceId);
+    await assertStorageForService(serviceId, input.saveS3 ? input.s3StorageId : null);
     const backup = await prisma.scheduledBackup.create({
       data: {
         serviceId,
@@ -60,6 +62,7 @@ export const BackupModule = {
   async update(serviceId: string, backupId: string, input: UpdateBackupInput) {
     const backup = await prisma.scheduledBackup.findFirst({ where: { id: backupId, serviceId } });
     if (!backup) throw new NotFoundError('Backup schedule not found.');
+    await assertStorageForService(serviceId, input.s3StorageId);
     const updated = await prisma.scheduledBackup.update({
       where: { id: backupId },
       data: {
@@ -157,3 +160,12 @@ export const BackupModule = {
 };
 
 export const BackupService = BackupModule;
+
+async function assertStorageForService(
+  serviceId: string,
+  s3StorageId: string | null | undefined,
+): Promise<void> {
+  if (!s3StorageId) return;
+  const workspaceId = await workspaceIdForService(serviceId);
+  await assertStorageInWorkspace(s3StorageId, workspaceId);
+}
