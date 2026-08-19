@@ -1,15 +1,15 @@
 # Default owners for critical paths. Reviews are requested on matching PRs.
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
-*       @hironate
+*       @hironate @arpit-advant
 
-/.github/          @hironate
-/.env.example      @hironate
-/SECURITY.md       @hironate
-/scripts/          @hironate
+/.github/          @hironate @arpit-advant
+/.env.example      @hironate @arpit-advant
+/SECURITY.md       @hironate @arpit-advant
+/scripts/          @hironate @arpit-advant
 
-/src/lib/auth/     @hironate
-/src/lib/billing/  @hironate
-/src/lib/stripe/   @hironate
-/src/app/api/      @hironate
-/prisma/           @hironate
+/src/lib/auth/     @hironate @arpit-advant
+/src/lib/billing/  @hironate @arpit-advant
+/src/lib/stripe/   @hironate @arpit-advant
+/src/app/api/      @hironate @arpit-advant
+/prisma/           @hironate @arpit-advant
