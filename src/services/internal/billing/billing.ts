@@ -20,8 +20,23 @@ import {
   PEON_PRO_YEARLY_CENTS,
   yearlyDiscountPercent,
 } from '@/lib/billing/pricing';
+import {
+  extractSubscriptionPromotion,
+  mergePromotionFields,
+  SUBSCRIPTION_DISCOUNT_EXPAND,
+  subscriptionDiscountsNeedExpand,
+} from '@/lib/billing/promotion';
 
 export type BillingInterval = 'month' | 'year';
+
+async function ensureSubscriptionDiscountsExpanded(
+  stripeSub: Stripe.Subscription,
+): Promise<Stripe.Subscription> {
+  if (!subscriptionDiscountsNeedExpand(stripeSub)) return stripeSub;
+  return getStripe().subscriptions.retrieve(stripeSub.id, {
+    expand: [...SUBSCRIPTION_DISCOUNT_EXPAND],
+  });
+}
 
 async function resolvePriceId(interval: BillingInterval): Promise<string> {
   const env = serverEnv();
@@ -72,9 +87,10 @@ function nextPeriodPaidQuantity(opts: {
 
 export async function upsertSubscriptionFromStripe(
   workspaceId: string,
-  stripeSub: Stripe.Subscription,
+  stripeSubInput: Stripe.Subscription,
   customerId?: string | null,
 ) {
+  const stripeSub = await ensureSubscriptionDiscountsExpanded(stripeSubInput);
   const item = stripeSub.items.data[0];
   const customer =
     customerId ??
@@ -90,6 +106,15 @@ export async function upsertSubscriptionFromStripe(
     newQuantity,
     newPeriodEnd,
   });
+  const promotion = mergePromotionFields(
+    existing
+      ? {
+          promotionCodeEver: existing.promotionCodeEver,
+          promotionCodeAppliedAt: existing.promotionCodeAppliedAt,
+        }
+      : null,
+    extractSubscriptionPromotion(stripeSub),
+  );
 
   await prisma.subscription.upsert({
     where: { workspaceId },
@@ -106,6 +131,7 @@ export async function upsertSubscriptionFromStripe(
       cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
       currentPeriodEnd: newPeriodEnd,
       canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null,
+      ...promotion,
     },
     update: {
       stripeCustomerId: customer ?? undefined,
@@ -119,6 +145,7 @@ export async function upsertSubscriptionFromStripe(
       cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
       currentPeriodEnd: newPeriodEnd,
       canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : null,
+      ...promotion,
     },
   });
 
@@ -242,7 +269,9 @@ export const BillingService = {
     if (billingOn && sub?.stripeSubscriptionId) {
       try {
         const stripe = getStripe();
-        const stripeSub = await stripe.subscriptions.retrieve(sub.stripeSubscriptionId);
+        const stripeSub = await stripe.subscriptions.retrieve(sub.stripeSubscriptionId, {
+          expand: [...SUBSCRIPTION_DISCOUNT_EXPAND],
+        });
         await upsertSubscriptionFromStripe(workspaceId, stripeSub);
         sub = await prisma.subscription.findUnique({ where: { workspaceId } });
       } catch {
@@ -707,7 +736,9 @@ export async function handleStripeWebhookEvent(event: Stripe.Event) {
       const stripe = getStripe();
       const subId =
         typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
-      const stripeSub = await stripe.subscriptions.retrieve(subId);
+      const stripeSub = await stripe.subscriptions.retrieve(subId, {
+        expand: [...SUBSCRIPTION_DISCOUNT_EXPAND],
+      });
       await upsertSubscriptionFromStripe(workspaceId, stripeSub);
       break;
     }
@@ -736,7 +767,9 @@ export async function handleStripeWebhookEvent(event: Stripe.Event) {
       if (!subRef) break;
       const subId = typeof subRef === 'string' ? subRef : subRef.id;
       const stripe = getStripe();
-      const stripeSub = await stripe.subscriptions.retrieve(subId);
+      const stripeSub = await stripe.subscriptions.retrieve(subId, {
+        expand: [...SUBSCRIPTION_DISCOUNT_EXPAND],
+      });
       const workspaceId = stripeSub.metadata?.workspaceId;
       if (workspaceId) {
         await upsertSubscriptionFromStripe(workspaceId, stripeSub);
