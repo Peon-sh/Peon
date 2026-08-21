@@ -1,15 +1,18 @@
 import { prisma } from '@/lib/prisma';
+import type { ServiceStatus } from '@/lib/prisma';
 import { enqueue } from '@/lib/queue/sqs';
-import { NotFoundError, AppError } from '@/lib/errors';
+import { NotFoundError, AppError, ConflictError } from '@/lib/errors';
 import { buildPreviewFqdn } from '@/lib/deploy/preview-fqdn';
 import { appendDeploymentLog, type LogLine } from '@/services/internal/deploy/logs';
 import { isCancellableStatus } from '@/services/internal/deploy/status';
+import type { ServiceControlAction } from '@/lib/service-control';
 import {
   assertServerCanAcceptQueuedDeployment,
   promoteServerAfterSlotFreed,
   scheduleQueuedDeployment,
 } from '@/services/internal/deploy/server-queue';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
+import { assertNotSuspended, isSuspended } from '@/services/internal/service/suspension';
 
 async function wildcardDomainForService(serviceId: string): Promise<string | null> {
   const svc = await prisma.service.findUnique({
@@ -73,6 +76,7 @@ export async function deploy(
 ) {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc) throw new NotFoundError('Service not found.');
+  assertNotSuspended(svc, 'deploying');
 
   if (svc.serverId) {
     await assertServerCanAcceptQueuedDeployment(svc.serverId);
@@ -113,15 +117,51 @@ export async function deploy(
   return deployment;
 }
 
-export async function control(serviceId: string, action: 'start' | 'stop' | 'restart') {
+/** Status the API reports back immediately, before the worker reaches the host. */
+const INTENT_STATUS: Record<ServiceControlAction, ServiceStatus> = {
+  start: 'STARTING',
+  restart: 'STARTING',
+  resume: 'STARTING',
+  stop: 'STOPPED',
+  suspend: 'SUSPENDED',
+};
+
+const AUDIT_ACTION: Partial<Record<ServiceControlAction, string>> = {
+  suspend: 'service.suspended',
+  resume: 'service.resumed',
+};
+
+export async function control(serviceId: string, action: ServiceControlAction) {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc) throw new NotFoundError('Service not found.');
-  // Reflect intent immediately — the worker applies compose start/stop/restart async.
-  const status = action === 'stop' ? 'STOPPED' : 'STARTING';
-  await prisma.service.update({ where: { id: serviceId }, data: { status } });
+
+  const suspended = isSuspended(svc);
+  if (action !== 'suspend' && action !== 'resume') {
+    assertNotSuspended(svc, `you can ${action} it`);
+  }
+  // Idempotent so a double-click cannot re-stamp suspendedAt.
+  if (suspended && action === 'suspend') {
+    return { queued: false, action, status: 'SUSPENDED' as ServiceStatus };
+  }
+  if (!suspended && action === 'resume') {
+    throw new ConflictError('Service is not suspended.');
+  }
+
+  const status = INTENT_STATUS[action];
+  // Reflect intent immediately — the worker applies the compose command async.
+  // For suspend/resume this also persists the desired state before the job is
+  // enqueued, so a git push arriving right after already sees the guard.
+  await prisma.service.update({
+    where: { id: serviceId },
+    data: {
+      status,
+      ...(action === 'suspend' ? { suspendedAt: new Date() } : {}),
+      ...(action === 'resume' ? { suspendedAt: null } : {}),
+    },
+  });
   await enqueue({ type: 'service.control', serviceId, action });
   await recordServiceAudit(serviceId, {
-    action: 'service.control',
+    action: AUDIT_ACTION[action] ?? 'service.control',
     summary: `Queued ${action} for "${svc.name}"`,
     metadata: { controlAction: action },
   });
@@ -137,6 +177,7 @@ export async function rollback(serviceId: string, deploymentId: string, userId: 
 
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc) throw new NotFoundError('Service not found.');
+  assertNotSuspended(svc, 'rolling back');
 
   if (svc.serverId) {
     await assertServerCanAcceptQueuedDeployment(svc.serverId);
