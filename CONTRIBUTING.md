@@ -81,7 +81,7 @@ cp .env.example .env
 - Node.js 22.x
 - [pnpm](https://pnpm.io/)
 - PostgreSQL
-- AWS credentials with access to SQS (SES/S3 optional for email and assets)
+- A queue: real AWS SQS, or local ElasticMQ via Compose (SES/S3 optional for email and assets)
 - A Linux server reachable over SSH (to exercise real deployments)
 
 Fill in at least:
@@ -90,14 +90,13 @@ Fill in at least:
 - `JWT_SECRET` (`openssl rand -hex 32`)
 - `ENCRYPTION_KEY` (`openssl rand -base64 32`)
 - `SQS_DEPLOYMENT_QUEUE_URL` / `SQS_TASKS_QUEUE_URL`
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION`
+- For real AWS SQS: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` (leave `SQS_ENDPOINT` empty)
+- For local ElasticMQ: see the ElasticMQ block in `.env.example`
 
-Leave `SQS_ENDPOINT` empty to use real AWS SQS. See `.env.example` for the full list.
-
-Optional local Postgres via Compose:
+Optional local Postgres + ElasticMQ via Compose:
 
 ```bash
-docker compose --profile db up -d
+docker compose --profile db --profile sqs up -d
 ```
 
 ## Development

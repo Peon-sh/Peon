@@ -18,7 +18,7 @@ Security reports: see [SECURITY.md](./SECURITY.md).
 - One-click service templates (databases, compose stacks, and more)
 - Workspace / project tenancy with role-based access
 - Background worker for deployments, backups, and async tasks
-- Self-host with your own Postgres and AWS SQS (SES/S3 optional for email and assets)
+- Self-host with your own Postgres and AWS SQS or local ElasticMQ (SES/S3 optional for email and assets)
 
 ## Related repositories
 
@@ -32,7 +32,8 @@ Security reports: see [SECURITY.md](./SECURITY.md).
 - Node.js 20+
 - [pnpm](https://pnpm.io/)
 - PostgreSQL (run your own local container or managed instance)
-- AWS credentials with access to SQS (and SES/S3 if you use those features)
+- A queue: real AWS SQS, or local ElasticMQ via Compose (no AWS account needed)
+- SES/S3 credentials only if you use email / object storage features
 - A Linux server reachable over SSH (to exercise real deployments)
 
 ## Quick start
@@ -41,7 +42,10 @@ Security reports: see [SECURITY.md](./SECURITY.md).
 git clone https://github.com/Peon-sh/Peon.git
 cd Peon
 pnpm install
-cp .env.example .env   # set DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, AWS + SQS URLs
+cp .env.example .env   # set DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, and SQS URLs
+
+# Optional local dependencies (Postgres + ElasticMQ):
+docker compose --profile db --profile sqs up -d
 
 pnpm db:migrate
 pnpm dev               # http://localhost:3000
@@ -50,15 +54,17 @@ pnpm schedule          # cron → enqueue (exactly one instance)
 pnpm socket            # terminal WebSocket
 ```
 
-Leave `SQS_ENDPOINT` empty so the app talks to real AWS SQS. See `.env.example` for the full list of environment variables.
+For local ElasticMQ, set the SQS block in `.env` as documented in `.env.example`.
+Leave `SQS_ENDPOINT` empty to use real AWS SQS instead.
 
 ### Optional Docker Compose
 
-Compose is optional and not used for day-to-day local development. Profiles:
+Compose is optional. Profiles:
 
 ```bash
-docker compose --profile db up -d      # Postgres only, if you want it
-docker compose --profile full up -d    # containerized app + worker + schedule + socket
+docker compose --profile db up -d       # Postgres only
+docker compose --profile sqs up -d      # ElasticMQ (local SQS on :9324)
+docker compose --profile full up -d     # app + worker + schedule + socket + ElasticMQ
 ```
 
 ## Scripts

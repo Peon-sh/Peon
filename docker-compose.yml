@@ -1,14 +1,24 @@
 # Optional self-host / production-like stack for Peon.
-# Local development does NOT require this file — run Postgres yourself and use
-# real AWS SQS (leave SQS_ENDPOINT empty). App + processes run on the host:
 #
-#   pnpm dev
-#   pnpm worker     # SQS job consumer (scale freely)
-#   pnpm schedule   # cron → enqueue (run exactly one)
-#   pnpm socket     # terminal WebSocket
+# Day-to-day local development usually runs the app on the host:
 #
-# Full containerized deploy still needs DATABASE_URL and AWS credentials in
-# `.env` (SQS, SES, S3).
+#   docker compose --profile db up -d       # Postgres
+#   docker compose --profile sqs up -d      # ElasticMQ (local SQS)
+#   pnpm dev / pnpm worker / pnpm schedule / pnpm socket
+#
+# Or run the full containerized stack (app + worker + schedule + socket + SQS):
+#
+#   docker compose --profile full up -d
+#
+# Point `.env` at ElasticMQ when using the local queue (see `.env.example`),
+# or leave SQS_ENDPOINT empty to use real AWS SQS.
+
+x-local-sqs-env: &local-sqs-env
+  SQS_ENDPOINT: http://elasticmq:9324
+  SQS_DEPLOYMENT_QUEUE_URL: http://elasticmq:9324/000000000000/peon-deployments
+  SQS_TASKS_QUEUE_URL: http://elasticmq:9324/000000000000/peon-tasks
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
 
 services:
   postgres:
@@ -31,6 +41,16 @@ services:
       retries: 10
     profiles: ["db"]
 
+  elasticmq:
+    image: softwaremill/elasticmq-native
+    container_name: peon-elasticmq
+    restart: unless-stopped
+    ports:
+      - "9324:9324"
+    volumes:
+      - ./docker/elasticmq.conf:/opt/elasticmq.conf:ro
+    profiles: ["sqs", "full"]
+
   app:
     build:
       context: .
@@ -40,8 +60,12 @@ services:
     command: ["pnpm", "start"]
     env_file:
       - .env
+    environment:
+      <<: *local-sqs-env
     ports:
       - "3000:3000"
+    depends_on:
+      - elasticmq
     profiles: ["full"]
 
   worker:
@@ -53,6 +77,10 @@ services:
     command: ["node", "--import", "tsx", "worker/index.ts"]
     env_file:
       - .env
+    environment:
+      <<: *local-sqs-env
+    depends_on:
+      - elasticmq
     profiles: ["full"]
 
   schedule:
@@ -64,6 +92,10 @@ services:
     command: ["node", "--import", "tsx", "worker/schedule.ts"]
     env_file:
       - .env
+    environment:
+      <<: *local-sqs-env
+    depends_on:
+      - elasticmq
     profiles: ["full"]
 
   socket:
