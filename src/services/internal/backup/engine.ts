@@ -12,6 +12,7 @@ import { dockerExecShellCommand, shellSingleQuote } from '@/lib/shell/quote';
 import { uploadFileFromServer } from '@/services/external/s3/backup';
 import { notifyService } from '@/services/internal/notifications/events';
 import { ValidationError, NotFoundError } from '@/lib/errors';
+import { assertStorageInWorkspace, workspaceIdForService } from '@/lib/auth/workspace-resources';
 
 function assertSafeBackupFilename(filename: string): void {
   if (/[/\\]|\.\./.test(filename)) throw new ValidationError('Invalid backup filename.');
@@ -52,6 +53,10 @@ export async function runBackup(backupId: string, executionId: string): Promise<
 
     let s3Uploaded = false;
     if (backup.saveS3 && backup.s3Storage) {
+      await assertStorageInWorkspace(
+        backup.s3Storage.id,
+        await workspaceIdForService(svc.id),
+      );
       await uploadFileFromServer(target, remotePath, `backups/${svc.uuid}/${filename}`, backup.s3Storage);
       s3Uploaded = true;
     }

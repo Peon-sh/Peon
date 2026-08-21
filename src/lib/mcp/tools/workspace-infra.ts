@@ -6,7 +6,7 @@ import { StorageService } from '@/services/internal/storages/storages';
 import { TagService } from '@/services/internal/tags/tags';
 import { SharedVariableService } from '@/services/internal/shared-variables/shared-variables';
 import { NotificationService } from '@/services/internal/notifications/notifications';
-import { s3ClientFor } from '@/services/external/s3/client';
+import { s3ClientForSafe } from '@/services/external/s3/client';
 import { createPrivateKeySchema } from '@/schemas/server.schema';
 import { createStorageSchema, updateStorageSchema } from '@/schemas/storages.schema';
 import { createTagSchema } from '@/schemas/tags.schema';
@@ -158,8 +158,8 @@ export function registerWorkspaceInfraTools(
       await infra();
       await assertStorageInWorkspace(storageId);
       const storage = await StorageService.getRaw(storageId);
+      const client = await s3ClientForSafe(storage);
       try {
-        const client = s3ClientFor(storage);
         await client.send(new HeadBucketCommand({ Bucket: storage.bucket }));
         return json({ reachable: true });
       } catch (err) {

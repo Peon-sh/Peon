@@ -137,7 +137,9 @@ async function resolveAll(hostname: string, label: string): Promise<string[]> {
     if (!records.length) throw new Error('empty');
     return records.map((r) => r.address);
   } catch {
-    throw new ValidationError(`${label} host could not be resolved: ${hostname}`);
+    throw new ValidationError(
+      `${label} host could not be resolved: ${hostname}. Check the spelling and try again.`,
+    );
   }
 }
 
@@ -149,7 +151,7 @@ export async function assertSafeEgressUrl(raw: string, opts: EgressOptions = {})
   try {
     url = new URL(raw);
   } catch {
-    throw new ValidationError(`${label} is not a valid URL.`);
+    throw new ValidationError(`${label} is not a valid URL. Check for a typo or a missing https://.`);
   }
 
   const schemes = opts.allowHttp ? ['https:', 'http:'] : ['https:'];
@@ -168,10 +170,22 @@ export async function assertSafeEgressUrl(raw: string, opts: EgressOptions = {})
   for (const address of addresses) {
     if (!isAllowedEgressAddress(address)) {
       throw new ValidationError(
-        `${label} resolves to a restricted address (${address}), which is not allowed.`,
+        `${label} points to a restricted address (${address}) that Peon isn't allowed to call. Use a public URL, or a machine on your own network — not localhost or cloud metadata.`,
       );
     }
   }
 
   return url;
+}
+
+/**
+ * Custom S3-compatible endpoints are optional; when set they must be fetchable.
+ * Host-only values (`minio.example.com:9000`) are treated as https for the check
+ * so existing MinIO configs without a scheme still validate.
+ */
+export async function assertSafeS3Endpoint(endpoint: string | null | undefined): Promise<void> {
+  const trimmed = endpoint?.trim();
+  if (!trimmed) return;
+  const value = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  await assertSafeEgressUrl(value, { allowHttp: true, label: 'S3 endpoint' });
 }

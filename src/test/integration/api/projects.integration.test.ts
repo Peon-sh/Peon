@@ -73,6 +73,52 @@ describe('project API', () => {
     expect(fromTemplate.body.data).toMatchObject({ kind: 'COMPOSE', templateSlug: 'actualbudget' });
   });
 
+  it('rejects attaching another workspace server to a service', async () => {
+    const owner = await createUser();
+    const workspace = await createWorkspaceFor(owner);
+    const other = await createWorkspaceFor(owner);
+    const project = await createProjectFor(workspace.id);
+    const localKey = await createPrivateKeyFor(workspace.id);
+    const localServer = await createServerFor(workspace.id, localKey.id);
+    const foreignKey = await createPrivateKeyFor(other.id);
+    const foreignServer = await createServerFor(other.id, foreignKey.id);
+    await loginAs(owner);
+
+    const created = await http.post(`/api/projects/${project.id}/services`, {
+      body: {
+        kind: 'GIT_APP',
+        name: 'hijack',
+        serverId: foreignServer.id,
+        destinationId: foreignServer.destinations[0].id,
+        gitRepository: 'https://github.com/acme/api.git',
+        gitBranch: 'main',
+      },
+    });
+    expect(created.status).toBe(403);
+
+    const fromTemplate = await http.post(`/api/projects/${project.id}/services/from-template`, {
+      body: {
+        slug: 'actualbudget',
+        name: 'Budget',
+        serverId: foreignServer.id,
+        destinationId: foreignServer.destinations[0].id,
+      },
+    });
+    expect(fromTemplate.status).toBe(403);
+
+    const sameWorkspace = await http.post(`/api/projects/${project.id}/services`, {
+      body: {
+        kind: 'GIT_APP',
+        name: 'ok',
+        serverId: localServer.id,
+        destinationId: localServer.destinations[0].id,
+        gitRepository: 'https://github.com/acme/api.git',
+        gitBranch: 'main',
+      },
+    });
+    expect(sameWorkspace.status).toBe(201);
+  });
+
   it('manages project members', async () => {
     const owner = await createUser();
     const user = await createUser();

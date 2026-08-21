@@ -1,6 +1,6 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { sshPool, type SshTarget } from '@/lib/ssh';
-import { s3ClientFor } from './client';
+import { s3ClientForSafe } from './client';
 import type { S3Storage } from '@/lib/prisma';
 
 /**
@@ -17,7 +17,7 @@ export async function uploadFileFromServer(
   if (res.code !== 0) throw new Error('Failed to read backup file for upload.');
   const body = Buffer.from(res.stdout.replace(/\s+/g, ''), 'base64');
 
-  const client = s3ClientFor(storage);
+  const client = await s3ClientForSafe(storage);
   await client.send(
     new PutObjectCommand({ Bucket: storage.bucket, Key: key, Body: body }),
   );
