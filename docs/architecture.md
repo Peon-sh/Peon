@@ -436,11 +436,14 @@ A suspended service (`Service.suspendedAt`) must not be brought back up by anyth
 | PR preview (`deploy/preview.ts`) | skipped; teardown on PR close is still allowed |
 | Cron scheduler (`worker/scheduler.ts`) | tasks and backups filtered to live services |
 | `runDeployment` entry (`deploy/engine.ts`) | cancels and releases the server slot |
+| `controlService` entry (`deploy/engine.ts`) | skips stale `start` / `restart` / `resume` if `suspendedAt` is set |
 | Host reboot | no guard needed — compose renders `restart: unless-stopped` |
 
 The first four guards sit at `Deployment` creation time. `runDeployment` re-checks on entry
-because desired state can flip while a deployment waits for a server-queue slot, which is the
-one window the creation-time guards cannot cover.
+because desired state can flip while a deployment waits for a server-queue slot.
+`controlService` re-checks the same way for queued `service.control` jobs: a later suspend
+must win over a stale start/restart/resume so containers stay down and status is not
+overwritten to `RUNNING`.
 
 Every one of those paths reads `Service.suspendedAt` through `service/suspension.ts` rather than
 inline: `assertNotSuspended(svc, activity)` for the paths that answer a user (one `409` wording),
