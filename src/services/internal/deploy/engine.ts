@@ -44,10 +44,14 @@ import { notifyService } from '@/services/internal/notifications/events';
 import { buildDeploymentMessage } from '@/services/internal/notifications/deployment-message';
 import {
   DeploymentCancelledError,
+  ResumeFailedError,
   statusAfterCancelledDeploy,
+  statusAfterControl,
   statusAfterFailedDeploy,
 } from '@/services/internal/deploy/status';
+import type { ServiceControlAction } from '@/lib/service-control';
 import { promoteServerAfterSlotFreed } from '@/services/internal/deploy/server-queue';
+import { isSuspended } from '@/services/internal/service/suspension';
 import {
   releaseDeployLease,
   startDeployLeaseHeartbeat,
@@ -431,6 +435,19 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   // Claim while QUEUED, or continue if already promoted to IN_PROGRESS (server-queue gate).
   if (deployment.status === 'CANCELLED') {
     await logger.info('Deployment was cancelled before start.');
+    return;
+  }
+  // Desired state can flip between queueing and running: a deployment waiting on
+  // a server slot must not deploy a service that was suspended in the meantime.
+  // The creation-time guards cannot cover this, so re-check here.
+  if (isSuspended(svc)) {
+    await logger.info('Service is suspended; skipping deployment. Resume the service to deploy.');
+    await prisma.deployment.updateMany({
+      where: { id: deploymentId, status: { in: ['QUEUED', 'IN_PROGRESS'] } },
+      data: { status: 'CANCELLED', finishedAt: new Date() },
+    });
+    // Release the server-queue slot this deployment may already hold.
+    await promoteServerAfterSlotFreed(svc.serverId);
     return;
   }
   if (deployment.status === 'QUEUED') {
@@ -950,22 +967,40 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   }
 }
 
-/** Start/stop/restart a deployed service via compose. */
-export async function controlService(serviceId: string, action: 'start' | 'stop' | 'restart'): Promise<void> {
+/** Compose command applied on the host for each control action. */
+function composeCommandFor(action: ServiceControlAction): string {
+  // `stop`/`suspend` both stop the containers; graceful shutdown is already
+  // honored via stop_grace_period in the rendered compose file.
+  if (action === 'stop' || action === 'suspend') return 'docker compose stop';
+  if (action === 'restart') return 'docker compose restart';
+  // `resume` deliberately uses `up -d` rather than `start`: docker cleanup runs
+  // `docker container prune -f`, which removes stopped containers, so a suspended
+  // service's container may no longer exist. `up -d` recreates it from the
+  // compose file still on disk.
+  return 'docker compose up -d';
+}
+
+/** Start/stop/restart/suspend/resume a deployed service via compose. */
+export async function controlService(
+  serviceId: string,
+  action: ServiceControlAction,
+): Promise<void> {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc || !svc.serverId) throw new Error('Service or server missing.');
   const target = await sshTargetForServer(svc.serverId);
   const dir = serviceDir(svc);
-  const cmd =
-    action === 'stop'
-      ? 'docker compose stop'
-      : action === 'restart'
-        ? 'docker compose restart'
-        : 'docker compose up -d';
-  await sshPool.exec(target, `cd ${dir} && ${cmd}`);
+  const res = await sshPool.exec(target, `cd ${dir} && ${composeCommandFor(action)}`);
+
+  // sshPool.exec resolves with an exit code instead of throwing, so a failed
+  // resume has to be detected explicitly. It usually means docker cleanup also
+  // pruned the image; the worker recovers by queueing a full rebuild.
+  if (action === 'resume' && res.code !== 0) {
+    throw new ResumeFailedError(res.stderr.trim() || res.stdout.trim() || 'compose up failed');
+  }
+
   await prisma.service.update({
     where: { id: serviceId },
-    data: { status: action === 'stop' ? 'STOPPED' : 'RUNNING' },
+    data: { status: statusAfterControl(action) },
   });
 }
 

@@ -77,6 +77,27 @@ describe('handlePreviewPullRequest head branch validation', () => {
     expect(prisma.deployment.create).not.toHaveBeenCalled();
   });
 
+  // A suspended service is scaled to zero on purpose; a PR must not start
+  // containers for it. The push path is guarded separately in the webhook
+  // handler, and previews reach the engine through this function instead.
+  it('skips a PR for a suspended service before anything is queued', async () => {
+    const suspended = [
+      { ...(service[0] as object), suspendedAt: new Date('2026-01-01T00:00:00Z') },
+    ] as unknown as Services;
+
+    const res = await handlePreviewPullRequest({
+      pr: pullRequest('feature/add-thing'),
+      services: suspended,
+    });
+
+    expect(res.deployments).toHaveLength(0);
+    expect(res.skipped).toEqual([
+      { serviceId: 'svc1', serviceName: 'app', reason: 'service suspended' },
+    ]);
+    expect(prisma.servicePreview.upsert).not.toHaveBeenCalled();
+    expect(prisma.deployment.create).not.toHaveBeenCalled();
+  });
+
   it('lets an ordinary head branch through the check', async () => {
     const res = await handlePreviewPullRequest({
       pr: pullRequest('feature/add-thing'),
