@@ -987,8 +987,20 @@ export async function controlService(
 ): Promise<void> {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc || !svc.serverId) throw new Error('Service or server missing.');
+
+  // Desired state can flip while a control job waits in the queue. A stale
+  // start/restart/resume must not bring containers back up (or overwrite
+  // status to RUNNING) after a later suspend. stop/suspend always move toward
+  // scaled-to-zero and remain safe to apply.
+  if (
+    (action === 'start' || action === 'restart' || action === 'resume') &&
+    isSuspended(svc)
+  ) {
+    return;
+  }
+
   const target = await sshTargetForServer(svc.serverId);
-  const dir = serviceDir(svc);
+  const dir = shellSingleQuote(serviceDir(svc));
   const res = await sshPool.exec(target, `cd ${dir} && ${composeCommandFor(action)}`);
 
   // sshPool.exec resolves with an exit code instead of throwing, so a failed
