@@ -118,7 +118,7 @@ Scale workers horizontally. Run a **single** scheduler. The web app can be scale
 | ORM | **Prisma 7** + `@prisma/adapter-pg` | Client generated under `src/lib/prisma/generated/client` (gitignored; `postinstall` / CI / Docker run `prisma generate`) |
 | Validation | Zod **4** | `src/schemas/*` |
 | Auth tokens | `jose` (JWT HS256), `bcryptjs` | Cookie + `AuthSession` rows |
-| Queues | AWS SQS (`@aws-sdk/client-sqs`) | Optional `SQS_ENDPOINT` for LocalStack |
+| Queues | AWS SQS (`@aws-sdk/client-sqs`) | Optional `SQS_ENDPOINT` for ElasticMQ / LocalStack |
 | Object storage | S3 | Previews, avatars, backup storage configs |
 | Email | SES or `test` driver | Worker job `email.send` |
 | AI / MCP | Vercel AI SDK + `@modelcontextprotocol/sdk` | Chat agent + hosted MCP |
