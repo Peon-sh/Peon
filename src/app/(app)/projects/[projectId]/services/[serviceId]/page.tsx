@@ -20,6 +20,7 @@ import {
   RefreshCw,
   CircleHelp,
   TriangleAlert,
+  PauseCircle,
 } from 'lucide-react';
 import { type ServiceSectionId as SectionId } from '@/lib/service-sections';
 import {
@@ -83,6 +84,7 @@ import {
   type ScheduledTaskItem,
   type ServiceConfigField,
   type ScheduledBackupItem,
+  type ServiceControlAction,
 } from '@/services/api/service';
 import { listPrivateKeys } from '@/services/api/privatekey';
 import {
@@ -182,7 +184,7 @@ function ServiceDetail_({ params }: { params: Promise<{ projectId: string; servi
   }, [deployMut.isPending, setRedeployBusy]);
 
   const controlMut = useMutation({
-    mutationFn: (action: 'start' | 'stop' | 'restart') => controlService(serviceId, action),
+    mutationFn: (action: ServiceControlAction) => controlService(serviceId, action),
     onSuccess: async (res, action) => {
       patchServiceStatusInCache(qc, {
         serviceId,
@@ -190,7 +192,17 @@ function ServiceDetail_({ params }: { params: Promise<{ projectId: string; servi
         status: res.status,
       });
       await invalidate();
-      toast.success(`${action} queued`);
+      // Resume can end up rebuilding instead of just starting the containers
+      // (docker cleanup prunes stopped containers and unused images), so say so
+      // up front rather than letting an unexplained build appear.
+      if (action === 'resume') {
+        toast.success('resume queued', {
+          description:
+            'If the image was cleaned up while suspended, Peon rebuilds the service automatically.',
+        });
+      } else {
+        toast.success(`${action} queued`);
+      }
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
@@ -289,7 +301,7 @@ function OverviewTab({
   projectId: string;
   onDeploy: () => void;
   onForceDeploy: () => void;
-  onControl: (action: 'start' | 'stop' | 'restart') => void;
+  onControl: (action: ServiceControlAction) => void;
   onOpenDeployments: () => void;
   busy: boolean;
 }) {
@@ -301,7 +313,13 @@ function OverviewTab({
   const productionDeployment =
     deployments?.find((d) => !d.isPreview && d.status === 'FINISHED') ?? null;
   const hasDeployment = !!productionDeployment;
-  const isRunning = ['RUNNING', 'STARTING'].includes(svc.status);
+  // Status alone, not suspendedAt: the API reconciles status to SUSPENDED exactly
+  // when suspendedAt is set, and the optimistic cache patch after a control
+  // action only updates status. Reading suspendedAt here would keep the
+  // suspended UI on screen until the refetch lands, and a second Resume click
+  // would 409. suspendedAt is still used below for the "suspended since" label.
+  const isSuspended = svc.status === 'SUSPENDED';
+  const isRunning = !isSuspended && ['RUNNING', 'STARTING'].includes(svc.status);
 
   const domains = (svc.fqdn ?? '')
     .split(',')
@@ -323,6 +341,34 @@ function OverviewTab({
 
   return (
     <div className="space-y-4">
+      {isSuspended && (
+        <Alert>
+          <PauseCircle className="size-4" />
+          <AlertTitle>Service suspended</AlertTitle>
+          <AlertDescription>
+            <span>
+              Containers are stopped. Deploys, git webhooks, scheduled tasks, and backups stay
+              paused until you resume. Domains, environment variables, and volumes are kept.
+              Resuming starts the containers again, or rebuilds the service if its image was
+              cleaned up in the meantime.
+              {svc.suspendedAt && (
+                <>
+                  {' '}
+                  Suspended <LocalDateTime value={svc.suspendedAt} />.
+                </>
+              )}
+            </span>
+            <Button
+              size="sm"
+              className="mt-2 w-fit"
+              onClick={() => onControl('resume')}
+              disabled={busy}
+            >
+              <Play className="size-3.5" /> Resume service
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <Panel
         title="production deployment"
         actions={
@@ -334,7 +380,11 @@ function OverviewTab({
                 </a>
               </Button>
             )}
-            {isRunning ? (
+            {isSuspended ? (
+              <Button size="sm" onClick={() => onControl('resume')} disabled={busy}>
+                <Play className="size-3.5" /> Resume
+              </Button>
+            ) : isRunning ? (
               <>
                 <Button size="sm" variant="outline" onClick={() => onControl('stop')} disabled={busy}>
                   <Square className="size-3.5" /> Stop
@@ -342,13 +392,25 @@ function OverviewTab({
                 <Button size="sm" variant="outline" onClick={() => onControl('restart')} disabled={busy}>
                   <RotateCw className="size-3.5" /> Restart
                 </Button>
+                <ConfirmButton
+                  size="sm"
+                  variant="outline"
+                  confirmVariant="default"
+                  confirmLabel="Suspend"
+                  title="Suspend this service?"
+                  description="Containers stop and stay stopped. Deploys, git webhooks, scheduled tasks, and backups are paused until you resume. Configuration, domains, and volumes are kept."
+                  onConfirm={() => onControl('suspend')}
+                  disabled={busy}
+                >
+                  <PauseCircle className="size-3.5" /> Suspend
+                </ConfirmButton>
               </>
             ) : hasDeployment ? (
               <Button size="sm" variant="outline" onClick={() => onControl('start')} disabled={busy}>
                 <Play className="size-3.5" /> Start
               </Button>
             ) : null}
-            {primaryUrl && (
+            {primaryUrl && !isSuspended && (
               <Button asChild size="sm" variant="outline">
                 <a href={primaryUrl} target="_blank" rel="noreferrer">
                   Visit <ExternalLink className="size-3" />
@@ -359,12 +421,20 @@ function OverviewTab({
               size="sm"
               variant="outline"
               onClick={onForceDeploy}
-              disabled={busy}
-              title="Clear cached source and rebuild without Docker/Nixpacks cache"
+              disabled={busy || isSuspended}
+              title={
+                isSuspended
+                  ? 'Resume the service before deploying'
+                  : 'Clear cached source and rebuild without Docker/Nixpacks cache'
+              }
             >
               <RefreshCw className="size-3.5" /> Force rebuild
             </Button>
-            <Button onClick={onDeploy} disabled={busy}>
+            <Button
+              onClick={onDeploy}
+              disabled={busy || isSuspended}
+              title={isSuspended ? 'Resume the service before deploying' : undefined}
+            >
               <Rocket className="size-4" /> {hasDeployment ? 'Redeploy' : 'Deploy now'}
             </Button>
           </div>

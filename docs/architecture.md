@@ -352,6 +352,14 @@ Kind ↔ field rules: [SERVICE_KIND_INVARIANTS.md](./SERVICE_KIND_INVARIANTS.md)
 
 `DeploymentStatus` tracks queue/run lifecycle (`QUEUED`, `IN_PROGRESS`, `FINISHED`, `FAILED`, `CANCELLED`, …). Active deploys are listed for the toast UI and concurrency accounting.
 
+### Desired state vs. observed state
+
+`Service.status` is **observed** state: `reconcileServiceStatus` (`src/services/internal/deploy/status.ts`) recomputes it from deployment history, so a `FINISHED` deploy resolves the service back to `RUNNING`.
+
+`Service.suspendedAt` is **desired** state — set when an operator scales the service to zero. Because the reconciler rewrites `status` from history, suspension cannot live in `status` alone; the reconciler checks `suspendedAt` first and returns `SUSPENDED` ahead of every other rule.
+
+The API layer writes `suspendedAt` synchronously before enqueueing the `service.control` job, so the guards below apply the moment the request returns rather than when the worker reaches the host.
+
 ---
 
 ## 10. Service layer
@@ -415,6 +423,36 @@ sequenceDiagram
   Eng->>Eng: status FINISHED / FAILED
   Eng->>Eng: notifications + optional screenshot
 ```
+
+### Suspension guards
+
+A suspended service (`Service.suspendedAt`) must not be brought back up by anything except an explicit resume. Every path that can start a deployment consults it:
+
+| Path | Behavior |
+|------|----------|
+| `ServiceModule.deploy` / `rollback` / `control` | `409 Conflict` |
+| GitHub App push (`webhooks/github-app.ts`) | skipped with reason `service suspended` |
+| Token deploy webhook (`webhooks/token-deploy.ts`) | `{ triggered: false }` |
+| PR preview (`deploy/preview.ts`) | skipped; teardown on PR close is still allowed |
+| Cron scheduler (`worker/scheduler.ts`) | tasks and backups filtered to live services |
+| `runDeployment` entry (`deploy/engine.ts`) | cancels and releases the server slot |
+| Host reboot | no guard needed — compose renders `restart: unless-stopped` |
+
+The first four guards sit at `Deployment` creation time. `runDeployment` re-checks on entry
+because desired state can flip while a deployment waits for a server-queue slot, which is the
+one window the creation-time guards cannot cover.
+
+Every one of those paths reads `Service.suspendedAt` through `service/suspension.ts` rather than
+inline: `assertNotSuspended(svc, activity)` for the paths that answer a user (one `409` wording),
+`isSuspended(svc)` plus `SUSPENDED_REASON` for the paths that skip silently. The guards take the
+already-loaded service, so consolidating them costs no extra query.
+
+`controlService` maps `suspend` to `docker compose stop` and `resume` to `docker compose up -d`. `up -d` rather than `start` is deliberate: `server.cleanup` runs `docker container prune -f`, which removes stopped containers, so a suspended container may no longer exist. If the image was pruned too, the engine raises `ResumeFailedError` and the worker falls back to a forced rebuild — recorded as a `service.resume_rebuild` audit entry so the user can see why a build started from a Resume click.
+
+The set of control actions itself lives in `src/lib/service-control.ts` (`SERVICE_CONTROL_ACTIONS`
+plus the `ServiceControlAction` type). The request schema, the MCP tool enum, the queue message,
+the engine, and the API client all derive from it, so a new action cannot reach one layer and miss
+another.
 
 ### Engine responsibilities (`src/services/internal/deploy/engine.ts`)
 

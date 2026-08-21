@@ -6,7 +6,6 @@ import {
   deleteChatThread,
   getChatThread,
   listChatThreads,
-  renameChatThread,
   updateChatThreadModel,
 } from '@/services/api/chat';
 
@@ -51,18 +50,6 @@ export function useDeleteChatThread(workspaceId: string) {
     mutationFn: (threadId: string) => deleteChatThread(threadId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: chatQueryKeys.threads(workspaceId) });
-    },
-  });
-}
-
-export function useRenameChatThread(workspaceId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ threadId, title }: { threadId: string; title: string }) =>
-      renameChatThread(threadId, title),
-    onSuccess: (_data, vars) => {
-      void qc.invalidateQueries({ queryKey: chatQueryKeys.threads(workspaceId) });
-      void qc.invalidateQueries({ queryKey: chatQueryKeys.thread(vars.threadId) });
     },
   });
 }

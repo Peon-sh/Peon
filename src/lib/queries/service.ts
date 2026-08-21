@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 import {
   getService,
   listServices,
@@ -71,10 +71,4 @@ export function useProjectServices(projectId: string | undefined) {
       return false;
     },
   });
-}
-
-/** Invalidate detail + project list after lifecycle / deploy changes. */
-export function useInvalidateServiceQueries(serviceId: string, projectId?: string | null) {
-  const qc = useQueryClient();
-  return () => invalidateServiceQueries(qc, { serviceId, projectId });
 }

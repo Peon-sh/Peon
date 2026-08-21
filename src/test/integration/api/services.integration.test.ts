@@ -80,6 +80,59 @@ describe('service API', () => {
     expect((await http.post(`${path}/rollback`, { body: { deploymentId: completed.id } })).status).toBe(201);
   });
 
+  it('suspends a service, blocks deploys while suspended, and resumes', async () => {
+    const { service } = await setupService();
+    const path = `/api/services/${service.id}`;
+
+    const suspended = await http.post(`${path}/control`, { body: { action: 'suspend' } });
+    expect(suspended.status).toBe(200);
+    expect(suspended.body.data).toMatchObject({ action: 'suspend', status: 'SUSPENDED' });
+
+    // Desired state is persisted synchronously, before the worker runs.
+    const row = await prisma.service.findUnique({ where: { id: service.id } });
+    expect(row?.suspendedAt).not.toBeNull();
+    expect(row?.status).toBe('SUSPENDED');
+    expect((await http.get(path)).body.data.status).toBe('SUSPENDED');
+
+    // Nothing may bring it back up except an explicit resume.
+    const before = await prisma.deployment.count({ where: { serviceId: service.id } });
+    expect((await http.post(`${path}/deploy`, { body: {} })).status).toBe(409);
+    expect((await http.post(`${path}/control`, { body: { action: 'start' } })).status).toBe(409);
+    expect((await http.post(`${path}/control`, { body: { action: 'restart' } })).status).toBe(409);
+    expect(await prisma.deployment.count({ where: { serviceId: service.id } })).toBe(before);
+
+    // Suspending twice is a no-op rather than a re-stamp.
+    const suspendedAt = row!.suspendedAt;
+    const again = await http.post(`${path}/control`, { body: { action: 'suspend' } });
+    expect(again.status).toBe(200);
+    expect(again.body.data.queued).toBe(false);
+    expect((await prisma.service.findUnique({ where: { id: service.id } }))?.suspendedAt).toEqual(
+      suspendedAt,
+    );
+
+    const audit = await prisma.workspaceAuditLog.findFirst({
+      where: { resourceId: service.id, action: 'service.suspended' },
+    });
+    expect(audit).not.toBeNull();
+
+    const resumed = await http.post(`${path}/control`, { body: { action: 'resume' } });
+    expect(resumed.status).toBe(200);
+    expect(resumed.body.data.status).toBe('STARTING');
+    expect((await prisma.service.findUnique({ where: { id: service.id } }))?.suspendedAt).toBeNull();
+
+    // Resume only applies to a suspended service, and deploys work again.
+    expect((await http.post(`${path}/control`, { body: { action: 'resume' } })).status).toBe(409);
+    expect((await http.post(`${path}/deploy`, { body: {} })).status).toBe(201);
+  });
+
+  it('rejects an unknown control action', async () => {
+    const { service } = await setupService();
+    const res = await http.post(`/api/services/${service.id}/control`, {
+      body: { action: 'pause' },
+    });
+    expect(res.status).toBe(422);
+  });
+
   it('manages webhooks and scheduled tasks', async () => {
     const { service } = await setupService();
     const path = `/api/services/${service.id}`;
