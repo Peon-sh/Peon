@@ -1091,6 +1091,16 @@ model Subscription {
   cancelAtPeriodEnd        Boolean   @default(false)
   currentPeriodEnd         DateTime?
   canceledAt               DateTime?
+  /// Human promo code currently on the Stripe subscription (null when none active).
+  promotionCode            String?
+  /// Stripe coupon id currently applied (null when none active).
+  stripeCouponId           String?
+  /// True while Stripe still has an active discount on the subscription.
+  hasActivePromotion       Boolean   @default(false)
+  /// First promo code ever seen (sticky; not cleared when a once-coupon expires).
+  promotionCodeEver        String?
+  /// When we first recorded a promotion on this subscription (sticky).
+  promotionCodeAppliedAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
