@@ -441,18 +441,6 @@ export function getServiceLogs(serviceId: string, tail = 200) {
   );
 }
 
-export function execServiceCommand(serviceId: string, command: string) {
-  return unwrap<{ container: string; code: number | null; output: string }>(
-    api.post(`/services/${serviceId}/exec`, { command }),
-  );
-}
-
-export function warmServiceTerminal(serviceId: string) {
-  return unwrap<{ container: string; ready: boolean }>(
-    api.post(`/services/${serviceId}/exec/warm`),
-  );
-}
-
 export interface ServiceTerminalSession {
   ticket: string;
   wsUrl: string;

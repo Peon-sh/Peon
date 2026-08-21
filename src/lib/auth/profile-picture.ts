@@ -35,23 +35,3 @@ export function isPlatformAvatarKey(key: string | null | undefined): boolean {
 export function avatarKeyForUser(userId: string, key: string): boolean {
   return key.startsWith(`users/${userId}/avatar.`);
 }
-
-export function parseAvatarKey(key: string): { userId: string; ext: string } | null {
-  const match = key.match(/^users\/([^/]+)\/avatar\.([a-z0-9]+)$/i);
-  if (!match) return null;
-  return { userId: match[1]!, ext: match[2]!.toLowerCase() };
-}
-
-export function contentTypeForAvatarExt(ext: string): string {
-  switch (ext.toLowerCase()) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    case 'webp':
-      return 'image/webp';
-    default:
-      return 'application/octet-stream';
-  }
-}
