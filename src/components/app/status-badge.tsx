@@ -27,7 +27,8 @@ export function statusTone(status?: string | null): Tone {
     return 'warning';
   if (['FAILED', 'ERROR', 'DEGRADED', 'UNHEALTHY', 'UNREACHABLE'].some((x) => s.includes(x)))
     return 'destructive';
-  if (['CANCELLED', 'CANCELED', 'STOPPED', 'EXITED'].some((x) => s.includes(x))) return 'muted';
+  if (['CANCELLED', 'CANCELED', 'STOPPED', 'EXITED', 'SUSPENDED'].some((x) => s.includes(x)))
+    return 'muted';
   return 'muted';
 }
 

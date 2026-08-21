@@ -40,10 +40,6 @@ export function getChatThread(threadId: string) {
   return unwrap<ChatThreadDetail>(api.get(`/chat/threads/${threadId}`));
 }
 
-export function renameChatThread(threadId: string, title: string) {
-  return unwrap<ChatThreadListItem>(api.patch(`/chat/threads/${threadId}`, { title }));
-}
-
 export function updateChatThreadModel(
   threadId: string,
   input: { modelProvider: string; modelId: string },
