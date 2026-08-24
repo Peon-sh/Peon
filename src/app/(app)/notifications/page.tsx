@@ -65,8 +65,22 @@ const FIELDS: Record<NotificationChannel, FieldDef[]> = {
       hint: 'Comma-separated. Peon sends mail via its own email service — no SMTP setup needed.',
     },
   ],
-  DISCORD: [{ key: 'webhookUrl', label: 'Webhook URL', secret: true }],
-  SLACK: [{ key: 'webhookUrl', label: 'Webhook URL', secret: true }],
+  DISCORD: [
+    {
+      key: 'webhookUrl',
+      label: 'Webhook URL',
+      secret: true,
+      hint: 'Paste the Incoming Webhook URL from Discord (Integrations → Webhooks). It should start with https://discord.com/api/webhooks/',
+    },
+  ],
+  SLACK: [
+    {
+      key: 'webhookUrl',
+      label: 'Webhook URL',
+      secret: true,
+      hint: 'Paste the Incoming Webhook URL from Slack. It should start with https://hooks.slack.com/',
+    },
+  ],
   TELEGRAM: [
     { key: 'token', label: 'Bot token', secret: true },
     { key: 'chatId', label: 'Chat ID' },
@@ -76,7 +90,12 @@ const FIELDS: Record<NotificationChannel, FieldDef[]> = {
     { key: 'user', label: 'User key', secret: true },
   ],
   WEBHOOK: [
-    { key: 'url', label: 'URL', secret: true },
+    {
+      key: 'url',
+      label: 'URL',
+      secret: true,
+      hint: 'HTTPS URL Peon should POST events to. Localhost and cloud-metadata addresses are blocked.',
+    },
     { key: 'secret', label: 'Signing secret', secret: true },
   ],
 };

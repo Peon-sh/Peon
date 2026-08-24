@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createPrivateKeyFor,
   createProjectFor,
+  createServerFor,
   createServiceFor,
   createUser,
   createWorkspaceFor,
@@ -50,6 +52,31 @@ describe('sources, storage, and workspace settings APIs', () => {
 
     await prisma.service.update({ where: { id: linked.id }, data: { githubAppId: null } });
     expect((await http.delete(sourcePath)).status).toBe(200);
+  });
+
+  it('rejects a GitHub source key and shared variable from another workspace', async () => {
+    const owner = await createUser();
+    const workspace = await createWorkspaceFor(owner);
+    const other = await createWorkspaceFor(owner);
+    const foreignKey = await createPrivateKeyFor(other.id);
+    const foreignServer = await createServerFor(other.id, foreignKey.id);
+    await loginAs(owner);
+
+    const source = await http.post(`/api/workspaces/${workspace.id}/sources`, {
+      body: {
+        provider: 'github',
+        name: 'GitHub',
+        installationId: '99',
+        appId: '1',
+        privateKeyId: foreignKey.id,
+      },
+    });
+    expect(source.status).toBe(403);
+
+    const variable = await http.post(`/api/workspaces/${workspace.id}/shared-variables`, {
+      body: { scope: 'SERVER', key: 'STOLEN', value: 'x', serverId: foreignServer.id },
+    });
+    expect(variable.status).toBe(403);
   });
 
   it('starts platform GitHub connect and completes the install callback', async () => {
@@ -117,6 +144,31 @@ describe('sources, storage, and workspace settings APIs', () => {
 
     expect((await http.post(`${storagePath}/test`)).status).toBe(200);
     expect((await http.delete(storagePath)).status).toBe(200);
+
+    const blocked = await http.post(path, {
+      body: {
+        name: 'metadata',
+        region: 'us-east-1',
+        bucket: 'peon',
+        accessKey: 'key',
+        secretKey: 'secret',
+        endpoint: 'http://169.254.169.254',
+      },
+    });
+    expect(blocked.status).toBe(422);
+
+    const lan = await http.post(path, {
+      body: {
+        name: 'minio',
+        region: 'us-east-1',
+        bucket: 'peon',
+        accessKey: 'key',
+        secretKey: 'secret',
+        endpoint: 'http://192.168.1.10:9000',
+      },
+    });
+    expect(lan.status).toBe(201);
+    expect((await http.delete(`/api/storages/${lan.body.data.id as string}`)).status).toBe(200);
   });
 
   it('manages shared variables, tags, and API tokens', async () => {
@@ -169,6 +221,16 @@ describe('sources, storage, and workspace settings APIs', () => {
       ).status,
     ).toBe(200);
     expect((await http.post(`${notificationsPath}/EMAIL/test`)).status).toBe(200);
+
+    const webhook = await http.put(notificationsPath, {
+      body: {
+        channel: 'WEBHOOK',
+        enabled: true,
+        config: { url: 'http://169.254.169.254/latest/meta-data/' },
+        events: {},
+      },
+    });
+    expect(webhook.status).toBe(422);
 
     const llmPath = `${workspacePath}/llm/credentials`;
     expect((await http.get(llmPath)).status).toBe(200);

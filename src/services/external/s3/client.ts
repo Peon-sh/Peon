@@ -4,6 +4,7 @@ import type { S3Storage } from '@/lib/prisma';
 import { serverEnv } from '@/lib/env';
 import { isE2eMode } from '@/lib/e2e';
 import { awsCredentialsIfConfigured, awsRegion } from '@/lib/aws/credentials';
+import { assertSafeS3Endpoint } from '@/lib/net/egress';
 
 function e2eS3Client(): S3Client {
   return {
@@ -11,8 +12,9 @@ function e2eS3Client(): S3Client {
   } as unknown as S3Client;
 }
 
-/** Per-workspace storage credentials (user-configured S3 destinations). */
-export function s3ClientFor(storage: S3Storage): S3Client {
+/** Per-workspace storage credentials. Refuses metadata / loopback custom endpoints. */
+export async function s3ClientForSafe(storage: S3Storage): Promise<S3Client> {
+  await assertSafeS3Endpoint(storage.endpoint);
   if (isE2eMode()) return e2eS3Client();
   return new S3Client({
     region: storage.region,

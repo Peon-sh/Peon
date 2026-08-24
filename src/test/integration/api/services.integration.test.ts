@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { prisma } from '@/lib/prisma';
+import { encrypt } from '@/lib/crypto/encryption';
 import {
   createPrivateKeyFor,
   createProjectFor,
@@ -77,6 +78,59 @@ describe('service API', () => {
       },
     });
     expect((await http.post(`${path}/rollback`, { body: { deploymentId: completed.id } })).status).toBe(201);
+  });
+
+  it('suspends a service, blocks deploys while suspended, and resumes', async () => {
+    const { service } = await setupService();
+    const path = `/api/services/${service.id}`;
+
+    const suspended = await http.post(`${path}/control`, { body: { action: 'suspend' } });
+    expect(suspended.status).toBe(200);
+    expect(suspended.body.data).toMatchObject({ action: 'suspend', status: 'SUSPENDED' });
+
+    // Desired state is persisted synchronously, before the worker runs.
+    const row = await prisma.service.findUnique({ where: { id: service.id } });
+    expect(row?.suspendedAt).not.toBeNull();
+    expect(row?.status).toBe('SUSPENDED');
+    expect((await http.get(path)).body.data.status).toBe('SUSPENDED');
+
+    // Nothing may bring it back up except an explicit resume.
+    const before = await prisma.deployment.count({ where: { serviceId: service.id } });
+    expect((await http.post(`${path}/deploy`, { body: {} })).status).toBe(409);
+    expect((await http.post(`${path}/control`, { body: { action: 'start' } })).status).toBe(409);
+    expect((await http.post(`${path}/control`, { body: { action: 'restart' } })).status).toBe(409);
+    expect(await prisma.deployment.count({ where: { serviceId: service.id } })).toBe(before);
+
+    // Suspending twice is a no-op rather than a re-stamp.
+    const suspendedAt = row!.suspendedAt;
+    const again = await http.post(`${path}/control`, { body: { action: 'suspend' } });
+    expect(again.status).toBe(200);
+    expect(again.body.data.queued).toBe(false);
+    expect((await prisma.service.findUnique({ where: { id: service.id } }))?.suspendedAt).toEqual(
+      suspendedAt,
+    );
+
+    const audit = await prisma.workspaceAuditLog.findFirst({
+      where: { resourceId: service.id, action: 'service.suspended' },
+    });
+    expect(audit).not.toBeNull();
+
+    const resumed = await http.post(`${path}/control`, { body: { action: 'resume' } });
+    expect(resumed.status).toBe(200);
+    expect(resumed.body.data.status).toBe('STARTING');
+    expect((await prisma.service.findUnique({ where: { id: service.id } }))?.suspendedAt).toBeNull();
+
+    // Resume only applies to a suspended service, and deploys work again.
+    expect((await http.post(`${path}/control`, { body: { action: 'resume' } })).status).toBe(409);
+    expect((await http.post(`${path}/deploy`, { body: {} })).status).toBe(201);
+  });
+
+  it('rejects an unknown control action', async () => {
+    const { service } = await setupService();
+    const res = await http.post(`/api/services/${service.id}/control`, {
+      body: { action: 'pause' },
+    });
+    expect(res.status).toBe(422);
   });
 
   it('manages webhooks and scheduled tasks', async () => {
@@ -233,5 +287,52 @@ describe('service API', () => {
     expect((await http.get(`/api/deployments/${deployment.id}`)).status).toBe(200);
     expect((await http.get(`/api/deployments/${deployment.id}/preview`)).status).toBe(200);
     expect((await http.get(`/api/deployments/${crypto.randomUUID()}/preview`)).status).toBe(404);
+  });
+
+  it('rejects cross-workspace server and S3 storage bindings', async () => {
+    const { owner, workspace, service } = await setupService('DATABASE');
+    const other = await createWorkspaceFor(owner);
+    const foreignKey = await createPrivateKeyFor(other.id);
+    const foreignServer = await createServerFor(other.id, foreignKey.id);
+    const foreignStorage = await prisma.s3Storage.create({
+      data: {
+        workspaceId: other.id,
+        name: 'exfil',
+        region: 'us-east-1',
+        bucket: 'stolen',
+        accessKey: encrypt('key'),
+        secretKey: encrypt('secret'),
+      },
+    });
+
+    const moved = await http.patch(`/api/services/${service.id}`, {
+      body: { serverId: foreignServer.id, destinationId: foreignServer.destinations[0].id },
+    });
+    expect(moved.status).toBe(403);
+
+    const backup = await http.post(`/api/services/${service.id}/backups`, {
+      body: { frequency: '0 0 * * *', enabled: true, saveS3: true, s3StorageId: foreignStorage.id },
+    });
+    expect(backup.status).toBe(403);
+
+    const allowed = await http.post(`/api/workspaces/${workspace.id}/storages`, {
+      body: {
+        name: 'backups',
+        region: 'us-east-1',
+        bucket: 'peon',
+        accessKey: 'key',
+        secretKey: 'secret',
+      },
+    });
+    expect(allowed.status).toBe(201);
+    const okBackup = await http.post(`/api/services/${service.id}/backups`, {
+      body: {
+        frequency: '0 0 * * *',
+        enabled: true,
+        saveS3: true,
+        s3StorageId: allowed.body.data.id as string,
+      },
+    });
+    expect(okBackup.status).toBe(201);
   });
 });

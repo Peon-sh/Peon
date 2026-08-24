@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ENV_VAR_KEY, MAX_ENV_VAR_KEY_LENGTH } from '@/lib/env-var-key';
 import { isSafeGitRefName, MAX_GIT_REF_LENGTH } from '@/lib/git/ref';
+import { SERVICE_CONTROL_ACTIONS } from '@/lib/service-control';
 
 /**
  * Create/update validation for services.
@@ -260,7 +261,7 @@ export const deployOptsSchema = z.object({
 });
 
 export const controlSchema = z.object({
-  action: z.enum(['start', 'stop', 'restart']),
+  action: z.enum(SERVICE_CONTROL_ACTIONS),
 });
 
 export const rollbackSchema = z.object({

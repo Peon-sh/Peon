@@ -4,7 +4,7 @@ const { lookup } = vi.hoisted(() => ({ lookup: vi.fn() }));
 
 vi.mock('node:dns/promises', () => ({ lookup }));
 
-import { assertSafeEgressUrl, isAllowedEgressAddress } from '../egress';
+import { assertSafeEgressUrl, assertSafeS3Endpoint, isAllowedEgressAddress } from '../egress';
 
 function resolvesTo(...addresses: string[]) {
   lookup.mockResolvedValue(
@@ -127,7 +127,7 @@ describe('assertSafeEgressUrl', () => {
   it('rejects a literal metadata address without touching DNS', async () => {
     await expect(
       assertSafeEgressUrl('http://169.254.169.254/latest/meta-data/', { allowHttp: true }),
-    ).rejects.toThrow('restricted address');
+    ).rejects.toThrow(/restricted address.*own network/);
     expect(lookup).not.toHaveBeenCalled();
   });
 
@@ -188,5 +188,12 @@ describe('assertSafeEgressUrl', () => {
     await expect(
       assertSafeEgressUrl('http://169.254.169.254', { allowHttp: true, label: 'Webhook URL' }),
     ).rejects.toThrow(/^Webhook URL/);
+  });
+
+  it('skips empty S3 endpoints and rejects metadata hosts', async () => {
+    await expect(assertSafeS3Endpoint(null)).resolves.toBeUndefined();
+    await expect(assertSafeS3Endpoint('  ')).resolves.toBeUndefined();
+    await expect(assertSafeS3Endpoint('http://169.254.169.254')).rejects.toThrow(/^S3 endpoint/);
+    await expect(assertSafeS3Endpoint('169.254.169.254')).rejects.toThrow(/^S3 endpoint/);
   });
 });

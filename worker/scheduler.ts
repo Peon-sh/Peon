@@ -14,6 +14,13 @@ type Log = (msg: string) => void;
 /** Guards against firing the same schedule twice within one minute bucket. */
 const lastFired = new Map<string, string>();
 
+/**
+ * Schedules only fire for live services. A suspended service is intentionally
+ * scaled to zero, so its container cannot run a task or be dumped for backup;
+ * soft-deleted services should never have fired either.
+ */
+const LIVE_SERVICE = { service: { suspendedAt: null, deletedAt: null } };
+
 function minuteBucket(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
 }
@@ -30,7 +37,9 @@ async function tick(log: Log) {
   const now = new Date();
 
   // Scheduled tasks
-  const tasks = await prisma.scheduledTask.findMany({ where: { enabled: true } });
+  const tasks = await prisma.scheduledTask.findMany({
+    where: { enabled: true, ...LIVE_SERVICE },
+  });
   for (const task of tasks) {
     if (!shouldFire(`task:${task.id}`, task.frequency, now)) continue;
     const execution = await prisma.scheduledTaskExecution.create({
@@ -41,7 +50,9 @@ async function tick(log: Log) {
   }
 
   // Scheduled database backups
-  const backups = await prisma.scheduledBackup.findMany({ where: { enabled: true } });
+  const backups = await prisma.scheduledBackup.findMany({
+    where: { enabled: true, ...LIVE_SERVICE },
+  });
   for (const backup of backups) {
     if (!shouldFire(`backup:${backup.id}`, backup.frequency, now)) continue;
     const execution = await prisma.scheduledBackupExecution.create({

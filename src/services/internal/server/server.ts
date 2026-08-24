@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors';
+import { assertPrivateKeyInWorkspace } from '@/lib/auth/workspace-resources';
 import { sshPool } from '@/lib/ssh';
 import { teardownService } from '@/services/internal/deploy/engine';
 import { checkServerDelete } from '@/services/internal/server/delete-guards';
@@ -47,7 +48,7 @@ export const ServerService = {
   },
 
   async create(workspaceId: string, input: CreateServerInput) {
-    await assertPrivateKeyInWorkspace(workspaceId, input.privateKeyId);
+    await assertPrivateKeyInWorkspace(input.privateKeyId, workspaceId);
     const server = await prisma.server.create({
       data: {
         workspaceId,
@@ -149,7 +150,7 @@ export const ServerService = {
     if (!existing) throw new NotFoundError('Server not found.');
 
     if (privateKeyId !== undefined && privateKeyId !== null) {
-      await assertPrivateKeyInWorkspace(existing.workspaceId, privateKeyId);
+      await assertPrivateKeyInWorkspace(privateKeyId, existing.workspaceId);
     }
 
     const settingsInput = {
@@ -350,11 +351,3 @@ export const ServerService = {
     }
   },
 };
-
-async function assertPrivateKeyInWorkspace(workspaceId: string, privateKeyId: string): Promise<void> {
-  const key = await prisma.privateKey.findFirst({
-    where: { id: privateKeyId, workspaceId },
-    select: { id: true },
-  });
-  if (!key) throw new ValidationError('SSH key not found in this workspace.');
-}

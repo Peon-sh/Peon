@@ -16,6 +16,7 @@ import {
   githubPlatformInstallUrl,
 } from '@/lib/webhooks/github';
 import { signGithubConnectState, verifyGithubConnectState } from '@/lib/github/connect-state';
+import { assertPrivateKeyInWorkspace } from '@/lib/auth/workspace-resources';
 import { AuditService } from '@/services/internal/audit/audit';
 import type {
   CreateSourceInput,
@@ -98,6 +99,9 @@ export const SourceService = {
       void _provider;
       void _sw;
       void _pub;
+      if (rest.privateKeyId) {
+        await assertPrivateKeyInWorkspace(rest.privateKeyId, workspaceId);
+      }
       const created = await prisma.githubApp.create({
         data: {
           ...rest,
@@ -133,6 +137,9 @@ export const SourceService = {
     void _provider;
     void _sw;
     void _pub;
+    if (rest.privateKeyId) {
+      await assertPrivateKeyInWorkspace(rest.privateKeyId, workspaceId);
+    }
     const created = await prisma.gitlabApp.create({
       data: {
         ...rest,
@@ -184,7 +191,7 @@ export const SourceService = {
   },
 
   async update(sourceId: string, body: UpdateGithubSourceInput & UpdateGitlabSourceInput) {
-    const { provider } = await this.resolve(sourceId);
+    const { provider, workspaceId } = await this.resolve(sourceId);
     if (provider === 'github') {
       const existing = await prisma.githubApp.findUnique({ where: { id: sourceId } });
       if (!existing) throw new NotFoundError('Source not found.');
@@ -204,6 +211,9 @@ export const SourceService = {
       } = body as UpdateGithubSourceInput;
       void _sw;
       void _pub;
+      if (rest.privateKeyId) {
+        await assertPrivateKeyInWorkspace(rest.privateKeyId, workspaceId);
+      }
       const updated = await prisma.githubApp.update({
         where: { id: sourceId },
         data: {
@@ -239,6 +249,9 @@ export const SourceService = {
     } = body as UpdateGitlabSourceInput;
     void _sw;
     void _pub;
+    if (rest.privateKeyId) {
+      await assertPrivateKeyInWorkspace(rest.privateKeyId, workspaceId);
+    }
     const updated = await prisma.gitlabApp.update({
       where: { id: sourceId },
       data: {

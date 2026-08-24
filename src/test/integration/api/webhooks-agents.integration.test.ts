@@ -91,6 +91,28 @@ describe('agent and webhook APIs', () => {
     expect(await prisma.deployment.count({ where: { serviceId: service.id } })).toBe(1);
   });
 
+  it('ignores a webhook push while the service is suspended', async () => {
+    const { owner, service } = await setup();
+    await loginAs(owner);
+    const created = await http.post(`/api/services/${service.id}/webhooks`, {
+      body: { provider: 'generic' },
+    });
+    const token = created.body.data.token as string;
+
+    await http.post(`/api/services/${service.id}/control`, { body: { action: 'suspend' } });
+
+    const result = await http.post(`/api/webhooks/${token}`, {
+      body: {
+        ref: 'refs/heads/main',
+        after: 'abc123',
+        head_commit: { message: 'Ship it' },
+      },
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.data).toMatchObject({ triggered: false, reason: 'service suspended' });
+    expect(await prisma.deployment.count({ where: { serviceId: service.id } })).toBe(0);
+  });
+
   it('rejects GitHub App events with an invalid signature', async () => {
     const result = await http.post('/api/webhooks/source/github/events', {
       body: { ref: 'refs/heads/main' },

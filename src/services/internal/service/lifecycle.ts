@@ -14,6 +14,11 @@ import { getTemplate } from '@/lib/templates';
 import { generateMagicEnv, parseEnvSeed } from '@/lib/templates/magic-env';
 import { slugify } from '@/lib/utils/slug';
 import { NotFoundError, AppError } from '@/lib/errors';
+import {
+  assertBindingsInWorkspace,
+  workspaceIdForProject,
+  workspaceIdForService,
+} from '@/lib/auth/workspace-resources';
 import type { CreateServiceInput, UpdateServiceInput } from '@/schemas/service.schema';
 import { MASK, randomToken } from './shared';
 import { applyReconciledStatus, deploymentHintsForServices } from './status-read';
@@ -159,6 +164,15 @@ export async function projectIdFor(serviceId: string): Promise<string> {
 }
 
 export async function create(projectId: string, input: CreateServiceInput) {
+  const workspaceId = await workspaceIdForProject(projectId);
+  await assertBindingsInWorkspace(workspaceId, {
+    serverId: input.serverId,
+    destinationId: input.destinationId,
+    githubAppId: 'githubAppId' in input ? input.githubAppId : undefined,
+    gitlabAppId: 'gitlabAppId' in input ? input.gitlabAppId : undefined,
+    privateKeyId: 'privateKeyId' in input ? input.privateKeyId : undefined,
+  });
+
   const data: Prisma.ServiceCreateInput = {
     name: input.name,
     description: input.description,
@@ -234,18 +248,15 @@ export async function create(projectId: string, input: CreateServiceInput) {
 
   const service = await prisma.service.create({ data, include: { settings: true } });
   await ensureDefaultNixpacksNodeEnv(service.id, buildPack);
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { workspaceId: true } });
-  if (project) {
-    await AuditService.record({
-      workspaceId: project.workspaceId,
-      action: 'service.created',
-      resourceType: 'service',
-      resourceId: service.id,
-      resourceName: service.name,
-      summary: `Created service "${service.name}"`,
-      metadata: { kind: service.kind },
-    });
-  }
+  await AuditService.record({
+    workspaceId,
+    action: 'service.created',
+    resourceType: 'service',
+    resourceId: service.id,
+    resourceName: service.name,
+    summary: `Created service "${service.name}"`,
+    metadata: { kind: service.kind },
+  });
   return service;
 }
 
@@ -260,6 +271,12 @@ export async function createFromTemplate(
 ) {
   const template = getTemplate(input.slug);
   if (!template) throw new NotFoundError(`Template "${input.slug}" not found.`);
+
+  const workspaceId = await workspaceIdForProject(projectId);
+  await assertBindingsInWorkspace(workspaceId, {
+    serverId: input.serverId,
+    destinationId: input.destinationId,
+  });
 
   let baseDomain: string | null = null;
   if (input.serverId) {
@@ -315,22 +332,47 @@ export async function createFromTemplate(
     });
   }
 
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { workspaceId: true } });
-  if (project) {
-    await AuditService.record({
-      workspaceId: project.workspaceId,
-      action: 'service.created',
-      resourceType: 'service',
-      resourceId: service.id,
-      resourceName: service.name,
-      summary: `Created service "${service.name}" from template`,
-      metadata: { template: input.slug },
-    });
-  }
+  await AuditService.record({
+    workspaceId,
+    action: 'service.created',
+    resourceType: 'service',
+    resourceId: service.id,
+    resourceName: service.name,
+    summary: `Created service "${service.name}" from template`,
+    metadata: { template: input.slug },
+  });
   return service;
 }
 
 export async function update(serviceId: string, input: UpdateServiceInput) {
+  const existing = await prisma.service.findUnique({
+    where: { id: serviceId },
+    select: {
+      serverId: true,
+      destinationId: true,
+      project: { select: { workspaceId: true } },
+    },
+  });
+  if (!existing) throw new NotFoundError('Service not found.');
+  await assertBindingsInWorkspace(
+    existing.project.workspaceId,
+    {
+      serverId: input.serverId,
+      // Re-check the current destination when the server changes, so an old
+      // destination cannot stay attached to a different server.
+      destinationId:
+        input.destinationId !== undefined
+          ? input.destinationId
+          : input.serverId !== undefined
+            ? existing.destinationId
+            : undefined,
+      githubAppId: input.githubAppId,
+      gitlabAppId: input.gitlabAppId,
+      privateKeyId: input.privateKeyId,
+    },
+    { existingServerId: existing.serverId },
+  );
+
   const serviceData = { ...input } as Record<string, unknown>;
   const settingsData: Record<string, unknown> = {};
 
@@ -531,6 +573,9 @@ export async function remove(serviceId: string) {
 }
 
 export async function setServer(serviceId: string, serverId: string, destinationId?: string | null) {
+  const workspaceId = await workspaceIdForService(serviceId);
+  await assertBindingsInWorkspace(workspaceId, { serverId, destinationId: destinationId ?? null });
+
   const service = await prisma.service.update({
     where: { id: serviceId },
     data: { serverId, destinationId: destinationId ?? null },

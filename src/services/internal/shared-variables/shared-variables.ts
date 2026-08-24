@@ -1,6 +1,10 @@
 import { prisma } from '@/lib/prisma';
 import { encrypt } from '@/lib/crypto/encryption';
 import { NotFoundError } from '@/lib/errors';
+import {
+  assertProjectInWorkspace,
+  assertServerInWorkspace,
+} from '@/lib/auth/workspace-resources';
 import type {
   CreateSharedVariableInput,
   UpdateSharedVariableInput,
@@ -33,6 +37,12 @@ export const SharedVariableService = {
 
   async create(workspaceId: string, input: CreateSharedVariableInput) {
     const { value, ...rest } = input;
+    if (rest.scope === 'PROJECT' && rest.projectId) {
+      await assertProjectInWorkspace(rest.projectId, workspaceId);
+    }
+    if (rest.scope === 'SERVER' && rest.serverId) {
+      await assertServerInWorkspace(rest.serverId, workspaceId);
+    }
     const row = await prisma.sharedEnvironmentVariable.create({
       data: {
         scope: rest.scope,
