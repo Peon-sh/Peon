@@ -7,6 +7,7 @@ import { getMe, logout } from '@/services/api/auth';
 import { useAuthStore } from '@/store/auth';
 import { isPublicPath } from '@/lib/routes/config';
 import { postAuthPath } from '@/lib/auth/post-auth-path';
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 
 /**
  * Hydrates the auth store from `/api/auth/me`. Middleware already enforces
@@ -39,7 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const settledError = isError && isFetched && !isFetching && fetchStatus === 'idle';
 
   useEffect(() => {
-    if (data) setSession(data.user, data.workspaces);
+    if (data) {
+      setSession(data.user, data.workspaces);
+      identifyUser(data.user);
+    }
   }, [data, setSession]);
 
   // Route new users through the onboarding wizard until they finish or skip it.
@@ -74,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (guestClearedRef.current) return;
       guestClearedRef.current = true;
       clear();
+      resetAnalytics();
       void logout().catch(() => undefined);
       return;
     }
@@ -81,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (publicRoute || clearingRef.current) return;
     clearingRef.current = true;
     clear();
+    resetAnalytics();
     qc.removeQueries({ queryKey: ['auth', 'me'] });
     void logout()
       .catch(() => undefined)

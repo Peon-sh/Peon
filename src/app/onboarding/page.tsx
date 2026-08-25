@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import { publicEnv } from '@/lib/env';
 import { InAppSubscribeForm } from '@/components/billing/in-app-subscribe-form';
 import { yearlyDiscountPercent } from '@/lib/billing/pricing';
 import { markWelcomeTutorialPending } from '@/lib/welcome-tutorial';
+import { AnalyticsEvents, captureEvent } from '@/lib/analytics';
 
 const BASE_STEPS = [
   { id: 'workspace', label: 'Workspace', icon: Sparkles },
@@ -26,6 +27,8 @@ const BASE_STEPS = [
 ] as const;
 
 type StepId = (typeof BASE_STEPS)[number]['id'];
+type PlanOutcome = 'subscribed' | 'skipped' | 'already_entitled' | 'billing_disabled';
+type ProjectOutcome = 'created' | 'skipped';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -34,6 +37,7 @@ export default function OnboardingPage() {
   const workspace = workspaces.find((w) => w.id === currentWorkspaceId) ?? workspaces[0] ?? null;
   const wsId = workspace?.id ?? '';
   const billingOn = publicEnv.billingEnabled;
+  const startedRef = useRef(false);
 
   const steps = billingOn
     ? BASE_STEPS
@@ -42,6 +46,9 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<StepId>('workspace');
   const [done, setDone] = useState<Partial<Record<StepId, boolean>>>({});
   const [planSkipped, setPlanSkipped] = useState(false);
+  const [planOutcome, setPlanOutcome] = useState<PlanOutcome | null>(
+    billingOn ? null : 'billing_disabled',
+  );
 
   const { data: billing } = useQuery({
     queryKey: ['billing', wsId],
@@ -53,17 +60,43 @@ export default function OnboardingPage() {
 
   const stepIndex = steps.findIndex((s) => s.id === step);
 
+  useEffect(() => {
+    if (!user || startedRef.current) return;
+    startedRef.current = true;
+    captureEvent(AnalyticsEvents.onboardingStarted, {
+      billing_enabled: billingOn,
+      workspace_id: wsId || undefined,
+    });
+  }, [user, billingOn, wsId]);
+
   const finishMut = useMutation({
-    mutationFn: completeOnboarding,
-    onSuccess: async (_data, destination: string | void) => {
+    mutationFn: async (_vars: {
+      destination?: string;
+      projectOutcome: ProjectOutcome;
+    }) => completeOnboarding(),
+    onSuccess: async (_data, vars) => {
+      captureEvent(AnalyticsEvents.onboardingCompleted, {
+        plan_outcome: planOutcome ?? (billingOn ? 'skipped' : 'billing_disabled'),
+        project_outcome: vars.projectOutcome,
+        destination: vars.destination ?? '/dashboard',
+      });
       markWelcomeTutorialPending();
       await qc.invalidateQueries({ queryKey: ['auth', 'me'] });
-      router.replace(typeof destination === 'string' && destination ? destination : '/dashboard');
+      router.replace(vars.destination || '/dashboard');
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Something went wrong'),
   });
 
-  const finish = (destination?: string) => finishMut.mutate(destination);
+  const finish = (opts?: { destination?: string; projectOutcome?: ProjectOutcome }) => {
+    const projectOutcome = opts?.projectOutcome ?? 'skipped';
+    if (projectOutcome === 'skipped') {
+      captureEvent(AnalyticsEvents.onboardingProjectContinued, { outcome: 'skipped' });
+    }
+    finishMut.mutate({
+      destination: opts?.destination,
+      projectOutcome,
+    });
+  };
 
   if (!user || !workspace) {
     return (
@@ -137,8 +170,19 @@ export default function OnboardingPage() {
               workspaceId={wsId}
               initialName={workspace.name}
               onDone={() => {
+                captureEvent(AnalyticsEvents.onboardingWorkspaceCompleted, {
+                  workspace_id: wsId,
+                });
                 setDone((d) => ({ ...d, workspace: true }));
-                setStep(billingOn ? 'plan' : 'project');
+                if (billingOn) {
+                  setStep('plan');
+                } else {
+                  setPlanOutcome('billing_disabled');
+                  captureEvent(AnalyticsEvents.onboardingPlanContinued, {
+                    outcome: 'billing_disabled',
+                  });
+                  setStep('project');
+                }
               }}
             />
           )}
@@ -147,14 +191,27 @@ export default function OnboardingPage() {
               workspaceId={wsId}
               entitled={entitled}
               onSubscribed={() => {
+                setPlanOutcome('subscribed');
+                captureEvent(AnalyticsEvents.onboardingPlanContinued, { outcome: 'subscribed' });
+                setDone((d) => ({ ...d, plan: true }));
+                setPlanSkipped(false);
+                setStep('project');
+              }}
+              onAlreadyEntitled={() => {
+                setPlanOutcome('already_entitled');
+                captureEvent(AnalyticsEvents.onboardingPlanContinued, {
+                  outcome: 'already_entitled',
+                });
                 setDone((d) => ({ ...d, plan: true }));
                 setPlanSkipped(false);
                 setStep('project');
               }}
               onSkip={() => {
+                setPlanOutcome('skipped');
+                captureEvent(AnalyticsEvents.onboardingPlanContinued, { outcome: 'skipped' });
                 setPlanSkipped(true);
                 setDone((d) => ({ ...d, plan: true }));
-                finish();
+                finish({ projectOutcome: 'skipped' });
               }}
             />
           )}
@@ -163,10 +220,14 @@ export default function OnboardingPage() {
               workspaceId={wsId}
               finishing={finishMut.isPending}
               onDone={(projectId) => {
+                captureEvent(AnalyticsEvents.onboardingProjectContinued, {
+                  outcome: 'created',
+                  project_id: projectId,
+                });
                 setDone((d) => ({ ...d, project: true }));
-                finish(`/projects/${projectId}`);
+                finish({ destination: `/projects/${projectId}`, projectOutcome: 'created' });
               }}
-              onSkip={() => finish()}
+              onSkip={() => finish({ projectOutcome: 'skipped' })}
             />
           )}
         </div>
@@ -235,11 +296,13 @@ function PlanStep({
   workspaceId,
   entitled,
   onSubscribed,
+  onAlreadyEntitled,
   onSkip,
 }: {
   workspaceId: string;
   entitled: boolean;
   onSubscribed: () => void;
+  onAlreadyEntitled: () => void;
   onSkip: () => void;
 }) {
   const discount = yearlyDiscountPercent();
@@ -251,7 +314,7 @@ function PlanStep({
           title="You're on Peon Pro"
           description="Your workspace already has an active subscription. Continue to create a project."
         />
-        <Button onClick={onSubscribed}>
+        <Button onClick={onAlreadyEntitled}>
           Continue <ArrowRight className="size-4" />
         </Button>
       </div>
