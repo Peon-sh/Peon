@@ -6,6 +6,7 @@ import { AppSidebar } from '@/components/app/app-sidebar';
 import { AppHeader } from '@/components/app/app-header';
 import { CommandPalette } from '@/components/app/command-palette';
 import { BottomRightNotices } from '@/components/app/bottom-right-notices';
+import { WelcomeTutorialDialog } from '@/components/app/welcome-tutorial-dialog';
 import { useAuthStore } from '@/store/auth';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -35,6 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </SidebarInset>
       <BottomRightNotices />
+      <WelcomeTutorialDialog />
     </SidebarProvider>
   );
 }
