@@ -129,6 +129,9 @@ export const publicEnv = {
   stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
   /** Mirrors server `isBillingEnabled` for UI (publishable key present). */
   billingEnabled: !!(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '').trim(),
+  /** PostHog project token (browser). Empty disables analytics. */
+  posthogToken: process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN ?? '',
+  posthogHost: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
 };
 
 /** Absolute URL into the marketing site (peon.sh). */

@@ -49,6 +49,7 @@ import { useAuthStore } from '@/store/auth';
 import { logout } from '@/services/api/auth';
 import { sectionsForService } from '@/lib/service-sections';
 import { useServiceDetail } from '@/lib/queries/service';
+import { resetAnalytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -189,6 +190,7 @@ export function AppSidebar() {
       await logout();
     } finally {
       clear();
+      resetAnalytics();
       qc.removeQueries({ queryKey: ['auth', 'me'] });
       toast.success('Signed out');
       router.replace('/login');
