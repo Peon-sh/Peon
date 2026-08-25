@@ -17,6 +17,7 @@ import { getBillingSummary } from '@/services/api/billing';
 import { publicEnv } from '@/lib/env';
 import { InAppSubscribeForm } from '@/components/billing/in-app-subscribe-form';
 import { yearlyDiscountPercent } from '@/lib/billing/pricing';
+import { markWelcomeTutorialPending } from '@/lib/welcome-tutorial';
 
 const BASE_STEPS = [
   { id: 'workspace', label: 'Workspace', icon: Sparkles },
@@ -55,6 +56,7 @@ export default function OnboardingPage() {
   const finishMut = useMutation({
     mutationFn: completeOnboarding,
     onSuccess: async (_data, destination: string | void) => {
+      markWelcomeTutorialPending();
       await qc.invalidateQueries({ queryKey: ['auth', 'me'] });
       router.replace(typeof destination === 'string' && destination ? destination : '/dashboard');
     },
