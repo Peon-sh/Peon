@@ -27,6 +27,17 @@ describe('template catalog logos', () => {
 
 const COOLIFY_VOLUME_KEYS = new Set(['content', 'is_directory', 'isDirectory']);
 
+function namedVolumeSources(volumes: unknown[] | undefined): string[] {
+  const sources: string[] = [];
+  for (const mount of volumes ?? []) {
+    if (typeof mount !== 'string') continue;
+    const source = mount.split(':')[0];
+    if (!source || source.startsWith('/')) continue;
+    sources.push(source);
+  }
+  return sources;
+}
+
 describe('template catalog compose', () => {
   const templates = listTemplates();
 
@@ -95,10 +106,7 @@ describe('template catalog compose', () => {
   it('keeps shared storage on one named volume for multi-service templates', () => {
     const detail = getTemplate('supabase')!;
     const doc = parse(detail.compose) as { services?: Record<string, { volumes?: unknown[] }> };
-    const sources = (svc: string) =>
-      (doc.services?.[svc]?.volumes ?? [])
-        .map((v) => (typeof v === 'string' ? v.split(':')[0] : null))
-        .filter((s): s is string => Boolean(s) && !s.startsWith('/'));
+    const sources = (svc: string) => namedVolumeSources(doc.services?.[svc]?.volumes);
     expect(sources('supabase-minio')).toContain('supabase-volumes-storage');
     expect(sources('supabase-storage')).toContain('supabase-volumes-storage');
     expect(sources('imgproxy')).toContain('supabase-volumes-storage');
@@ -108,10 +116,7 @@ describe('template catalog compose', () => {
     const authentik = parse(getTemplate('authentik')!.compose) as {
       services?: Record<string, { volumes?: unknown[] }>;
     };
-    const aSources = (svc: string) =>
-      (authentik.services?.[svc]?.volumes ?? [])
-        .map((v) => (typeof v === 'string' ? v.split(':')[0] : null))
-        .filter((s): s is string => Boolean(s) && !s.startsWith('/'));
+    const aSources = (svc: string) => namedVolumeSources(authentik.services?.[svc]?.volumes);
     expect(aSources('authentik-server').filter((s) => s.includes('media'))).toEqual(
       aSources('authentik-worker').filter((s) => s.includes('media')),
     );
