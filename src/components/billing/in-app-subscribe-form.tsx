@@ -43,12 +43,27 @@ const stripePromise = publicEnv.stripePublishableKey
   ? loadStripe(publicEnv.stripePublishableKey)
   : null;
 
+const PAYMENT_ELEMENT_OPTIONS = {
+  layout: 'tabs' as const,
+  fields: {
+    billingDetails: {
+      name: 'auto' as const,
+      email: 'never' as const,
+      phone: 'never' as const,
+      address: 'auto' as const,
+    },
+  },
+};
+
 function PayForm({ onSuccess }: { onSuccess: () => void }) {
   const checkoutState = useCheckoutElements();
   const [submitting, setSubmitting] = useState(false);
   const [promoCode, setPromoCode] = useState('');
   const [promoBusy, setPromoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Checkout session can be ready before PaymentElement finishes mounting its iframe.
+  // validateElements/confirm then surface Stripe's "You must have a mounted element."
+  const [paymentElementReady, setPaymentElementReady] = useState(false);
 
   if (checkoutState.type === 'loading') {
     return (
@@ -115,6 +130,13 @@ function PayForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   const onPay = async () => {
+    if (!paymentElementReady) {
+      const message = 'Payment form is still loading. Please wait a moment and try again.';
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -206,19 +228,26 @@ function PayForm({ onSuccess }: { onSuccess: () => void }) {
             )}
           </div>
 
-          <PaymentElement
-            options={{
-              layout: 'tabs',
-              fields: {
-                billingDetails: {
-                  name: 'auto',
-                  email: 'never',
-                  phone: 'never',
-                  address: 'auto',
-                },
-              },
-            }}
-          />
+          <div className="relative min-h-[140px]">
+            {!paymentElementReady && !error ? (
+              <p className="text-muted-foreground absolute inset-0 flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" />
+                Loading card form…
+              </p>
+            ) : null}
+            <PaymentElement
+              options={PAYMENT_ELEMENT_OPTIONS}
+              onReady={() => setPaymentElementReady(true)}
+              onLoadError={(event) => {
+                setPaymentElementReady(false);
+                const message =
+                  event.error.message ||
+                  'Could not load the payment form. Check your connection and try again.';
+                setError(message);
+                toast.error(message);
+              }}
+            />
+          </div>
           {checkout.savedPaymentMethods && checkout.savedPaymentMethods.length > 0 ? (
             <p className="text-muted-foreground text-xs">
               Saved cards for this workspace are listed above. Choose one or add a new card.
@@ -239,9 +268,9 @@ function PayForm({ onSuccess }: { onSuccess: () => void }) {
         <Button
           className="w-full"
           onClick={onPay}
-          disabled={submitting || promoBusy}
+          disabled={submitting || promoBusy || !paymentElementReady}
         >
-          {submitting ? 'Processing…' : 'Subscribe'}
+          {submitting ? 'Processing…' : paymentElementReady ? 'Subscribe' : 'Loading…'}
         </Button>
       </ModalFooter>
     </>
@@ -276,6 +305,32 @@ export function InAppSubscribeForm({
     if (typeof window === 'undefined') return publicEnv.appUrl + returnPath;
     return `${window.location.origin}${returnPath}`;
   }, [returnPath]);
+
+  const checkoutElementsOptions = useMemo(
+    () =>
+      clientSecret
+        ? {
+            clientSecret,
+            defaultValues: user?.name
+              ? { billingAddress: { name: user.name, address: { country: 'US' } } }
+              : undefined,
+            elementsOptions: {
+              savedPaymentMethod: {
+                enableSave: 'auto' as const,
+                enableRedisplay: 'auto' as const,
+              },
+              appearance: {
+                theme: 'night' as const,
+                variables: {
+                  colorPrimary: '#a3e635',
+                  borderRadius: '6px',
+                },
+              },
+            },
+          }
+        : null,
+    [clientSecret, user?.name],
+  );
 
   const startMut = useMutation({
     mutationFn: () =>
@@ -423,29 +478,8 @@ export function InAppSubscribeForm({
               {quantity === 1 ? '' : 's'}
             </ModalDescription>
           </ModalHeader>
-          {clientSecret ? (
-            <CheckoutElementsProvider
-              stripe={stripePromise}
-              options={{
-                clientSecret,
-                defaultValues: user?.name
-                  ? { billingAddress: { name: user.name, address: { country: 'US' } } }
-                  : undefined,
-                elementsOptions: {
-                  savedPaymentMethod: {
-                    enableSave: 'auto',
-                    enableRedisplay: 'auto',
-                  },
-                  appearance: {
-                    theme: 'night',
-                    variables: {
-                      colorPrimary: '#a3e635',
-                      borderRadius: '6px',
-                    },
-                  },
-                },
-              }}
-            >
+          {checkoutElementsOptions ? (
+            <CheckoutElementsProvider stripe={stripePromise} options={checkoutElementsOptions}>
               <PayForm onSuccess={finish} />
             </CheckoutElementsProvider>
           ) : null}
