@@ -131,7 +131,10 @@ export const publicEnv = {
   billingEnabled: !!(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '').trim(),
   /** PostHog project token (browser). Empty disables analytics. */
   posthogToken: process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN ?? '',
-  posthogHost: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com',
+  /** Ingestion host — prefer managed reverse proxy. */
+  posthogHost: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? 'https://t.advant.xyz',
+  /** PostHog app UI (links/toolbar) when api_host is a proxy. */
+  posthogUiHost: process.env.NEXT_PUBLIC_POSTHOG_UI_HOST ?? 'https://us.posthog.com',
 };
 
 /** Absolute URL into the marketing site (peon.sh). */
