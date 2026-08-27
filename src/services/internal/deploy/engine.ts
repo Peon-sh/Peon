@@ -769,7 +769,8 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     if (await isServiceSuspended(svc.id)) {
-      await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose stop`);
+      const project = rollingProject ? `-p ${shellSingleQuote(rollingProject)} ` : '';
+      await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose ${project}stop`);
       throw new DeploymentSuspendedError();
     }
 
