@@ -225,9 +225,18 @@ async function composeUp(
   if (res.code !== 0) throw new Error('docker compose up failed.');
 }
 
-async function composeStop(target: SshTarget, dir: string, projectName: string | null): Promise<void> {
+async function composeStop(
+  target: SshTarget,
+  dir: string,
+  projectName: string | null,
+  log: (m: string) => void,
+): Promise<void> {
   const project = projectName ? `-p ${shellSingleQuote(projectName)} ` : '';
-  await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose ${project}stop`);
+  const res = await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose ${project}stop`);
+  if (res.code !== 0) {
+    const detail = res.stderr.trim() || res.stdout.trim() || `exit code ${res.code ?? 'unknown'}`;
+    log(`Failed to stop compose project after suspension: ${detail}`);
+  }
 }
 
 /** Stop/remove other containers for this Peon service, keeping `keepContainer`. */
@@ -398,18 +407,6 @@ async function assertNotCancelled(deploymentId: string): Promise<void> {
     select: { status: true },
   });
   if (row?.status === 'CANCELLED') throw new DeploymentCancelledError();
-}
-
-async function assertServiceNotSuspended(serviceId: string): Promise<void> {
-  if (await isServiceSuspended(serviceId)) throw new DeploymentSuspendedError();
-}
-
-async function isServiceSuspended(serviceId: string): Promise<boolean> {
-  const row = await prisma.service.findUnique({
-    where: { id: serviceId },
-    select: { suspendedAt: true },
-  });
-  return row?.suspendedAt != null;
 }
 
 async function hasPriorFinishedProduction(
@@ -745,7 +742,11 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     // The service may have been suspended while the image was being built.
     // Do not start the new container after that desired-state change.
-    await assertServiceNotSuspended(svc.id);
+    const serviceAfterBuild = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceAfterBuild && isSuspended(serviceAfterBuild)) throw new DeploymentSuspendedError();
 
     // Pre-deploy command runs in the currently-running container before swap.
     const preCmd = svc.settings?.preDeployCommand?.trim();
@@ -758,7 +759,11 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     await assertNotCancelled(deploymentId);
-    await assertServiceNotSuspended(svc.id);
+    const serviceBeforeCompose = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceBeforeCompose && isSuspended(serviceBeforeCompose)) throw new DeploymentSuspendedError();
 
     log(useRolling ? 'Starting new container (rolling update)…' : 'Starting containers…');
     try {
@@ -773,8 +778,12 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       throw err;
     }
 
-    if (await isServiceSuspended(svc.id)) {
-      await composeStop(target, dir, rollingProject);
+    const serviceAfterCompose = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceAfterCompose && isSuspended(serviceAfterCompose)) {
+      await composeStop(target, dir, rollingProject, log);
       throw new DeploymentSuspendedError();
     }
 
@@ -805,8 +814,12 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     await assertNotCancelled(deploymentId);
 
-    if (await isServiceSuspended(svc.id)) {
-      await composeStop(target, dir, rollingProject);
+    const serviceAfterReadiness = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceAfterReadiness && isSuspended(serviceAfterReadiness)) {
+      await composeStop(target, dir, rollingProject, log);
       throw new DeploymentSuspendedError();
     }
 
