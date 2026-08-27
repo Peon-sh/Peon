@@ -152,4 +152,21 @@ describe('template catalog compose', () => {
       expect(detail.compose, t.slug).not.toMatch(/\$\{[A-Za-z_][A-Za-z0-9_]*\s*:\?/);
     }
   });
+
+  it('escapes shell $(...) in healthchecks so Compose does not interpolate', () => {
+    for (const t of templates) {
+      const detail = getTemplate(t.slug)!;
+      const doc = parse(detail.compose) as {
+        services?: Record<string, { healthcheck?: { test?: unknown } }>;
+      };
+      for (const [key, svc] of Object.entries(doc.services ?? {})) {
+        const test = svc.healthcheck?.test;
+        const parts = Array.isArray(test) ? test : test != null ? [test] : [];
+        for (const part of parts) {
+          if (typeof part !== 'string') continue;
+          expect(part, `${t.slug}/${key}`).not.toMatch(/(?<!\$)\$\(/);
+        }
+      }
+    }
+  });
 });
