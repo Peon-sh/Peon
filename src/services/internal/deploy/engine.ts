@@ -225,6 +225,11 @@ async function composeUp(
   if (res.code !== 0) throw new Error('docker compose up failed.');
 }
 
+async function composeStop(target: SshTarget, dir: string, projectName: string | null): Promise<void> {
+  const project = projectName ? `-p ${shellSingleQuote(projectName)} ` : '';
+  await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose ${project}stop`);
+}
+
 /** Stop/remove other containers for this Peon service, keeping `keepContainer`. */
 async function stopPreviousServiceContainers(
   target: SshTarget,
@@ -769,8 +774,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     if (await isServiceSuspended(svc.id)) {
-      const project = rollingProject ? `-p ${shellSingleQuote(rollingProject)} ` : '';
-      await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose ${project}stop`);
+      await composeStop(target, dir, rollingProject);
       throw new DeploymentSuspendedError();
     }
 
@@ -800,6 +804,11 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     await assertNotCancelled(deploymentId);
+
+    if (await isServiceSuspended(svc.id)) {
+      await composeStop(target, dir, rollingProject);
+      throw new DeploymentSuspendedError();
+    }
 
     if (useRolling) {
       if (previousContainer && previousContainer !== runtimeContainer) {
