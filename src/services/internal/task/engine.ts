@@ -30,7 +30,9 @@ export async function runScheduledTask(taskId: string, executionId: string): Pro
         finishedAt: new Date(),
       },
     });
-    if (res.code !== 0) throw new Error('Task exited non-zero.');
+    if (res.code !== 0) {
+      throw new Error((res.stdout + res.stderr).slice(0, 10000) || 'Task exited non-zero.');
+    }
     await notifyService(svc.id, 'task_success', {
       subject: `Scheduled task succeeded: ${task.name}`,
       text: `Scheduled task "${task.name}" on "${svc.name}" completed successfully.`,
