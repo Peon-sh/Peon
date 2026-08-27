@@ -9,6 +9,7 @@ interface PooledConnection {
   lastUsed: number;
   connecting: Promise<NodeSSH> | null;
   serverId: string;
+  generation: symbol;
 }
 
 /** Stable identity for a target so IP/user/key changes drop stale pooled sessions. */
@@ -104,18 +105,37 @@ class SshPool {
     this.disconnect(target.id);
 
     const connecting = this.connect(target, key);
+    const generation = Symbol('ssh-connection');
     this.connections.set(key, {
       ssh: null as unknown as NodeSSH,
       lastUsed: Date.now(),
       connecting,
       serverId: target.id,
+      generation,
     });
     try {
       const ssh = await connecting;
-      this.connections.set(key, { ssh, lastUsed: Date.now(), connecting: null, serverId: target.id });
+      const current = this.connections.get(key);
+      if (!current || current.generation !== generation) {
+        try {
+          ssh.dispose();
+        } catch {
+          // The connection was invalidated while it was opening.
+        }
+        throw new Error('SSH connection was disconnected while connecting.');
+      }
+      this.connections.set(key, {
+        ssh,
+        lastUsed: Date.now(),
+        connecting: null,
+        serverId: target.id,
+        generation,
+      });
       return ssh;
     } catch (err) {
-      this.connections.delete(key);
+      if (this.connections.get(key)?.generation === generation) {
+        this.connections.delete(key);
+      }
       throw err;
     }
   }
