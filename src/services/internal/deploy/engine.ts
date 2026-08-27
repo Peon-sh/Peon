@@ -913,12 +913,14 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   } catch (err) {
     if (err instanceof DeploymentCancelledError) {
       await logger.info('Deployment cancelled.');
+      if (err instanceof DeploymentSuspendedError) {
+        await prisma.deployment.updateMany({
+          where: { id: deploymentId, status: 'IN_PROGRESS' },
+          data: { status: 'CANCELLED', finishedAt: new Date() },
+        });
+      }
       if (!isPreview) {
         if (err instanceof DeploymentSuspendedError) {
-          await prisma.deployment.updateMany({
-            where: { id: deploymentId, status: 'IN_PROGRESS' },
-            data: { status: 'CANCELLED', finishedAt: new Date() },
-          });
           await prisma.service.update({ where: { id: svc.id }, data: { status: 'SUSPENDED' } });
         } else {
           const prior = await hasPriorFinishedProduction(svc.id, deploymentId);
