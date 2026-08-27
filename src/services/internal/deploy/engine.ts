@@ -44,6 +44,7 @@ import { notifyService } from '@/services/internal/notifications/events';
 import { buildDeploymentMessage } from '@/services/internal/notifications/deployment-message';
 import {
   DeploymentCancelledError,
+  DeploymentSuspendedError,
   ResumeFailedError,
   statusAfterCancelledDeploy,
   statusAfterControl,
@@ -394,6 +395,18 @@ async function assertNotCancelled(deploymentId: string): Promise<void> {
   if (row?.status === 'CANCELLED') throw new DeploymentCancelledError();
 }
 
+async function assertServiceNotSuspended(serviceId: string): Promise<void> {
+  if (await isServiceSuspended(serviceId)) throw new DeploymentSuspendedError();
+}
+
+async function isServiceSuspended(serviceId: string): Promise<boolean> {
+  const row = await prisma.service.findUnique({
+    where: { id: serviceId },
+    select: { suspendedAt: true },
+  });
+  return row?.suspendedAt != null;
+}
+
 async function hasPriorFinishedProduction(
   serviceId: string,
   excludeDeploymentId: string,
@@ -725,6 +738,10 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     await assertNotCancelled(deploymentId);
 
+    // The service may have been suspended while the image was being built.
+    // Do not start the new container after that desired-state change.
+    await assertServiceNotSuspended(svc.id);
+
     // Pre-deploy command runs in the currently-running container before swap.
     const preCmd = svc.settings?.preDeployCommand?.trim();
     if (preCmd && !isPreview) {
@@ -736,6 +753,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     await assertNotCancelled(deploymentId);
+    await assertServiceNotSuspended(svc.id);
 
     log(useRolling ? 'Starting new container (rolling update)…' : 'Starting containers…');
     try {
@@ -748,6 +766,11 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         await removeFailedRollingContainer(target, name, log);
       }
       throw err;
+    }
+
+    if (await isServiceSuspended(svc.id)) {
+      await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose stop`);
+      throw new DeploymentSuspendedError();
     }
 
     // Raw compose may use project-prefixed names — resolve the actual container.
@@ -891,11 +914,19 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     if (err instanceof DeploymentCancelledError) {
       await logger.info('Deployment cancelled.');
       if (!isPreview) {
-        const prior = await hasPriorFinishedProduction(svc.id, deploymentId);
-        await prisma.service.update({
-          where: { id: svc.id },
-          data: { status: statusAfterCancelledDeploy(prior) },
-        });
+        if (err instanceof DeploymentSuspendedError) {
+          await prisma.deployment.updateMany({
+            where: { id: deploymentId, status: 'IN_PROGRESS' },
+            data: { status: 'CANCELLED', finishedAt: new Date() },
+          });
+          await prisma.service.update({ where: { id: svc.id }, data: { status: 'SUSPENDED' } });
+        } else {
+          const prior = await hasPriorFinishedProduction(svc.id, deploymentId);
+          await prisma.service.update({
+            where: { id: svc.id },
+            data: { status: statusAfterCancelledDeploy(prior) },
+          });
+        }
       }
       return;
     }
