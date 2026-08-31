@@ -9,6 +9,14 @@ export class DeploymentCancelledError extends Error {
   }
 }
 
+/** Thrown when a deployment reaches the host after its service was suspended. */
+export class DeploymentSuspendedError extends DeploymentCancelledError {
+  constructor() {
+    super('Service suspended during deployment');
+    this.name = 'DeploymentSuspendedError';
+  }
+}
+
 /**
  * Thrown when `docker compose up -d` fails while resuming a suspended service —
  * typically because docker cleanup pruned the image while it was suspended.
