@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    service: { findUnique: vi.fn(), update: vi.fn() },
+    service: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -17,6 +17,7 @@ import { controlService } from '@/services/internal/deploy/engine';
 
 const serviceFindUnique = vi.mocked(prisma.service.findUnique);
 const serviceUpdate = vi.mocked(prisma.service.update);
+const serviceUpdateMany = vi.mocked(prisma.service.updateMany);
 const exec = vi.mocked(sshPool.exec);
 const targetForServer = vi.mocked(sshTargetForServer);
 
@@ -36,6 +37,7 @@ describe('controlService suspension re-check', () => {
     targetForServer.mockResolvedValue({ host: 'h', user: 'u' } as never);
     exec.mockResolvedValue({ code: 0, stdout: '', stderr: '' } as never);
     serviceUpdate.mockResolvedValue({} as never);
+    serviceUpdateMany.mockResolvedValue({ count: 1 } as never);
   });
 
   // Resume clears suspendedAt at enqueue time. If the operator suspends again
@@ -103,5 +105,24 @@ describe('controlService suspension re-check', () => {
     expect(cmd).toMatch(
       /^cd '\/data\/peon\/services\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' && /,
     );
+  });
+
+  it('keeps SUSPENDED when a stale stop runs after suspension', async () => {
+    serviceFindUnique.mockResolvedValue(service(new Date('2026-01-01T00:00:00Z')));
+    serviceUpdateMany
+      .mockResolvedValueOnce({ count: 0 } as never)
+      .mockResolvedValueOnce({ count: 1 } as never);
+
+    await controlService('svc1', 'stop');
+
+    expect(serviceUpdateMany).toHaveBeenNthCalledWith(1, {
+      where: { id: 'svc1', suspendedAt: null },
+      data: { status: 'STOPPED' },
+    });
+    expect(serviceUpdateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 'svc1', suspendedAt: { not: null } },
+      data: { status: 'SUSPENDED' },
+    });
+    expect(serviceUpdate).not.toHaveBeenCalled();
   });
 });
