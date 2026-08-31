@@ -44,6 +44,7 @@ import { notifyService } from '@/services/internal/notifications/events';
 import { buildDeploymentMessage } from '@/services/internal/notifications/deployment-message';
 import {
   DeploymentCancelledError,
+  DeploymentSuspendedError,
   ResumeFailedError,
   statusAfterCancelledDeploy,
   statusAfterControl,
@@ -222,6 +223,20 @@ async function composeUp(
     (c) => log(c.trimEnd()),
   );
   if (res.code !== 0) throw new Error('docker compose up failed.');
+}
+
+async function composeStop(
+  target: SshTarget,
+  dir: string,
+  projectName: string | null,
+  log: (m: string) => void,
+): Promise<void> {
+  const project = projectName ? `-p ${shellSingleQuote(projectName)} ` : '';
+  const res = await sshPool.exec(target, `cd ${shellSingleQuote(dir)} && docker compose ${project}stop`);
+  if (res.code !== 0) {
+    const detail = res.stderr.trim() || res.stdout.trim() || `exit code ${res.code ?? 'unknown'}`;
+    log(`Failed to stop compose project after suspension: ${detail}`);
+  }
 }
 
 /** Stop/remove other containers for this Peon service, keeping `keepContainer`. */
@@ -725,6 +740,14 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 
     await assertNotCancelled(deploymentId);
 
+    // The service may have been suspended while the image was being built.
+    // Do not start the new container after that desired-state change.
+    const serviceAfterBuild = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceAfterBuild && isSuspended(serviceAfterBuild)) throw new DeploymentSuspendedError();
+
     // Pre-deploy command runs in the currently-running container before swap.
     const preCmd = svc.settings?.preDeployCommand?.trim();
     if (preCmd && !isPreview) {
@@ -736,6 +759,11 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     await assertNotCancelled(deploymentId);
+    const serviceBeforeCompose = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceBeforeCompose && isSuspended(serviceBeforeCompose)) throw new DeploymentSuspendedError();
 
     log(useRolling ? 'Starting new container (rolling update)…' : 'Starting containers…');
     try {
@@ -748,6 +776,15 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         await removeFailedRollingContainer(target, name, log);
       }
       throw err;
+    }
+
+    const serviceAfterCompose = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceAfterCompose && isSuspended(serviceAfterCompose)) {
+      await composeStop(target, dir, rollingProject, log);
+      throw new DeploymentSuspendedError();
     }
 
     // Raw compose may use project-prefixed names — resolve the actual container.
@@ -776,6 +813,15 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     }
 
     await assertNotCancelled(deploymentId);
+
+    const serviceAfterReadiness = await prisma.service.findUnique({
+      where: { id: svc.id },
+      select: { suspendedAt: true },
+    });
+    if (serviceAfterReadiness && isSuspended(serviceAfterReadiness)) {
+      await composeStop(target, dir, rollingProject, log);
+      throw new DeploymentSuspendedError();
+    }
 
     if (useRolling) {
       if (previousContainer && previousContainer !== runtimeContainer) {
@@ -890,12 +936,22 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   } catch (err) {
     if (err instanceof DeploymentCancelledError) {
       await logger.info('Deployment cancelled.');
-      if (!isPreview) {
-        const prior = await hasPriorFinishedProduction(svc.id, deploymentId);
-        await prisma.service.update({
-          where: { id: svc.id },
-          data: { status: statusAfterCancelledDeploy(prior) },
+      if (err instanceof DeploymentSuspendedError) {
+        await prisma.deployment.updateMany({
+          where: { id: deploymentId, status: 'IN_PROGRESS' },
+          data: { status: 'CANCELLED', finishedAt: new Date() },
         });
+      }
+      if (!isPreview) {
+        if (err instanceof DeploymentSuspendedError) {
+          await prisma.service.update({ where: { id: svc.id }, data: { status: 'SUSPENDED' } });
+        } else {
+          const prior = await hasPriorFinishedProduction(svc.id, deploymentId);
+          await prisma.service.update({
+            where: { id: svc.id },
+            data: { status: statusAfterCancelledDeploy(prior) },
+          });
+        }
       }
       return;
     }
