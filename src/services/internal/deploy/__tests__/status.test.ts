@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DeploymentCancelledError,
+  DeploymentSuspendedError,
   ResumeFailedError,
   isCancellableStatus,
   reconcileServiceStatus,
@@ -8,6 +9,15 @@ import {
   statusAfterControl,
   statusAfterFailedDeploy,
 } from '../status';
+
+describe('DeploymentSuspendedError', () => {
+  it('is handled as a cancelled deployment with a distinct cause', () => {
+    const err = new DeploymentSuspendedError();
+    expect(err).toBeInstanceOf(DeploymentCancelledError);
+    expect(err.name).toBe('DeploymentSuspendedError');
+    expect(err.message).toBe('Service suspended during deployment');
+  });
+});
 
 describe('isCancellableStatus', () => {
   it('allows queued and in-progress deployments', () => {
