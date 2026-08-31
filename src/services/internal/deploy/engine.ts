@@ -1066,6 +1066,22 @@ export async function controlService(
     throw new ResumeFailedError(res.stderr.trim() || res.stdout.trim() || 'compose up failed');
   }
 
+  if (action === 'stop') {
+    // A queued stop may run after a suspend request. Keep the persisted status
+    // aligned with the latest desired state instead of overwriting SUSPENDED.
+    const stopped = await prisma.service.updateMany({
+      where: { id: serviceId, suspendedAt: null },
+      data: { status: 'STOPPED' },
+    });
+    if (stopped.count === 0) {
+      await prisma.service.updateMany({
+        where: { id: serviceId, suspendedAt: { not: null } },
+        data: { status: 'SUSPENDED' },
+      });
+    }
+    return;
+  }
+
   await prisma.service.update({
     where: { id: serviceId },
     data: { status: statusAfterControl(action) },
