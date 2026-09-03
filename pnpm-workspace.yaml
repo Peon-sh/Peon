@@ -1,9 +1,12 @@
 packages: []
 
+overrides:
+  fast-uri: ">=3.1.6"
+
 # Packages allowed to run install/build scripts (pnpm 10+).
 # Without this, Docker installs skip prisma/ssh2/sharp native binaries.
 onlyBuiltDependencies:
-  - '@prisma/engines'
+  - "@prisma/engines"
   - prisma
   - esbuild
   - sharp
@@ -14,7 +17,7 @@ onlyBuiltDependencies:
 
 # pnpm 11 allowBuilds map (ignored on 10.x; kept for forward compat).
 allowBuilds:
-  '@prisma/engines': true
+  "@prisma/engines": true
   prisma: true
   esbuild: true
   sharp: true
@@ -28,5 +31,5 @@ allowBuilds:
 # --frozen-lockfile installs. High-churn packages break Docker builds when
 # bumped inside that window — exclude them so image builds stay deterministic.
 minimumReleaseAgeExclude:
-  - '@aws-sdk/*'
+  - "@aws-sdk/*"
   - openai
