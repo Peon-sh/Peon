@@ -3612,8 +3612,8 @@ function DangerTab({
                 deployment history from Peon.
               </p>
               <p className="text-amber-700 dark:text-amber-400 font-medium">
-                Stop the service first. Deleting does not stop or remove containers on the server —
-                they will keep running until you stop the service (or clean them up manually).
+                It also stops and removes this app on the server, including Docker volumes. That
+                data cannot be recovered. Use Stop or Suspend if you only want to pause it.
               </p>
             </div>
           }
@@ -3627,10 +3627,11 @@ function DangerTab({
     >
       <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-50">
         <TriangleAlert />
-        <AlertTitle>Stop the service first</AlertTitle>
+        <AlertTitle>This cannot be undone</AlertTitle>
         <AlertDescription className="text-amber-900/85 dark:text-amber-100/80">
-          Deleting a service removes it from Peon only. Running containers on the server are not
-          stopped. Stop the service before deleting it.
+          Delete stops this app on the server and removes its Docker volumes (databases, uploads).
+          Use Stop or Suspend if you only want to pause it. If the server is unreachable, Peon still
+          removes the service from your account.
         </AlertDescription>
       </Alert>
       <p className="text-muted-foreground text-sm">

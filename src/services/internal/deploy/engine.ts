@@ -1089,17 +1089,28 @@ export async function controlService(
 }
 
 /**
- * Best-effort Docker teardown for a service (compose down + remove config dir).
- * Used when cascading server deletion.
- * Does not throw if the host is unreachable — caller still deletes the DB row.
+ * Best-effort Docker teardown for a service: `compose down -v` the main stack
+ * (named volumes included), force-remove any container still labelled for this
+ * service, then delete its config dir.
+ * Used when deleting a service or cascading server deletion.
+ * SSH failures throw — callers catch so the DB row can still be deleted.
  */
 export async function teardownService(serviceId: string): Promise<void> {
   const svc = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!svc?.serverId) return;
   const target = await sshTargetForServer(svc.serverId);
   const dir = shellSingleQuote(serviceDir(svc));
+  // `compose down` only reaches the directory's default project. Rolling
+  // deploys use a per-deployment project name and previews live in `pr-*`
+  // subdirectories, so sweep leftovers by service label — matching on the label
+  // (rather than on those directories) keeps another service's identically
+  // named preview project out of scope.
+  const label = shellSingleQuote(`${PEON_SERVICE_ID_LABEL}=${svc.id}`);
   await sshPool.exec(
     target,
-    `if [ -d ${dir} ]; then cd ${dir} && docker compose down -v --remove-orphans || true; fi; rm -rf ${dir}`,
+    `if [ -d ${dir} ]; then (cd ${dir} && docker compose down -v --remove-orphans) || true; fi; ` +
+      `docker ps -aq --filter label=${label} 2>/dev/null | ` +
+      `while read -r c; do docker rm -f "$c" >/dev/null 2>&1 || true; done; ` +
+      `rm -rf ${dir}`,
   );
 }

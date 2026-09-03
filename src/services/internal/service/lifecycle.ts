@@ -24,6 +24,7 @@ import { MASK, randomToken } from './shared';
 import { applyReconciledStatus, deploymentHintsForServices } from './status-read';
 import { AuditService } from '@/services/internal/audit/audit';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
+import { teardownService } from '@/services/internal/deploy/engine';
 
 const SERVICE_SETTING_FIELDS = [
   'isAutoDeployEnabled',
@@ -559,6 +560,18 @@ export async function remove(serviceId: string) {
     where: { id: serviceId },
     select: { id: true, name: true, project: { select: { workspaceId: true } } },
   });
+  // An unreachable host must not strand the service in Peon, but the operator
+  // still needs to know containers may have been left behind.
+  let teardownFailed = false;
+  try {
+    await teardownService(serviceId);
+  } catch (err) {
+    teardownFailed = true;
+    console.warn(
+      `[service.remove] teardown failed for ${serviceId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
   await prisma.service.delete({ where: { id: serviceId } });
   if (svc) {
     await AuditService.record({
@@ -567,7 +580,10 @@ export async function remove(serviceId: string) {
       resourceType: 'service',
       resourceId: svc.id,
       resourceName: svc.name,
-      summary: `Deleted service "${svc.name}"`,
+      summary: teardownFailed
+        ? `Deleted service "${svc.name}" (server unreachable — containers may still be running)`
+        : `Deleted service "${svc.name}"`,
+      metadata: { teardown: teardownFailed ? 'failed' : 'ok' },
     });
   }
 }

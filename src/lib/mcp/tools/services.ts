@@ -80,7 +80,7 @@ export function registerServiceTools(server: McpServer, ctx: McpContext, access:
 
   server.tool(
     'delete_service',
-    'Delete a service from Peon. Does not stop or remove containers on the server — stop the service first. Requires manage access.',
+    'Delete a service from Peon and tear down its containers and Docker volumes on the server. If the server is unreachable, the Peon record is still removed. Requires manage access.',
     { serviceId: z.string().describe('The service ID') },
     safe(async ({ serviceId }) => {
       await serviceAccess(serviceId, true);
