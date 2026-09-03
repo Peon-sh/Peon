@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { sshTargetForServer } from '@/lib/ssh';
+import { tearDownPreviewStack } from '@/services/internal/deploy/preview-teardown';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 
 const BASE_DIR = '/data/peon/services';
@@ -26,11 +27,12 @@ export async function deletePreview(serviceId: string, previewId: string) {
   if (preview.service.serverId) {
     try {
       const target = await sshTargetForServer(preview.service.serverId);
-      const dir = `${BASE_DIR}/${preview.service.uuid}/pr-${preview.pullRequestId}`;
-      await sshPool.exec(
-        target,
-        `if [ -f ${dir}/docker-compose.yml ]; then cd ${dir} && docker compose down --remove-orphans || true; fi`,
-      );
+      await tearDownPreviewStack(target, {
+        serviceId,
+        serviceUuid: preview.service.uuid,
+        pullRequestId: preview.pullRequestId,
+        dir: `${BASE_DIR}/${preview.service.uuid}/pr-${preview.pullRequestId}`,
+      });
     } catch (err) {
       console.error(
         `[preview] teardown failed for ${serviceId} PR #${preview.pullRequestId}:`,
