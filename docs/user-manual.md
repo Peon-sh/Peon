@@ -769,7 +769,7 @@ Enable **Auto deploy** for push-triggered deploys. Branch filtering and signatur
 | Field | What it does |
 |-------|--------------|
 | Confirm name | Type the **exact** service name to enable delete |
-| Delete | Removes the service from Peon and tears down containers per platform behavior |
+| Delete | Stops and removes the app on the VPS (including Docker volumes), then deletes it from Peon. If the server is unreachable, Peon still deletes the record |
 
 ---
 
