@@ -153,20 +153,28 @@ describe('template catalog compose', () => {
     }
   });
 
-  it('escapes shell $(...) in healthchecks so Compose does not interpolate', () => {
+  // Compose reads `$` as the start of an interpolation: `$VAR`, `${VAR}`, or
+  // `$$` for a literal dollar. Anything else — `$(cmd)`, `$2`, `$?` — is an
+  // invalid interpolation that stricter Compose builds reject outright, taking
+  // the whole one-click deploy with them. Shell snippets therefore have to
+  // double every dollar they want the container's shell to see. Scanning the
+  // whole file rather than just healthchecks: offenders have turned up in
+  // `command` and `entrypoint` too.
+  it('escapes every shell $ Compose would read as an interpolation', () => {
+    const offenders: string[] = [];
     for (const t of templates) {
-      const detail = getTemplate(t.slug)!;
-      const doc = parse(detail.compose) as {
-        services?: Record<string, { healthcheck?: { test?: unknown } }>;
-      };
-      for (const [key, svc] of Object.entries(doc.services ?? {})) {
-        const test = svc.healthcheck?.test;
-        const parts = Array.isArray(test) ? test : test != null ? [test] : [];
-        for (const part of parts) {
-          if (typeof part !== 'string') continue;
-          expect(part, `${t.slug}/${key}`).not.toMatch(/(?<!\$)\$\(/);
+      const compose = getTemplate(t.slug)!.compose;
+      for (let i = 0; i < compose.length; i++) {
+        if (compose[i] !== '$') continue;
+        const next = compose[i + 1];
+        if (next === '$') {
+          i++;
+          continue;
         }
+        if (next === '{' || (next && /[A-Za-z_]/.test(next))) continue;
+        offenders.push(`${t.slug}: …${compose.slice(Math.max(0, i - 24), i + 24)}…`);
       }
     }
+    expect(offenders).toEqual([]);
   });
 });
