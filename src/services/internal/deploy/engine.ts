@@ -1024,16 +1024,44 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 }
 
 /** Compose command applied on the host for each control action. */
-function composeCommandFor(action: ServiceControlAction): string {
+function composeCommandFor(action: ServiceControlAction, projectName: string | null): string {
+  const project = projectName ? `-p ${shellSingleQuote(projectName)} ` : '';
   // `stop`/`suspend` both stop the containers; graceful shutdown is already
   // honored via stop_grace_period in the rendered compose file.
-  if (action === 'stop' || action === 'suspend') return 'docker compose stop';
-  if (action === 'restart') return 'docker compose restart';
+  if (action === 'stop' || action === 'suspend') return `docker compose ${project}stop`;
+  if (action === 'restart') return `docker compose ${project}restart`;
   // `resume` deliberately uses `up -d` rather than `start`: docker cleanup runs
   // `docker container prune -f`, which removes stopped containers, so a suspended
   // service's container may no longer exist. `up -d` recreates it from the
   // compose file still on disk.
-  return 'docker compose up -d';
+  return `docker compose ${project}up -d`;
+}
+
+/**
+ * Compose project that actually owns the service's container, or null to let
+ * compose derive it from the directory.
+ *
+ * A rolling deploy runs `up` under a per-deployment project name, so the
+ * directory's default project — all a bare `docker compose` command can see —
+ * ends up empty. Without this, stop/restart/suspend exit 0 having done nothing
+ * while the app keeps serving traffic. Read the project off the live container
+ * rather than recomputing it, so the command targets what is really running.
+ */
+async function activeComposeProject(
+  target: SshTarget,
+  activeContainerName: string | null | undefined,
+): Promise<string | null> {
+  const container = activeContainerName?.trim();
+  if (!container) return null;
+  const res = await sshPool.exec(
+    target,
+    `docker inspect --format='{{index .Config.Labels "com.docker.compose.project"}}' ` +
+      `${shellSingleQuote(container)} 2>/dev/null || true`,
+  );
+  const project = res.stdout.trim();
+  // Gone from the host, or created without the label: fall back to the default.
+  if (!project || project === '<no value>') return null;
+  return project;
 }
 
 /** Start/stop/restart/suspend/resume a deployed service via compose. */
@@ -1057,7 +1085,8 @@ export async function controlService(
 
   const target = await sshTargetForServer(svc.serverId);
   const dir = shellSingleQuote(serviceDir(svc));
-  const res = await sshPool.exec(target, `cd ${dir} && ${composeCommandFor(action)}`);
+  const project = await activeComposeProject(target, svc.activeContainerName);
+  const res = await sshPool.exec(target, `cd ${dir} && ${composeCommandFor(action, project)}`);
 
   // sshPool.exec resolves with an exit code instead of throwing, so a failed
   // resume has to be detected explicitly. It usually means docker cleanup also
