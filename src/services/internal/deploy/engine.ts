@@ -59,6 +59,7 @@ import {
   tryAcquireDeployLease,
 } from '@/services/internal/deploy/lease';
 import { notifyPreviewDeployOutcome } from '@/services/internal/deploy/preview';
+import { legacyPreviewSweep } from '@/services/internal/deploy/preview-teardown';
 import {
   buildEnvMap,
   buildHealthcheck,
@@ -72,6 +73,7 @@ import {
   PEON_DEPLOYMENT_ID_LABEL,
   PEON_ROLE_LABEL,
   PEON_SERVICE_ID_LABEL,
+  previewComposeProject,
   rollingComposeProject,
   rollingContainerName,
   shouldUseRollingUpdate,
@@ -550,6 +552,14 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         ? rollingContainerName(svc.name, deployment.uuid)
         : containerName(svc.name, svc.uuid);
     const rollingProject = useRolling ? rollingComposeProject(svc.uuid, deployment.uuid) : null;
+    // Previews share a directory basename (`pr-<n>`) across services, so they
+    // need an explicit project too — mirroring the condition `serviceDir` uses
+    // to pick the preview directory in the first place.
+    const previewProject =
+      isPreview && deployment.pullRequestId != null
+        ? previewComposeProject(svc.uuid, deployment.pullRequestId)
+        : null;
+    const composeProject = rollingProject ?? previewProject;
     const buildEnv = await buildEnvMap(svc.id, { isPreview: deployment.isPreview, phase: 'build' });
     const runtimeEnv = await buildEnvMap(svc.id, { isPreview: deployment.isPreview, phase: 'runtime' });
     // Previews get isolated empty volumes — never share production data mounts.
@@ -765,10 +775,24 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     });
     if (serviceBeforeCompose && isSuspended(serviceBeforeCompose)) throw new DeploymentSuspendedError();
 
+    if (previewProject && deployment.pullRequestId != null) {
+      // A preview from before projects were scoped per service still holds the
+      // container name this deploy is about to claim, and Docker refuses
+      // duplicate names across projects. Drop it first, scoped to this service.
+      await sshPool.exec(
+        target,
+        legacyPreviewSweep({
+          serviceId: svc.id,
+          pullRequestId: deployment.pullRequestId,
+          dir,
+        }),
+      );
+    }
+
     log(useRolling ? 'Starting new container (rolling update)…' : 'Starting containers…');
     try {
       await composeUp(target, dir, composeYaml, log, svc.kind === 'COMPOSE' ? runtimeEnv : undefined, {
-        projectName: rollingProject ?? undefined,
+        projectName: composeProject ?? undefined,
         removeOrphans: !useRolling,
       });
     } catch (err) {
@@ -783,7 +807,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       select: { suspendedAt: true },
     });
     if (serviceAfterCompose && isSuspended(serviceAfterCompose)) {
-      await composeStop(target, dir, rollingProject, log);
+      await composeStop(target, dir, composeProject, log);
       throw new DeploymentSuspendedError();
     }
 
@@ -819,7 +843,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       select: { suspendedAt: true },
     });
     if (serviceAfterReadiness && isSuspended(serviceAfterReadiness)) {
-      await composeStop(target, dir, rollingProject, log);
+      await composeStop(target, dir, composeProject, log);
       throw new DeploymentSuspendedError();
     }
 
