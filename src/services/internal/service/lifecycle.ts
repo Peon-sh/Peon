@@ -308,7 +308,13 @@ export async function createFromTemplate(
     serviceSlug: slugify(template.slug),
     serviceUuid: service.id,
     baseDomain,
-    https: false,
+    // The generated host is served over TLS: the proxy reads a bare hostname as
+    // https (parseDomain) and forceHttps redirects plain http on top of that.
+    // SERVICE_URL_* has to say the same, or the app builds its own links and
+    // OAuth redirects on http and the browser blocks them as mixed content.
+    // Without a server there is no proxy and no certificate, so the localhost
+    // fallback host stays http.
+    https: baseDomain !== null,
   });
 
   // Seed env file values, resolving references to generated magic vars.
