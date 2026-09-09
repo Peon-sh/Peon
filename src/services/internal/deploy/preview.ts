@@ -21,7 +21,8 @@ import {
 } from '@/services/internal/deploy/server-queue';
 import { BillingService } from '@/services/internal/billing/billing';
 import { isSuspended, SUSPENDED_REASON } from '@/services/internal/service/suspension';
-import { sshPool, sshTargetForServer } from '@/lib/ssh';
+import { sshTargetForServer } from '@/lib/ssh';
+import { tearDownPreviewStack } from '@/services/internal/deploy/preview-teardown';
 import type { GithubAppForAuth } from '@/lib/github/app';
 
 const BASE_DIR = '/data/peon/services';
@@ -425,11 +426,12 @@ async function teardownPreview(
   if (svc.serverId) {
     try {
       const target = await sshTargetForServer(svc.serverId);
-      const dir = previewDir(svc.uuid, pullRequestId);
-      await sshPool.exec(
-        target,
-        `if [ -f ${dir}/docker-compose.yml ]; then cd ${dir} && docker compose down --remove-orphans || true; fi`,
-      );
+      await tearDownPreviewStack(target, {
+        serviceId: svc.id,
+        serviceUuid: svc.uuid,
+        pullRequestId,
+        dir: previewDir(svc.uuid, pullRequestId),
+      });
     } catch (err) {
       console.error(`[preview] teardown failed for ${svc.id} PR #${pullRequestId}:`, err);
     }
