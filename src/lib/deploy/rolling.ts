@@ -46,6 +46,25 @@ export function rollingComposeProject(serviceUuid: string, deploymentUuid: strin
   return `peon-${a}-${b}`;
 }
 
+/**
+ * Compose project name for a PR preview, scoped to the service.
+ *
+ * Previews live in `<service-uuid>/pr-<n>` and compose names a project after
+ * its directory, so the default works out to just `pr-<n>` — the same for every
+ * service previewing that PR number. Two services in one repo (a monorepo
+ * front end and back end, say) preview the same PR, and `up --remove-orphans`
+ * for the second treats the first's container as an orphan and removes it.
+ */
+export function previewComposeProject(serviceUuid: string, pullRequestId: number): string {
+  const a = sanitizeName(serviceUuid).slice(0, 12) || 'svc';
+  return `peon-${a}-pr-${pullRequestId}`;
+}
+
+/** The shared project name previews used before they were scoped per service. */
+export function legacyPreviewComposeProject(pullRequestId: number): string {
+  return `pr-${pullRequestId}`;
+}
+
 export const PEON_SERVICE_ID_LABEL = 'peon.serviceId';
 export const PEON_DEPLOYMENT_ID_LABEL = 'peon.deploymentId';
 export const PEON_ROLE_LABEL = 'peon.role';

@@ -59,6 +59,7 @@ import {
   tryAcquireDeployLease,
 } from '@/services/internal/deploy/lease';
 import { notifyPreviewDeployOutcome } from '@/services/internal/deploy/preview';
+import { legacyPreviewSweep } from '@/services/internal/deploy/preview-teardown';
 import {
   buildEnvMap,
   buildHealthcheck,
@@ -72,6 +73,7 @@ import {
   PEON_DEPLOYMENT_ID_LABEL,
   PEON_ROLE_LABEL,
   PEON_SERVICE_ID_LABEL,
+  previewComposeProject,
   rollingComposeProject,
   rollingContainerName,
   shouldUseRollingUpdate,
@@ -550,6 +552,14 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         ? rollingContainerName(svc.name, deployment.uuid)
         : containerName(svc.name, svc.uuid);
     const rollingProject = useRolling ? rollingComposeProject(svc.uuid, deployment.uuid) : null;
+    // Previews share a directory basename (`pr-<n>`) across services, so they
+    // need an explicit project too — mirroring the condition `serviceDir` uses
+    // to pick the preview directory in the first place.
+    const previewProject =
+      isPreview && deployment.pullRequestId != null
+        ? previewComposeProject(svc.uuid, deployment.pullRequestId)
+        : null;
+    const composeProject = rollingProject ?? previewProject;
     const buildEnv = await buildEnvMap(svc.id, { isPreview: deployment.isPreview, phase: 'build' });
     const runtimeEnv = await buildEnvMap(svc.id, { isPreview: deployment.isPreview, phase: 'runtime' });
     // Previews get isolated empty volumes — never share production data mounts.
@@ -765,10 +775,24 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     });
     if (serviceBeforeCompose && isSuspended(serviceBeforeCompose)) throw new DeploymentSuspendedError();
 
+    if (previewProject && deployment.pullRequestId != null) {
+      // A preview from before projects were scoped per service still holds the
+      // container name this deploy is about to claim, and Docker refuses
+      // duplicate names across projects. Drop it first, scoped to this service.
+      await sshPool.exec(
+        target,
+        legacyPreviewSweep({
+          serviceId: svc.id,
+          pullRequestId: deployment.pullRequestId,
+          dir,
+        }),
+      );
+    }
+
     log(useRolling ? 'Starting new container (rolling update)…' : 'Starting containers…');
     try {
       await composeUp(target, dir, composeYaml, log, svc.kind === 'COMPOSE' ? runtimeEnv : undefined, {
-        projectName: rollingProject ?? undefined,
+        projectName: composeProject ?? undefined,
         removeOrphans: !useRolling,
       });
     } catch (err) {
@@ -783,7 +807,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       select: { suspendedAt: true },
     });
     if (serviceAfterCompose && isSuspended(serviceAfterCompose)) {
-      await composeStop(target, dir, rollingProject, log);
+      await composeStop(target, dir, composeProject, log);
       throw new DeploymentSuspendedError();
     }
 
@@ -819,7 +843,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       select: { suspendedAt: true },
     });
     if (serviceAfterReadiness && isSuspended(serviceAfterReadiness)) {
-      await composeStop(target, dir, rollingProject, log);
+      await composeStop(target, dir, composeProject, log);
       throw new DeploymentSuspendedError();
     }
 
@@ -1024,16 +1048,44 @@ export async function runDeployment(deploymentId: string): Promise<void> {
 }
 
 /** Compose command applied on the host for each control action. */
-function composeCommandFor(action: ServiceControlAction): string {
+function composeCommandFor(action: ServiceControlAction, projectName: string | null): string {
+  const project = projectName ? `-p ${shellSingleQuote(projectName)} ` : '';
   // `stop`/`suspend` both stop the containers; graceful shutdown is already
   // honored via stop_grace_period in the rendered compose file.
-  if (action === 'stop' || action === 'suspend') return 'docker compose stop';
-  if (action === 'restart') return 'docker compose restart';
+  if (action === 'stop' || action === 'suspend') return `docker compose ${project}stop`;
+  if (action === 'restart') return `docker compose ${project}restart`;
   // `resume` deliberately uses `up -d` rather than `start`: docker cleanup runs
   // `docker container prune -f`, which removes stopped containers, so a suspended
   // service's container may no longer exist. `up -d` recreates it from the
   // compose file still on disk.
-  return 'docker compose up -d';
+  return `docker compose ${project}up -d`;
+}
+
+/**
+ * Compose project that actually owns the service's container, or null to let
+ * compose derive it from the directory.
+ *
+ * A rolling deploy runs `up` under a per-deployment project name, so the
+ * directory's default project — all a bare `docker compose` command can see —
+ * ends up empty. Without this, stop/restart/suspend exit 0 having done nothing
+ * while the app keeps serving traffic. Read the project off the live container
+ * rather than recomputing it, so the command targets what is really running.
+ */
+async function activeComposeProject(
+  target: SshTarget,
+  activeContainerName: string | null | undefined,
+): Promise<string | null> {
+  const container = activeContainerName?.trim();
+  if (!container) return null;
+  const res = await sshPool.exec(
+    target,
+    `docker inspect --format='{{index .Config.Labels "com.docker.compose.project"}}' ` +
+      `${shellSingleQuote(container)} 2>/dev/null || true`,
+  );
+  const project = res.stdout.trim();
+  // Gone from the host, or created without the label: fall back to the default.
+  if (!project || project === '<no value>') return null;
+  return project;
 }
 
 /** Start/stop/restart/suspend/resume a deployed service via compose. */
@@ -1057,7 +1109,8 @@ export async function controlService(
 
   const target = await sshTargetForServer(svc.serverId);
   const dir = shellSingleQuote(serviceDir(svc));
-  const res = await sshPool.exec(target, `cd ${dir} && ${composeCommandFor(action)}`);
+  const project = await activeComposeProject(target, svc.activeContainerName);
+  const res = await sshPool.exec(target, `cd ${dir} && ${composeCommandFor(action, project)}`);
 
   // sshPool.exec resolves with an exit code instead of throwing, so a failed
   // resume has to be detected explicitly. It usually means docker cleanup also

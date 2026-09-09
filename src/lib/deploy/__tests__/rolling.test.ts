@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   hasHostPortMappings,
+  legacyPreviewComposeProject,
+  previewComposeProject,
   rollingComposeProject,
   rollingContainerName,
   shouldUseRollingUpdate,
@@ -13,6 +15,38 @@ describe('hasHostPortMappings', () => {
     expect(hasHostPortMappings('3000')).toBe(false);
     expect(hasHostPortMappings(null)).toBe(false);
     expect(hasHostPortMappings('')).toBe(false);
+  });
+});
+
+// Compose derives a project name from the directory, and every service's
+// preview for PR n lives in a directory called `pr-n`. Sharing that project is
+// what let one service's `up --remove-orphans` delete another's preview.
+describe('previewComposeProject', () => {
+  it('scopes the project to the service', () => {
+    expect(previewComposeProject('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 7)).toBe(
+      'peon-aaaaaaaa-bbb-pr-7',
+    );
+  });
+
+  it('differs between two services previewing the same PR', () => {
+    const a = previewComposeProject('aaaaaaaa-1111-2222-3333-444444444444', 7);
+    const b = previewComposeProject('bbbbbbbb-1111-2222-3333-444444444444', 7);
+
+    expect(a).not.toBe(b);
+    // …where the old default project name was identical for both.
+    expect(legacyPreviewComposeProject(7)).toBe('pr-7');
+  });
+
+  it('differs between two PRs of the same service', () => {
+    const uuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+
+    expect(previewComposeProject(uuid, 7)).not.toBe(previewComposeProject(uuid, 8));
+  });
+
+  it('never collides with a rolling project for the same service', () => {
+    const uuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+
+    expect(previewComposeProject(uuid, 7)).not.toBe(rollingComposeProject(uuid, 'dep12345'));
   });
 });
 
