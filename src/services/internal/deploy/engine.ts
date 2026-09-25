@@ -1001,7 +1001,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         return;
       }
     }
-    await logger.info(`Deployment failed: ${message}`);
+    await logger.stderr(`Deployment failed: ${message}`);
     if (isPreview && deployment.pullRequestId != null) {
       try {
         await notifyPreviewDeployOutcome({
