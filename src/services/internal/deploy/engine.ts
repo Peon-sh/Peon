@@ -340,7 +340,7 @@ async function waitUntilReady(
   container: string,
   svc: FullService,
   deploymentId: string,
-  log: (m: string) => void,
+  log: (m: string, stream?: 'stdout' | 'stderr') => void,
 ): Promise<void> {
   // APPLICATION/DATABASE: Peon healthcheck on → require Docker healthy.
   // Healthcheck off → require running (catches crash-loops).
@@ -391,8 +391,13 @@ async function waitUntilReady(
     log('----------------------------------------');
     log('Container logs:');
     await sshPool
-      .execStream(target, `docker logs -n 100 ${shellSingleQuote(container)} 2>&1 || true`, (c) =>
-        log(c.trimEnd()),
+      .execStream(
+        target,
+        `docker logs -n 100 ${shellSingleQuote(container)} || true`,
+        (c, stream) => {
+          const trimmed = c.trimEnd();
+          if (trimmed) log(trimmed, stream);
+        },
       )
       .catch(() => undefined);
     log('----------------------------------------');
@@ -445,8 +450,9 @@ export async function runDeployment(deploymentId: string): Promise<void> {
   if (!svc.serverId) throw new Error('Service has no target server.');
 
   const logger = makeDeploymentLogger(deploymentId);
-  const log = (m: string) => {
-    if (m) void logger.stdout(m);
+  const log = (m: string, stream: 'stdout' | 'stderr' = 'stdout') => {
+    if (!m) return;
+    void (stream === 'stderr' ? logger.stderr(m) : logger.stdout(m));
   };
 
   // Claim while QUEUED, or continue if already promoted to IN_PROGRESS (server-queue gate).
@@ -1001,7 +1007,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         return;
       }
     }
-    await logger.info(`Deployment failed: ${message}`);
+    await logger.stderr(`Deployment failed: ${message}`);
     if (isPreview && deployment.pullRequestId != null) {
       try {
         await notifyPreviewDeployOutcome({
