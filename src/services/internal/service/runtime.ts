@@ -15,11 +15,27 @@ import { AppError, NotFoundError } from '@/lib/errors';
 type ContainerContext = { target: SshTarget; container: string };
 
 const contextCache = new Map<string, { ctx: ContainerContext; expires: number }>();
+const contextGeneration = new Map<string, number>();
 const CACHE_TTL_MS = 60_000;
 
 async function containerContext(serviceId: string): Promise<ContainerContext> {
   const cached = contextCache.get(serviceId);
-  if (cached && cached.expires > Date.now()) return cached.ctx;
+  if (cached && cached.expires > Date.now()) {
+    const generation = contextGeneration.get(serviceId) ?? 0;
+    const current = await prisma.service.findFirst({
+      where: { id: serviceId, deletedAt: null },
+      select: { serverId: true },
+    });
+    if (
+      generation === (contextGeneration.get(serviceId) ?? 0) &&
+      current?.serverId === cached.ctx.target.id
+    ) {
+      return cached.ctx;
+    }
+    contextCache.delete(serviceId);
+  }
+
+  const generation = contextGeneration.get(serviceId) ?? 0;
 
   const svc = await prisma.service.findFirst({
     where: { id: serviceId, deletedAt: null },
@@ -79,7 +95,9 @@ async function containerContext(serviceId: string): Promise<ContainerContext> {
   }
 
   const ctx = { target, container };
-  contextCache.set(serviceId, { ctx, expires: Date.now() + CACHE_TTL_MS });
+  if (generation === (contextGeneration.get(serviceId) ?? 0)) {
+    contextCache.set(serviceId, { ctx, expires: Date.now() + CACHE_TTL_MS });
+  }
   return ctx;
 }
 
@@ -87,6 +105,7 @@ export const ServiceRuntime = {
   /** Drop cached SSH/container context after a rolling swap. */
   invalidate(serviceId: string) {
     contextCache.delete(serviceId);
+    contextGeneration.set(serviceId, (contextGeneration.get(serviceId) ?? 0) + 1);
   },
 
   /** Resolve SSH target + container name (cached). Used by exec and interactive terminal. */

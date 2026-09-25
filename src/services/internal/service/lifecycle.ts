@@ -24,6 +24,7 @@ import { MASK, randomToken } from './shared';
 import { applyReconciledStatus, deploymentHintsForServices } from './status-read';
 import { AuditService } from '@/services/internal/audit/audit';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
+import { ServiceRuntime } from './runtime';
 import { teardownService } from '@/services/internal/deploy/engine';
 
 const SERVICE_SETTING_FIELDS = [
@@ -356,7 +357,10 @@ export async function update(serviceId: string, input: UpdateServiceInput) {
     where: { id: serviceId },
     select: {
       serverId: true,
+      name: true,
+      dockerComposeRaw: true,
       destinationId: true,
+      settings: { select: { isRawComposeDeploymentEnabled: true } },
       project: { select: { workspaceId: true } },
     },
   });
@@ -402,6 +406,15 @@ export async function update(serviceId: string, input: UpdateServiceInput) {
     where: { id: serviceId },
     data: serviceData as Prisma.ServiceUpdateInput,
   });
+  const runtimeContextChanged =
+    (input.serverId !== undefined && input.serverId !== existing.serverId) ||
+    (input.name !== undefined && input.name !== existing.name) ||
+    (input.dockerComposeRaw !== undefined && input.dockerComposeRaw !== existing.dockerComposeRaw) ||
+    (input.isRawComposeDeploymentEnabled !== undefined &&
+      input.isRawComposeDeploymentEnabled !== existing.settings?.isRawComposeDeploymentEnabled);
+  if (runtimeContextChanged) {
+    ServiceRuntime.invalidate(serviceId);
+  }
   if (Object.keys(settingsData).length > 0) {
     await prisma.serviceSetting.upsert({
       where: { serviceId },
@@ -602,6 +615,7 @@ export async function setServer(serviceId: string, serverId: string, destination
     where: { id: serviceId },
     data: { serverId, destinationId: destinationId ?? null },
   });
+  ServiceRuntime.invalidate(serviceId);
   await recordServiceAudit(serviceId, {
     action: 'service.updated',
     summary: `Assigned server for "${service.name}"`,
