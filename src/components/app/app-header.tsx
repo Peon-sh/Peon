@@ -20,18 +20,19 @@ import { useAuthStore } from '@/store/auth';
 import { listProjects } from '@/services/api/project';
 import { type ServiceStatus } from '@/services/api/service';
 import { useProjectServices } from '@/lib/queries/service';
+import { statusLabel, statusTone } from '@/components/app/status-badge';
 import { cn } from '@/lib/utils';
 
-const STATUS_DOT: Partial<Record<ServiceStatus, string>> = {
-  RUNNING: 'bg-emerald-500',
-  STARTING: 'bg-amber-500',
-  DEGRADED: 'bg-red-500',
-  STOPPED: 'bg-zinc-500',
-  EXITED: 'bg-red-500',
-};
+const TONE_DOT = {
+  success: 'bg-success',
+  warning: 'bg-warning',
+  destructive: 'bg-destructive',
+  info: 'bg-info',
+  muted: 'bg-muted-foreground',
+} as const;
 
 function statusDotClass(status?: ServiceStatus) {
-  return (status && STATUS_DOT[status]) ?? 'bg-zinc-500';
+  return TONE_DOT[statusTone(status)];
 }
 
 /**
@@ -52,7 +53,7 @@ export function AppHeader() {
         <ProjectSelector projectId={projectId} />
         {projectId && (
           <>
-            <Slash className="text-faint size-3 shrink-0 -rotate-12" />
+            <Slash className="text-muted-foreground size-3 shrink-0 -rotate-12" />
             <ServiceSelector projectId={projectId} serviceId={serviceId} />
           </>
         )}
@@ -64,12 +65,10 @@ export function AppHeader() {
 function SelectorTrigger({
   label,
   placeholder,
-  active,
   leading,
 }: {
   label: string | null;
   placeholder: string;
-  active?: boolean;
   leading?: ReactNode;
 }) {
   return (
@@ -77,9 +76,8 @@ function SelectorTrigger({
       variant="ghost"
       size="sm"
       className={cn(
-        'h-8 max-w-56 gap-1.5 px-2 text-[13px]',
-        label ? 'font-semibold' : 'text-muted-foreground font-normal',
-        active && 'text-phosphor',
+        'h-8 max-w-56 gap-1.5 px-2 text-base',
+        label ? 'font-medium' : 'text-muted-foreground',
       )}
     >
       {leading}
@@ -180,12 +178,11 @@ function ServiceSelector({ projectId, serviceId }: { projectId: string; serviceI
           <SelectorTrigger
             label={current?.name ?? null}
             placeholder="Select service"
-            active={!!current}
             leading={
               current ? (
                 <span
-                  className={cn('size-2 shrink-0 rounded-full', statusDotClass(current.status))}
-                  title={current.status.toLowerCase()}
+                  className={cn('size-1.5 shrink-0 rounded-full', statusDotClass(current.status))}
+                  title={statusLabel(current.status)}
                 />
               ) : undefined
             }
@@ -207,7 +204,7 @@ function ServiceSelector({ projectId, serviceId }: { projectId: string; serviceI
                     router.push(`/projects/${projectId}/services/${s.id}`);
                   }}
                 >
-                  <span className={cn('size-2 rounded-full', statusDotClass(s.status))} />
+                  <span className={cn('size-1.5 rounded-full', statusDotClass(s.status))} />
                   <span className="truncate">{s.name}</span>
                   {s.id === serviceId && <Check className="ml-auto size-4" />}
                 </CommandItem>

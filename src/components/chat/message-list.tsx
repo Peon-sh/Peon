@@ -153,13 +153,13 @@ export function MessageList({
         }
       }}
     >
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-8">
+      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-1 px-6 py-6">
         {hasOlder && (
           <div className="flex justify-center">
             <button
               type="button"
               onClick={loadOlder}
-              className="text-muted-foreground hover:text-foreground text-[11px] underline-offset-2 hover:underline"
+              className="text-muted-foreground hover:text-foreground text-sm underline-offset-2 hover:underline"
             >
               Load earlier messages
             </button>

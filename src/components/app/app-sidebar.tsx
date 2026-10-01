@@ -76,11 +76,11 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Workspace settings',
+    label: 'Workspace',
     items: [
       { title: 'Servers', url: '/servers', icon: Server },
       { title: 'Storages', url: '/storages', icon: Database },
-      { title: 'Keys & Tokens', url: '/keys-and-tokens', icon: KeyRound },
+      { title: 'MCP & SSH Keys', url: '/keys-and-tokens', icon: KeyRound },
       { title: 'Git Sources', url: '/sources', icon: GitBranch },
       { title: 'Notifications', url: '/notifications', icon: Bell },
       { title: 'Settings', url: '/settings/general', icon: Settings },
@@ -199,7 +199,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="h-12 justify-center border-b group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-1">
+      <SidebarHeader className="h-12 justify-center group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-1">
         <SidebarMenu className="group-data-[collapsible=icon]:items-center">
           <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
             <WorkspaceSwitcher />
@@ -210,7 +210,7 @@ export function AppSidebar() {
       <SidebarContent>
         {groups.map((group) => (
           <SidebarGroup key={group.label}>
-            <SidebarGroupLabel className="text-faint truncate text-[11px] font-medium tracking-[0.14em] uppercase">
+            <SidebarGroupLabel className="text-muted-foreground truncate px-2 text-xs font-medium group-data-[collapsible=icon]:hidden">
               {group.label}
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -224,10 +224,10 @@ export function AppSidebar() {
                         isActive={active}
                         tooltip={item.title}
                         className={cn(
-                          'text-muted-foreground text-[13.5px] font-semibold',
+                          'h-8 rounded-md px-2',
                           item.danger
-                            ? 'hover:text-destructive data-[active=true]:text-destructive data-[active=true]:bg-destructive/10 border border-transparent'
-                            : 'data-[active=true]:text-phosphor data-[active=true]:border-border data-[active=true]:bg-sidebar-accent data-[active=true]:font-bold border border-transparent',
+                            ? 'text-muted-foreground hover:text-destructive data-[active=true]:bg-destructive/10 data-[active=true]:text-destructive'
+                            : '',
                         )}
                       >
                         <Link href={item.url}>
@@ -246,7 +246,7 @@ export function AppSidebar() {
 
       <SidebarUpgradePro />
 
-      <SidebarFooter className="gap-2 border-t">
+      <SidebarFooter className="gap-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -255,13 +255,13 @@ export function AppSidebar() {
                   tooltip={user?.name ?? 'Profile'}
                   className="h-9 hover:bg-transparent active:bg-transparent data-[state=open]:bg-transparent"
                 >
-                  <Avatar className="border-border-bright size-6 rounded-full border">
+                  <Avatar className="size-6 rounded-full">
                     <AvatarImage src={user?.profilePicture ?? undefined} />
-                    <AvatarFallback className="text-phosphor rounded-full text-[10px] font-bold">
+                    <AvatarFallback className="bg-secondary rounded-full text-xs font-medium">
                       {(user?.name ?? user?.email ?? 'U')[0].toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="truncate text-[13px] font-semibold">
+                  <span className="truncate text-base">
                     {user?.name ?? user?.email ?? 'User'}
                   </span>
                 </SidebarMenuButton>

@@ -25,11 +25,6 @@ vi.mock('../host', () => ({
   sshConnectHostOptions: vi.fn(() => ({ host: 'host' })),
 }));
 
-vi.mock('../host-key', () => ({
-  createHostKeyVerifier: vi.fn(() => ({ verify: vi.fn(), mismatch: null, learned: null })),
-  HostKeyMismatchError: class HostKeyMismatchError extends Error {},
-}));
-
 import { sshPool } from '../pool';
 import type { SshTarget } from '../types';
 

@@ -1,30 +1,23 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PageContainer } from '@/components/app/page';
+import { PageContainer, PageHeader } from '@/components/app/page';
 import { currentWorkspace } from '@/store/auth';
+import { cn } from '@/lib/utils';
 
-const TABS_LIST_CLASS =
-  'h-auto w-full justify-start gap-5 rounded-none border-b bg-transparent p-0';
-const TABS_TRIGGER_CLASS =
-  'rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-0 pb-2 text-[12.5px] shadow-none data-[state=active]:border-phosphor data-[state=active]:bg-transparent data-[state=active]:text-phosphor data-[state=active]:shadow-none';
-
-const BASE_TABS = [
+const SETTINGS_NAV = [
   { value: 'general', href: '/settings/general', label: 'General', ownerOnly: false },
   { value: 'members', href: '/settings/members', label: 'Members', ownerOnly: false },
   { value: 'subscription', href: '/settings/subscription', label: 'Subscription', ownerOnly: false },
   { value: 'llm', href: '/settings/llm', label: 'LLMs', ownerOnly: false },
-  { value: 'audit', href: '/settings/audit', label: 'Audit', ownerOnly: true },
-  { value: 'danger', href: '/settings/danger', label: 'Danger', ownerOnly: false },
+  { value: 'audit', href: '/settings/audit', label: 'Audit log', ownerOnly: true },
+  { value: 'danger', href: '/settings/danger', label: 'Danger zone', ownerOnly: false },
 ] as const;
 
-function tabFromPath(pathname: string): string {
-  const match = BASE_TABS.find(
-    (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
-  );
-  return match?.value ?? 'general';
+function activeFromPath(pathname: string) {
+  return SETTINGS_NAV.find((t) => pathname === t.href || pathname.startsWith(`${t.href}/`))?.value ?? 'general';
 }
 
 export default function WorkspaceSettingsLayout({ children }: { children: React.ReactNode }) {
@@ -32,35 +25,34 @@ export default function WorkspaceSettingsLayout({ children }: { children: React.
   const router = useRouter();
   const workspace = currentWorkspace();
   const isOwner = workspace?.role === 'OWNER';
-
-  const tabs = BASE_TABS.filter((tab) => !tab.ownerOnly || isOwner);
-  const active = tabFromPath(pathname);
+  const items = SETTINGS_NAV.filter((t) => !t.ownerOnly || isOwner);
+  const active = activeFromPath(pathname);
 
   useEffect(() => {
-    if (pathname === '/settings/audit' && workspace && !isOwner) {
-      router.replace('/settings/general');
-    }
+    if (pathname === '/settings/audit' && workspace && !isOwner) router.replace('/settings/general');
   }, [pathname, workspace, isOwner, router]);
 
   return (
     <PageContainer>
-      <Tabs
-        value={active}
-        onValueChange={(value) => {
-          const tab = BASE_TABS.find((t) => t.value === value);
-          if (tab) router.push(tab.href);
-        }}
-        className="w-full min-w-0"
-      >
-        <TabsList className={TABS_LIST_CLASS}>
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab.value} className={TABS_TRIGGER_CLASS} value={tab.value}>
-              {tab.label}
-            </TabsTrigger>
+      <PageHeader title="Workspace settings" description={workspace?.name} />
+      <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
+        <nav className="flex flex-row gap-1 overflow-x-auto lg:flex-col">
+          {items.map((t) => (
+            <Link
+              key={t.value}
+              href={t.href}
+              aria-current={active === t.value ? 'page' : undefined}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-base whitespace-nowrap transition-colors',
+                active === t.value ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+              )}
+            >
+              {t.label}
+            </Link>
           ))}
-        </TabsList>
-        <div className="pt-6">{children}</div>
-      </Tabs>
+        </nav>
+        <div className="min-w-0 space-y-6">{children}</div>
+      </div>
     </PageContainer>
   );
 }

@@ -48,7 +48,7 @@ export function ModalContent({
     <DialogContent
       showCloseButton={false}
       className={cn(
-        'flex max-h-[min(90vh,840px)] w-full flex-col gap-0 overflow-hidden p-0',
+        'flex max-h-[min(90vh,840px)] w-full flex-col gap-0 overflow-hidden rounded-xl p-0',
         SIZE_CLASS[size],
         className,
       )}
@@ -68,7 +68,7 @@ export function ModalHeader({
     <div
       data-slot="modal-header"
       className={cn(
-        'flex shrink-0 items-start justify-between gap-3 border-b border-border/70 px-4 py-3',
+        'flex shrink-0 items-start justify-between gap-3 px-6 pt-6 pb-4 [&_[data-slot=dialog-title]]:text-lg [&_[data-slot=dialog-title]]:font-semibold [&_[data-slot=dialog-description]]:text-base [&_[data-slot=dialog-description]]:text-muted-foreground',
         className,
       )}
       {...props}
@@ -88,7 +88,7 @@ export function ModalBody({ className, ...props }: React.ComponentProps<'div'>) 
   return (
     <div
       data-slot="modal-body"
-      className={cn('min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm', className)}
+      className={cn('min-h-0 flex-1 overflow-y-auto px-6 text-base', className)}
       {...props}
     />
   );
@@ -102,7 +102,7 @@ export function ModalFooter({
     <DialogFooter
       data-slot="modal-footer"
       className={cn(
-        'shrink-0 gap-2 border-t border-border/70 px-4 py-3 sm:justify-end',
+        'bg-secondary/50 mt-4 flex shrink-0 justify-end gap-2 border-t px-6 py-4 sm:justify-end',
         className,
       )}
       {...props}

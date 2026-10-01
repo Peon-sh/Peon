@@ -30,18 +30,18 @@ export function RedeployPrompt() {
   return (
     <div
       className={cn(
-        'pointer-events-auto w-full max-w-sm rounded-lg border bg-card shadow-lg',
+        'pointer-events-auto w-full max-w-sm rounded-lg border bg-card shadow-popover',
         'animate-in slide-in-from-bottom-4 fade-in duration-200',
       )}
       role="status"
     >
       <div className="flex items-start gap-3 p-4">
-        <div className="bg-phosphor/15 text-phosphor mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md">
+        <div className="bg-primary/15 text-primary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md">
           <Rocket className="size-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[13px] font-semibold">Redeploy to apply changes</p>
-          <p className="text-muted-foreground text-[12px] leading-relaxed">
+          <p className="text-base font-medium">Redeploy to apply changes</p>
+          <p className="text-muted-foreground text-sm leading-relaxed">
             Settings were saved. Redeploy for them to take effect on the running service.
           </p>
           <div className="flex items-center gap-2 pt-2">
@@ -63,9 +63,9 @@ export function RedeployPrompt() {
         </div>
         <Button
           type="button"
-          size="sm"
+          size="icon-sm"
           variant="ghost"
-          className="text-muted-foreground -mt-1 -mr-1 size-7 shrink-0 p-0"
+          className="text-muted-foreground -mt-1 -mr-1 shrink-0"
           onClick={() => hide()}
           aria-label="Dismiss"
         >

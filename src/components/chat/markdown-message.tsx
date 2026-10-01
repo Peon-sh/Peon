@@ -23,17 +23,17 @@ function Code({
 
   if (!isBlock) {
     return (
-      <code className="bg-muted rounded px-1 py-0.5 font-mono text-[0.85em]" {...props}>
+      <code className="bg-secondary rounded px-1 py-0.5 font-mono text-sm" {...props}>
         {children}
       </code>
     );
   }
 
   return (
-    <span className="bg-muted relative my-3 block overflow-hidden rounded-md border">
+    <span className="bg-secondary relative my-3 block overflow-hidden rounded-md">
       <Button
         type="button"
-        size="icon-xs"
+        size="icon-sm"
         variant="ghost"
         className="absolute top-2 right-2"
         onClick={() => {
@@ -46,7 +46,7 @@ function Code({
         {copied ? <Check /> : <Copy />}
       </Button>
       <code
-        className={cn('block overflow-x-auto p-3 pr-10 font-mono text-xs leading-relaxed', className)}
+        className={cn('block overflow-x-auto p-3 pr-10 font-mono text-sm leading-relaxed', className)}
         {...props}
       >
         {children}
@@ -61,7 +61,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
   children: string;
 }) {
   return (
-    <div className="space-y-3 break-words select-text [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p]:whitespace-pre-wrap [&_table]:w-full [&_table]:text-xs [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc">
+    <div className="space-y-3 text-base break-words select-text [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-md [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p]:whitespace-pre-wrap [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:bg-secondary [&_th]:p-2 [&_th]:text-left [&_th]:font-medium [&_ul]:list-disc">
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
@@ -73,7 +73,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({
               {...props}
               target="_blank"
               rel="noreferrer noopener"
-              className="text-phosphor underline underline-offset-2"
+              className="text-primary underline underline-offset-2"
             >
               {linkChildren}
             </a>

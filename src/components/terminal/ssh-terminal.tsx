@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
+import { useTheme } from '@teispace/next-themes';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { Button } from '@/components/ui/button';
-import { Panel } from '@/components/app/page';
+import { xtermTheme } from './xterm-theme';
 import { cn } from '@/lib/utils';
 import { createServerTerminalSession } from '@/services/api/server';
 import { createServiceTerminalSession } from '@/services/api/service';
@@ -40,6 +41,8 @@ export function SshTerminal({ serverId, serviceId, className }: SshTerminalProps
   const fitRef = useRef<FitAddon | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { resolvedTheme } = useTheme();
+  const themeRef = useRef<'dark' | 'light'>(resolvedTheme === 'light' ? 'light' : 'dark');
   const [state, setState] = useState<ConnectionState>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +78,10 @@ export function SshTerminal({ serverId, serviceId, className }: SshTerminalProps
     }
   }, []);
 
+  useEffect(() => {
+    themeRef.current = resolvedTheme === 'light' ? 'light' : 'dark';
+  }, [resolvedTheme]);
+
   // Mount xterm once; do not auto-connect.
   useEffect(() => {
     const el = containerRef.current;
@@ -83,13 +90,8 @@ export function SshTerminal({ serverId, serviceId, className }: SshTerminalProps
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-      theme: {
-        background: '#0a0f0c',
-        foreground: '#e5e5e5',
-        cursor: '#9dffb0',
-        selectionBackground: '#1f3d2a',
-      },
+      fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
+      theme: xtermTheme(themeRef.current),
       convertEol: true,
     });
     const fitAddon = new FitAddon();
@@ -125,6 +127,12 @@ export function SshTerminal({ serverId, serviceId, className }: SshTerminalProps
       fitRef.current = null;
     };
   }, [targetId, mode, closeSocket, fit]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = xtermTheme(resolvedTheme === 'light' ? 'light' : 'dark');
+  }, [resolvedTheme]);
 
   const disconnect = useCallback(() => {
     const term = termRef.current;
@@ -231,7 +239,7 @@ export function SshTerminal({ serverId, serviceId, className }: SshTerminalProps
   return (
     <div className={cn('flex min-h-[min(70svh,720px)] flex-col gap-2', className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-muted-foreground text-[11px]">{statusLabel}</div>
+        <div className="text-muted-foreground text-xs">{statusLabel}</div>
         <div className="flex items-center gap-2">
           {state === 'connected' || state === 'connecting' ? (
             <Button variant="outline" size="sm" onClick={disconnect} disabled={state === 'connecting'}>
@@ -244,12 +252,9 @@ export function SshTerminal({ serverId, serviceId, className }: SshTerminalProps
           )}
         </div>
       </div>
-      <Panel
-        contentClassName="bg-[#0a0f0c] flex min-h-0 flex-1 flex-col overflow-hidden p-2"
-        className="flex min-h-0 flex-1 flex-col"
-      >
+      <div className="bg-card border-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border p-2">
         <div ref={containerRef} className="h-full min-h-[min(65svh,680px)] w-full" />
-      </Panel>
+      </div>
     </div>
   );
 }

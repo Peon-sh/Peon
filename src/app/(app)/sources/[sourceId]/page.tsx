@@ -1,16 +1,22 @@
 'use client';
 
-import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PageContainer, Panel } from '@/components/app/page';
+import {
+  FormField,
+  FormSection,
+  KeyValueList,
+  PageContainer,
+  PageHeader,
+  Panel,
+} from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
 import { EmptyState } from '@/components/app/empty-state';
 import { StatusBadge } from '@/components/app/status-badge';
 import { KindChip } from '@/components/app/kind-chip';
@@ -27,12 +33,23 @@ import { publicEnv } from '@/lib/env';
 import { githubInstallationSettingsUrl } from '@/lib/github-urls';
 import { githubAppEventsWebhookUrl, githubAppSetupUrl } from '@/lib/webhooks/github';
 import { Boxes, CheckCircle2, Copy, ExternalLink } from 'lucide-react';
-import { DocCallout, DocSteps } from '@/components/app/doc-callout';
+import { Callout, CalloutSteps } from '@/components/app/callout';
 
-const TABS_LIST_CLASS =
-  'h-auto w-full justify-start gap-5 rounded-none border-b bg-transparent p-0';
-const TABS_TRIGGER_CLASS =
-  'rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-0 pb-2 text-[12.5px] shadow-none data-[state=active]:border-phosphor data-[state=active]:bg-transparent data-[state=active]:text-phosphor data-[state=active]:shadow-none';
+function isPlatformGithubSource(source: SourceDetail) {
+  return source.provider === 'github' && source.kind === 'PLATFORM';
+}
+
+/** Where "Open in provider" goes: the installation settings for the Peon app, else the provider host. */
+function providerUrl(source: SourceDetail) {
+  if (source.provider === 'github' && source.kind === 'PLATFORM') {
+    return githubInstallationSettingsUrl({
+      installationId: source.installationId,
+      organization: source.organization,
+      accountType: source.accountType,
+    });
+  }
+  return source.htmlUrl;
+}
 
 export default function SourceDetailPage({ params }: { params: Promise<{ sourceId: string }> }) {
   const { sourceId } = use(params);
@@ -50,12 +67,31 @@ export default function SourceDetailPage({ params }: { params: Promise<{ sourceI
     );
   }
 
+  const providerLabel =
+    source.provider === 'github'
+      ? isPlatformGithubSource(source)
+        ? 'GitHub (Peon GitHub App)'
+        : 'GitHub'
+      : 'GitLab';
+
   return (
     <PageContainer>
+      <PageHeader
+        title={source.name}
+        description={providerLabel}
+        actions={
+          <Button asChild variant="outline">
+            <a href={providerUrl(source)} target="_blank" rel="noreferrer">
+              Open in {source.provider === 'github' ? 'GitHub' : 'GitLab'}{' '}
+              <ExternalLink className="size-3.5" />
+            </a>
+          </Button>
+        }
+      />
       <Tabs defaultValue="general">
-        <TabsList className={TABS_LIST_CLASS}>
-          <TabsTrigger className={TABS_TRIGGER_CLASS} value="general">General</TabsTrigger>
-          <TabsTrigger className={TABS_TRIGGER_CLASS} value="resources">Resources</TabsTrigger>
+        <TabsList variant="line">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="resources">Resources</TabsTrigger>
         </TabsList>
         <TabsContent value="general" className="pt-6">
           <SourceGeneralForm source={source} />
@@ -74,43 +110,39 @@ function SourceResourcesTab({ sourceId }: { sourceId: string }) {
     queryFn: () => listSourceResources(sourceId),
   });
 
-  if (isLoading) {
-    return <div className="bg-accent h-40 animate-pulse rounded-lg" />;
-  }
-
-  if (!data?.length) {
-    return (
-      <EmptyState
-        icon={Boxes}
-        title="No resources using this source"
-        description="Services created with this Git connection will show up here."
-      />
-    );
-  }
-
   return (
-    <Panel title="resources" contentClassName="divide-y">
-      {data.map((svc) => (
-        <Link
-          key={svc.id}
-          href={`/projects/${svc.projectId}/services/${svc.id}`}
-          className="hover:bg-secondary flex items-center justify-between gap-4 px-4 py-3 transition-colors"
-        >
-          <div className="min-w-0">
-            <div className="text-[12.5px] font-semibold">{svc.name}</div>
-            <div className="text-muted-foreground truncate text-[11px]">
-              {svc.projectName}
-              {svc.gitRepository ? ` · ${svc.gitRepository}` : ''}
-              {svc.gitBranch ? `@${svc.gitBranch}` : ''}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <KindChip kind={svc.kind} />
-            <StatusBadge status={svc.status} />
-          </div>
-        </Link>
-      ))}
-    </Panel>
+    <DataTable
+      columns={[
+        { key: 'name', header: 'Name', cell: (svc) => svc.name },
+        { key: 'project', header: 'Project', cell: (svc) => svc.projectName },
+        {
+          key: 'repository',
+          header: 'Repository',
+          cell: (svc) =>
+            svc.gitRepository ? (
+              <span className="text-muted-foreground font-mono text-sm">
+                {svc.gitRepository}
+                {svc.gitBranch ? `@${svc.gitBranch}` : ''}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            ),
+        },
+        { key: 'kind', header: 'Kind', cell: (svc) => <KindChip kind={svc.kind} /> },
+        { key: 'status', header: 'Status', cell: (svc) => <StatusBadge status={svc.status} /> },
+      ]}
+      rows={data ?? []}
+      rowKey={(svc) => svc.id}
+      rowHref={(svc) => `/projects/${svc.projectId}/services/${svc.id}`}
+      isLoading={isLoading}
+      emptyState={
+        <EmptyState
+          icon={Boxes}
+          title="No resources using this source"
+          description="Services created with this Git connection will show up here."
+        />
+      }
+    />
   );
 }
 
@@ -191,64 +223,63 @@ function SourceGeneralForm({ source }: { source: SourceDetail }) {
   });
 
   const saveFooter = (
-    <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending || !name}>
+    <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending || !name}>
       Save
     </Button>
   );
 
   if (isPlatformGithub) {
     const status = source.status;
-    // Derive from accountType — organization field is the login for both User and Org.
-    const installSettingsUrl = githubInstallationSettingsUrl({
-      installationId: source.installationId,
-      organization: source.organization,
-      accountType: source.accountType,
-    });
 
     return (
       <div className="space-y-6">
         <Panel
           title="GitHub connection"
-          contentClassName="space-y-4 p-4"
           footer={
-            <>
-              <Button
-                size="sm"
-                onClick={() => reconnectMut.mutate()}
-                disabled={!workspaceId || reconnectMut.isPending}
-              >
-                Reconnect / add org
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <a href={installSettingsUrl} target="_blank" rel="noreferrer">
-                  Open on GitHub <ExternalLink className="size-3.5" />
-                </a>
-              </Button>
-            </>
+            <Button
+              onClick={() => reconnectMut.mutate()}
+              disabled={!workspaceId || reconnectMut.isPending}
+            >
+              Reconnect or add org
+            </Button>
           }
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <StatusRow
-              ok={status === 'CONNECTED'}
-              label="Status"
-              detail={
-                status === 'CONNECTED'
-                  ? 'Connected via Peon GitHub App'
-                  : status === 'SUSPENDED'
-                    ? 'Suspended on GitHub — reconnect or unsuspend the App'
-                    : 'Disconnected — reconnect to restore deploys'
-              }
-            />
-            <StatusRow
-              ok={!!source.installationId}
-              label="Installation"
-              detail={
-                source.installationId
-                  ? `ID ${source.installationId}${source.organization ? ` · ${source.organization}` : ''}`
-                  : 'Missing installation'
-              }
-            />
-          </div>
+          <KeyValueList
+            items={[
+              {
+                label: 'Status',
+                value: (
+                  <span className="flex flex-wrap items-center gap-2">
+                    <StatusBadge
+                      status={status}
+                      tone={status === 'SUSPENDED' ? 'warning' : undefined}
+                    />
+                    <span className="text-muted-foreground">
+                      {status === 'CONNECTED'
+                        ? 'Connected via Peon GitHub App'
+                        : status === 'SUSPENDED'
+                          ? 'Suspended on GitHub. Reconnect or unsuspend the app.'
+                          : 'Disconnected. Reconnect to restore deploys.'}
+                    </span>
+                  </span>
+                ),
+              },
+              {
+                label: 'Installation',
+                value: source.installationId ? (
+                  <span className="font-mono">
+                    {source.installationId}
+                    {source.organization ? ` · ${source.organization}` : ''}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Missing installation</span>
+                ),
+              },
+              ...(source.accountType
+                ? [{ label: 'Account type', value: source.accountType }]
+                : []),
+            ]}
+          />
         </Panel>
       </div>
     );
@@ -267,38 +298,33 @@ function SourceGeneralForm({ source }: { source: SourceDetail }) {
         />
       )}
 
-      <Panel title="general" contentClassName="grid gap-4 p-4 md:grid-cols-2" footer={saveFooter}>
+      <FormSection title="General" footer={saveFooter}>
         <Field id="src-name" label="App name" value={name} onChange={setName} />
         <Field id="src-org" label="Organization" value={organization} onChange={setOrganization} />
         <Field id="src-html" label="HTML URL" value={htmlUrl} onChange={setHtmlUrl} />
         <Field id="src-api" label="API URL" value={apiUrl} onChange={setApiUrl} />
         <Field id="src-user" label="User" value={customUser} onChange={setCustomUser} />
         <Field id="src-port" label="Port" value={customPort} onChange={setCustomPort} />
-      </Panel>
+      </FormSection>
 
-      <Panel
-        title="provider credentials"
-        contentClassName="grid gap-4 p-4 md:grid-cols-2"
-        footer={saveFooter}
-      >
+      <FormSection title="Provider credentials" footer={saveFooter}>
         <Field id="src-app-id" label="App ID" value={appId} onChange={setAppId} />
         {source.provider === 'github' ? (
           <>
             <Field id="src-installation-id" label="Installation ID" value={installationId} onChange={setInstallationId} />
             <Field id="src-client-id" label="Client ID" value={clientId} onChange={setClientId} />
-            <Field id="src-client-secret" label="Client secret" value={clientSecret} onChange={setClientSecret} type="password" placeholder="unchanged" />
-            <Field id="src-webhook-secret" label="Webhook secret" value={webhookSecret} onChange={setWebhookSecret} type="password" placeholder="unchanged" />
+            <Field id="src-client-secret" label="Client secret" value={clientSecret} onChange={setClientSecret} type="password" placeholder="Unchanged" />
+            <Field id="src-webhook-secret" label="Webhook secret" value={webhookSecret} onChange={setWebhookSecret} type="password" placeholder="Unchanged" />
           </>
         ) : (
           <>
             <Field id="src-oauth-id" label="OAuth ID" value={oauthId} onChange={setOauthId} />
             <Field id="src-group-name" label="Group name" value={groupName} onChange={setGroupName} />
-            <Field id="src-app-secret" label="App secret" value={clientSecret} onChange={setClientSecret} type="password" placeholder="unchanged" />
-            <Field id="src-webhook-token" label="Webhook token" value={webhookSecret} onChange={setWebhookSecret} type="password" placeholder="unchanged" />
+            <Field id="src-app-secret" label="App secret" value={clientSecret} onChange={setClientSecret} type="password" placeholder="Unchanged" />
+            <Field id="src-webhook-token" label="Webhook token" value={webhookSecret} onChange={setWebhookSecret} type="password" placeholder="Unchanged" />
           </>
         )}
-        <div className="space-y-2">
-          <Label>Private key</Label>
+        <FormField label="Private key">
           <SearchableSelect
             value={privateKeyId}
             onValueChange={setPrivateKeyId}
@@ -308,23 +334,23 @@ function SourceGeneralForm({ source }: { source: SourceDetail }) {
               ...(privateKeys ?? []).map((key) => ({ value: key.id, label: key.name })),
             ]}
           />
-        </div>
-      </Panel>
+        </FormField>
+      </FormSection>
     </div>
   );
 }
 
 function CopyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 space-y-1.5">
-      <Label className="text-[11px]">{label}</Label>
+    <FormField label={label}>
       <div className="flex min-w-0 items-center gap-2">
-        <Input readOnly value={value} className="min-w-0 flex-1 font-mono text-xs" />
+        <Input readOnly value={value} className="min-w-0 flex-1 font-mono text-sm" />
         <Button
           type="button"
           variant="outline"
           size="icon"
           className="shrink-0"
+          aria-label={`Copy ${label}`}
           onClick={async () => {
             await navigator.clipboard.writeText(value);
             toast.success(`${label} copied`);
@@ -333,19 +359,16 @@ function CopyField({ label, value }: { label: string; value: string }) {
           <Copy className="size-4" />
         </Button>
       </div>
-    </div>
+    </FormField>
   );
 }
 
-function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+function StatusValue({ ok, detail }: { ok: boolean; detail: string }) {
   return (
-    <div className="flex min-w-0 items-start gap-2 text-[12px]">
-      <CheckCircle2 className={`mt-0.5 size-3.5 shrink-0 ${ok ? 'text-phosphor' : 'text-muted-foreground/40'}`} />
-      <div className="min-w-0">
-        <p className={ok ? 'text-foreground' : 'text-muted-foreground'}>{label}</p>
-        <p className="text-muted-foreground break-words text-[11px]">{detail}</p>
-      </div>
-    </div>
+    <span className="flex min-w-0 items-start gap-2">
+      <CheckCircle2 className={`mt-0.5 size-3.5 shrink-0 ${ok ? 'text-success' : 'text-muted-foreground'}`} />
+      <span className={ok ? 'text-foreground' : 'text-muted-foreground'}>{detail}</span>
+    </span>
   );
 }
 
@@ -372,11 +395,15 @@ function GithubAppSetupDocs({
   const createAppUrl = organization
     ? `https://github.com/organizations/${organization}/apps/new`
     : 'https://github.com/settings/apps/new';
+  const incomplete = !appId || !clientId || !installationId || !source.privateKeyId;
 
   return (
     <div className="space-y-4">
-      <DocCallout title="How to finish GitHub App setup">
-        <DocSteps>
+      <Callout
+        title={incomplete ? 'Finish GitHub App setup' : 'How to finish GitHub App setup'}
+        tone={incomplete ? 'warning' : 'info'}
+      >
+        <CalloutSteps>
           <li>
             Open your App → <b>General</b>. Set Homepage URL to{' '}
             <span className="text-foreground font-mono">{publicEnv.appUrl}</span>.
@@ -411,69 +438,92 @@ function GithubAppSetupDocs({
             Link services with Git source type <b>GitHub App</b> and this source. Pushes to the tracked
             branch will queue deploys with <span className="font-mono">triggeredBy: webhook</span>.
           </li>
-        </DocSteps>
-      </DocCallout>
+        </CalloutSteps>
+      </Callout>
 
-      <Panel title="GitHub App setup" contentClassName="space-y-5 p-4">
-        <p className="text-muted-foreground text-[12.5px]">
-          Values below are generated for{' '}
-          <span className="text-foreground font-medium">{name || 'this source'}</span>
-          {organization ? (
-            <>
-              {' '}
-              (org <span className="text-foreground font-mono">{organization}</span>)
-            </>
-          ) : null}
-          . Paste them into your GitHub App — no per-repo webhook needed.
-        </p>
+      <Panel
+        title="GitHub App setup"
+        description={
+          <>
+            Values below are generated for{' '}
+            <span className="text-foreground font-medium">{name || 'this source'}</span>
+            {organization ? (
+              <>
+                {' '}
+                (org <span className="text-foreground font-mono">{organization}</span>)
+              </>
+            ) : null}
+            . Paste them into your GitHub App; no per-repo webhook is needed.
+          </>
+        }
+        contentClassName="space-y-6"
+        footer={
+          <>
+            <Button asChild variant="outline">
+              <a href={appSettingsUrl} target="_blank" rel="noreferrer">
+                Open GitHub Apps <ExternalLink className="size-3.5" />
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href={createAppUrl} target="_blank" rel="noreferrer">
+                Create new app <ExternalLink className="size-3.5" />
+              </a>
+            </Button>
+          </>
+        }
+      >
+        <KeyValueList
+          items={[
+            {
+              label: 'App ID',
+              value: (
+                <StatusValue
+                  ok={!!appId}
+                  detail={appId ? `Saved as ${appId}` : 'Missing. Copy it from GitHub App → About.'}
+                />
+              ),
+            },
+            {
+              label: 'Client ID',
+              value: (
+                <StatusValue
+                  ok={!!clientId}
+                  detail={clientId ? `Saved as ${clientId}` : 'Missing. Copy it from GitHub App → About.'}
+                />
+              ),
+            },
+            {
+              label: 'Installation ID',
+              value: (
+                <StatusValue
+                  ok={!!installationId}
+                  detail={
+                    installationId
+                      ? `Saved as ${installationId}`
+                      : 'Missing. After Install App, copy the number from …/installations/<ID>.'
+                  }
+                />
+              ),
+            },
+            {
+              label: 'Private key',
+              value: (
+                <StatusValue
+                  ok={!!source.privateKeyId}
+                  detail={
+                    source.privateKeyId
+                      ? 'Linked. Used to mint installation tokens for private clones.'
+                      : 'Missing. Generate a .pem on the app and attach it under MCP & SSH keys → SSH keys.'
+                  }
+                />
+              ),
+            },
+          ]}
+        />
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <StatusRow
-            ok={!!appId}
-            label="App ID"
-            detail={appId ? `Saved as ${appId}` : 'Missing — copy from GitHub App → About'}
-          />
-          <StatusRow
-            ok={!!clientId}
-            label="Client ID"
-            detail={clientId ? `Saved as ${clientId}` : 'Missing — copy from GitHub App → About'}
-          />
-          <StatusRow
-            ok={!!installationId}
-            label="Installation ID"
-            detail={
-              installationId
-                ? `Saved as ${installationId}`
-                : 'Missing — after Install App, copy the number from …/installations/<ID>'
-            }
-          />
-          <StatusRow
-            ok={!!source.privateKeyId}
-            label="Private key"
-            detail={
-              source.privateKeyId
-                ? 'Linked — used to mint installation tokens for private clones'
-                : 'Missing — generate a .pem on the App and attach it under Security → SSH Keys'
-            }
-          />
-        </div>
-
-        <div className="space-y-3">
+        <div className="space-y-4">
           <CopyField label="Webhook URL" value={webhookUrl} />
           <CopyField label="Setup URL (post-install redirect)" value={setupUrl} />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant="outline">
-            <a href={appSettingsUrl} target="_blank" rel="noreferrer">
-              Open GitHub Apps <ExternalLink className="size-3.5" />
-            </a>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <a href={createAppUrl} target="_blank" rel="noreferrer">
-              Create new App <ExternalLink className="size-3.5" />
-            </a>
-          </Button>
         </div>
       </Panel>
     </div>
@@ -496,9 +546,8 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+    <FormField label={label} htmlFor={id}>
       <Input id={id} type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
-    </div>
+    </FormField>
   );
 }

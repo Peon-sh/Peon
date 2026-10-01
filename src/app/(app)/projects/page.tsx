@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, FolderKanban, Boxes, ArrowRight } from 'lucide-react';
+import { Plus, FolderKanban } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,9 +14,10 @@ import {
   ModalTitle,
 } from '@/components/app/modal';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { PageContainer } from '@/components/app/page';
+import { FormField, PageContainer, PageHeader } from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
+import { LocalDateTime } from '@/components/app/local-datetime';
 import { EmptyState } from '@/components/app/empty-state';
 import { PlanPaywallDialog } from '@/components/billing/plan-paywall-dialog';
 import { currentWorkspace, useAuthStore } from '@/store/auth';
@@ -86,24 +86,22 @@ export default function ProjectsPage() {
           <ModalTitle>Create project</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="p-name">Name</Label>
+          <FormField label="Name" htmlFor="p-name" className="lg:grid-cols-1 lg:gap-2">
             <Input
               id="p-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="my-awesome-app"
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="p-desc">Description</Label>
+          </FormField>
+          <FormField label="Description" htmlFor="p-desc" className="lg:grid-cols-1 lg:gap-2">
             <Textarea
               id="p-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What lives in this project?"
             />
-          </div>
+          </FormField>
         </ModalBody>
         <ModalFooter>
           <Button onClick={() => createMut.mutate()} disabled={!name || createMut.isPending}>
@@ -126,67 +124,65 @@ export default function ProjectsPage() {
         />
       )}
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-accent h-40 animate-pulse rounded-lg" />
-          ))}
-        </div>
-      ) : !projects?.length ? (
-        <EmptyState
-          icon={FolderKanban}
-          title="No projects yet"
-          description="projects group your apps, databases, and services. create your first one to get started."
-          action={
-            roleCanCreate ? (
-              <Button onClick={onNewProject}>
-                <Plus className="size-4" />{' '}
-                {showPaywallInstead ? 'Subscribe to create' : 'New project'}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p) => (
-            <Link key={p.id} href={`/projects/${p.id}`} className="group">
-              <div className="bg-card hover:border-border-bright hover:bg-secondary flex h-full flex-col rounded-lg border p-4 transition-colors">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="border-border-bright bg-secondary text-phosphor grid size-9 place-items-center rounded-md border">
-                    <FolderKanban className="size-4" />
-                  </span>
-                  <ArrowRight className="text-faint size-4 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                </div>
-                <div className="mt-3 space-y-1">
-                  <p className="font-heading truncate font-bold">{p.name}</p>
-                  <p className="text-muted-foreground line-clamp-2 text-[11px]">
-                    {p.description || 'no description'}
-                  </p>
-                </div>
-                <div className="text-muted-foreground border-border-bright mt-auto flex items-center gap-1.5 border-t border-dashed pt-3 text-[11px]">
-                  <Boxes className="size-3.5" />
-                  <span>
-                    <b className="text-foreground">{p._count.services}</b>{' '}
-                    {p._count.services === 1 ? 'service' : 'services'}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-          {roleCanCreate ? (
-            <button
-              type="button"
-              onClick={onNewProject}
-              className="border-border-bright text-muted-foreground hover:text-phosphor hover:border-phosphor-dim grid min-h-40 place-items-center rounded-lg border border-dashed transition-colors"
-            >
-              <span className="flex flex-col items-center gap-2 text-[12.5px]">
-                <Plus className="size-4" />{' '}
-                {showPaywallInstead ? 'subscribe for seats' : 'new project'}
+      <PageHeader
+        title="Projects"
+        description="Groups of deployable services"
+        actions={
+          roleCanCreate ? (
+            <Button onClick={onNewProject}>
+              <Plus className="size-4" />{' '}
+              {showPaywallInstead ? 'Subscribe to create' : 'New project'}
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <DataTable
+        columns={[
+          {
+            key: 'name',
+            header: 'Name',
+            cell: (p) => (
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate font-medium">{p.name}</span>
+                {p.description ? (
+                  <span className="text-muted-foreground line-clamp-1 text-sm">{p.description}</span>
+                ) : null}
               </span>
-            </button>
-          ) : null}
-        </div>
-      )}
+            ),
+          },
+          {
+            key: 'services',
+            header: 'Services',
+            align: 'right',
+            cell: (p) => <span className="font-mono">{p._count.services}</span>,
+          },
+          {
+            key: 'updated',
+            header: 'Created',
+            cell: (p) => <LocalDateTime value={p.createdAt} />,
+          },
+        ]}
+        rows={projects ?? []}
+        rowKey={(p) => p.id}
+        rowHref={(p) => `/projects/${p.id}`}
+        isLoading={isLoading}
+        emptyState={
+          <EmptyState
+            icon={FolderKanban}
+            title="No projects yet"
+            description="Create a project to group services that deploy together."
+            action={
+              roleCanCreate ? (
+                <Button onClick={onNewProject}>
+                  <Plus className="size-4" />{' '}
+                  {showPaywallInstead ? 'Subscribe to create' : 'New project'}
+                </Button>
+              ) : undefined
+            }
+          />
+        }
+      />
     </PageContainer>
   );
 }

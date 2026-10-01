@@ -69,7 +69,7 @@ export function SearchableSelect({
           data-size={size}
           className={cn(
             'w-full justify-between font-normal',
-            size === 'sm' ? 'h-8' : 'h-7',
+            size === 'sm' ? 'h-7' : 'h-8',
             showPlaceholder && 'text-muted-foreground',
             className,
           )}

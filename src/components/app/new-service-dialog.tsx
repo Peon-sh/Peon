@@ -66,13 +66,23 @@ const DATABASE_ENGINES: { value: string; label: string }[] = [
 export function NewServiceDialog({
   projectId,
   onCreated,
+  open: openProp,
+  onOpenChange,
 }: {
   projectId: string;
   onCreated?: (serviceId: string) => void;
+  /** Optional controlled open state (e.g. opened by `?new=service` from the setup wizard). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const qc = useQueryClient();
   const workspaceId = useAuthStore((s) => s.currentWorkspaceId);
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setOpenState(next);
+    onOpenChange?.(next);
+  };
 
   const [kind, setKind] = useState<ServiceKind>('GIT_APP');
   const [name, setName] = useState('');
@@ -228,12 +238,12 @@ export function NewServiceDialog({
     <Modal open={open} onOpenChange={setOpen}>
       <ModalTrigger asChild>
         <Button>
-          <Boxes className="size-4" /> New Service
+          <Boxes className="size-4" /> New service
         </Button>
       </ModalTrigger>
       <ModalContent size="xl">
         <ModalHeader>
-          <ModalTitle>New Service</ModalTitle>
+          <ModalTitle>New service</ModalTitle>
           <ModalDescription>Create a deployable unit in this project.</ModalDescription>
         </ModalHeader>
         <ModalBody>
@@ -271,7 +281,7 @@ export function NewServiceDialog({
                     }))}
                   />
                   {!servers?.length && (
-                    <p className="text-muted-foreground text-[11px]">
+                    <p className="text-muted-foreground text-sm">
                       Add and validate a server before creating deployable services.
                     </p>
                   )}
@@ -362,7 +372,7 @@ export function NewServiceDialog({
                     }}
                     placeholder="Select source type"
                     options={[
-                      { value: 'git_app', label: 'Git App' },
+                      { value: 'git_app', label: 'Git app' },
                       { value: 'public', label: 'Public repository' },
                       { value: 'deploy_key', label: 'Deploy key' },
                     ]}
@@ -411,7 +421,7 @@ export function NewServiceDialog({
                     {gitAppProvider === 'github' && selectedGithubAppId ? (
                       <>
                         {selectedGithubSource?.status && selectedGithubSource.status !== 'CONNECTED' ? (
-                          <p className="text-muted-foreground text-[12px]">
+                          <p className="text-muted-foreground text-sm">
                             This GitHub connection is {selectedGithubSource.status.toLowerCase()}. Reconnect
                             under Git Sources before creating a service.
                           </p>
@@ -544,7 +554,7 @@ export function NewServiceDialog({
                   }))}
                 />
                 {!servers?.length && (
-                  <p className="text-muted-foreground text-[11px]">
+                  <p className="text-muted-foreground text-sm">
                     Add and validate a server before creating deployable services.
                   </p>
                 )}

@@ -64,17 +64,17 @@ export function ApprovalCard({
   }
 
   return (
-    <div className="border-warning/40 bg-warning/5 overflow-hidden rounded-md border">
-      <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium">
-        <ShieldAlert className="text-warning size-4 shrink-0" />
-        <span>
+    <div className="bg-card border-border overflow-hidden rounded-lg border">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium">
+        <ShieldAlert className="text-warning size-3.5 shrink-0" />
+        <span className="min-w-0 truncate">
           Approve <span className="font-mono">{getToolName(part)}</span>?
         </span>
       </div>
-      <p className="text-muted-foreground truncate border-y px-3 py-2 font-mono text-[11px]">
+      <p className="text-muted-foreground border-border truncate border-y px-3 py-2 font-mono text-sm">
         {summarizeInput(part.input)}
       </p>
-      <div className="flex justify-end gap-2 p-2">
+      <div className="bg-secondary/50 flex justify-end gap-2 px-3 py-2">
         <Button variant="outline" size="sm" disabled={pending} onClick={() => void decide(false)}>
           Deny
         </Button>

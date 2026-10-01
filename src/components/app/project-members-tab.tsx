@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Trash2, Users, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
   Modal,
   ModalBody,
@@ -18,6 +17,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { addProjectMember, updateProjectMemberRole } from '@/services/api/project';
 import { getWorkspaceMembers } from '@/services/api/workspace';
+import { FormField } from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
 import { EmptyState } from '@/components/app/empty-state';
 import { RolePill } from '@/components/app/kind-chip';
 import { ConfirmButton } from '@/components/app/confirm';
@@ -92,16 +93,15 @@ export function ProjectMembersTab({
           <ModalTitle>Add project member</ModalTitle>
         </ModalHeader>
         <ModalBody>
-          <Alert className="border-border-bright bg-secondary/60 mb-4">
-            <Info className="text-phosphor" />
+          <Alert variant="info" className="mb-4">
+            <Info />
             <AlertDescription>
               Choose someone who is already in this workspace. Workspace owners and admins already
               have access to every project.
             </AlertDescription>
           </Alert>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Workspace member</Label>
+            <FormField label="Workspace member" className="lg:grid-cols-1 lg:gap-2">
               <SearchableSelect
                 value={userId}
                 onValueChange={setUserId}
@@ -113,20 +113,19 @@ export function ProjectMembersTab({
                 }))}
               />
               {!addableMembers.length && (
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground mt-2 text-sm">
                   No workspace members available to add. Invite them to the workspace first.
                 </p>
               )}
-            </div>
-            <div className="space-y-2">
-              <Label>Project role</Label>
+            </FormField>
+            <FormField label="Project role" className="lg:grid-cols-1 lg:gap-2">
               <SearchableSelect
                 value={role}
                 onValueChange={(v) => setRole(v as 'ADMIN' | 'MEMBER')}
                 placeholder="Select role"
                 options={PROJECT_ROLES.map((r) => ({ value: r, label: r }))}
               />
-            </div>
+            </FormField>
           </div>
         </ModalBody>
         <ModalFooter>
@@ -149,7 +148,7 @@ export function ProjectMembersTab({
       <EmptyState
         icon={Users}
         title="No project members"
-        description="only workspace members added to this project can access it."
+        description="Only workspace members added to this project can access it."
       />
     );
   }
@@ -157,29 +156,33 @@ export function ProjectMembersTab({
   return (
     <>
       {addDialog}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {members.map((m) => (
-          <div
-            key={m.id}
-            className="bg-card hover:border-border-bright hover:bg-secondary flex h-full flex-col overflow-hidden rounded-lg border transition-colors"
-          >
-            <div className="flex items-start gap-3 p-4">
-              <span className="border-border-bright bg-secondary text-phosphor grid size-9 shrink-0 place-items-center rounded-md border text-[11px] font-bold">
-                {(m.user.name ?? m.user.email)[0].toUpperCase()}
+      {canManage && members.length > 0 && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setOpen(true)}>
+            <Plus className="size-3.5" /> Add member
+          </Button>
+        </div>
+      )}
+      <DataTable<ProjectMember>
+        columns={[
+          {
+            key: 'member',
+            header: 'Member',
+            cell: (m) => (
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate">{m.user.name ?? m.user.email}</span>
+                <span className="text-muted-foreground truncate text-sm font-normal">
+                  {m.user.email}
+                </span>
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[12.5px] font-semibold">
-                  {m.user.name ?? m.user.email}
-                </p>
-                <p className="text-muted-foreground truncate text-[11px]">{m.user.email}</p>
-                <div className="mt-2">
-                  <RolePill role={m.role} />
-                </div>
-              </div>
-            </div>
-            {canManage && (
-              <div className="bg-secondary mt-auto flex flex-wrap items-center gap-2 border-t px-4 py-2.5">
-                <div className="min-w-0 flex-1">
+            ),
+          },
+          {
+            key: 'role',
+            header: 'Role',
+            cell: (m) =>
+              canManage ? (
+                <div className="w-36">
                   <SearchableSelect
                     value={m.role}
                     onValueChange={(r) =>
@@ -191,31 +194,46 @@ export function ProjectMembersTab({
                     options={PROJECT_ROLES.map((r) => ({ value: r, label: r }))}
                   />
                 </div>
-                <ConfirmButton
-                  title={`Remove ${m.user.name ?? m.user.email}?`}
-                  description="They will lose access to this project."
-                  confirmLabel="Remove"
-                  size="sm"
-                  onConfirm={() => onRemove(m.user.id)}
-                >
-                  <Trash2 className="size-4" /> Remove
-                </ConfirmButton>
-              </div>
-            )}
-          </div>
-        ))}
-        {canManage && (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="border-border-bright text-muted-foreground hover:text-phosphor hover:border-phosphor-dim grid min-h-36 place-items-center rounded-lg border border-dashed transition-colors"
-          >
-            <span className="flex flex-col items-center gap-2 text-[12.5px]">
-              <Plus className="size-4" /> add member
-            </span>
-          </button>
-        )}
-      </div>
+              ) : (
+                <RolePill role={m.role} />
+              ),
+          },
+          ...(canManage
+            ? [
+                {
+                  key: 'actions',
+                  header: '',
+                  align: 'right' as const,
+                  cell: (m: ProjectMember) => (
+                    <ConfirmButton
+                      title={`Remove ${m.user.name ?? m.user.email}?`}
+                      description="They will lose access to this project."
+                      confirmLabel="Remove"
+                      size="sm"
+                      onConfirm={() => onRemove(m.user.id)}
+                    >
+                      <Trash2 className="size-4" /> Remove
+                    </ConfirmButton>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+        rows={members}
+        rowKey={(m) => m.id}
+        emptyState={
+          <EmptyState
+            icon={Users}
+            title="No project members"
+            description="Add workspace members to give them access to this project."
+            action={
+              <Button onClick={() => setOpen(true)}>
+                <Plus className="size-3.5" /> Add member
+              </Button>
+            }
+          />
+        }
+      />
     </>
   );
 }

@@ -14,8 +14,8 @@ import {
   ModalTitle,
 } from '@/components/app/modal';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { PageContainer } from '@/components/app/page';
+import { FormField, PageContainer, PageHeader } from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
 import { EmptyState } from '@/components/app/empty-state';
 import { ConfirmButton } from '@/components/app/confirm';
 import { useAuthStore } from '@/store/auth';
@@ -161,7 +161,7 @@ export default function StoragesPage() {
     >
       <ModalContent>
         <ModalHeader>
-          <ModalTitle>{isEditing ? 'Edit S3 storage' : 'Create S3 storage'}</ModalTitle>
+          <ModalTitle>{isEditing ? 'Edit S3 storage' : 'Add S3 storage'}</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
           {(
@@ -174,10 +174,19 @@ export default function StoragesPage() {
               ['secretKey', 'Secret key'],
             ] as const
           ).map(([k, label]) => (
-            <div key={k} className="space-y-2">
-              <Label htmlFor={`st-${k}`}>
-                {isEditing && k === 'secretKey' ? 'Secret key (replace)' : label}
-              </Label>
+            <FormField
+              key={k}
+              label={isEditing && k === 'secretKey' ? 'Secret key (replace)' : label}
+              htmlFor={`st-${k}`}
+              className="lg:grid-cols-1 lg:gap-2"
+              description={
+                k === 'endpoint'
+                  ? 'Leave blank for Amazon S3. For MinIO, paste its URL (for example http://192.168.1.10:9000). Localhost and cloud-metadata addresses are blocked.'
+                  : isEditing && k === 'secretKey'
+                    ? 'Leave this blank unless you want to replace the stored secret key.'
+                    : undefined
+              }
+            >
               <Input
                 id={`st-${k}`}
                 type={k === 'secretKey' ? 'password' : 'text'}
@@ -190,18 +199,7 @@ export default function StoragesPage() {
                 onChange={(e) => set(k, e.target.value)}
                 disabled={isEditing && loadingStorageId === editingId && k === 'accessKey'}
               />
-              {k === 'endpoint' ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Leave blank for Amazon S3. For MinIO, paste its URL (for example
-                  http://192.168.1.10:9000). Localhost and cloud-metadata addresses are blocked.
-                </p>
-              ) : null}
-              {isEditing && k === 'secretKey' ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Leave this blank unless you want to replace the stored secret key.
-                </p>
-              ) : null}
-            </div>
+            </FormField>
           ))}
         </ModalBody>
         <ModalFooter>
@@ -217,55 +215,46 @@ export default function StoragesPage() {
               (isEditing && loadingStorageId === editingId)
             }
           >
-            {isEditing ? 'Save changes' : 'Create'}
+            {isEditing ? 'Save changes' : 'Add storage'}
           </Button>
         </ModalFooter>
       </ModalContent>
     </Modal>
   );
 
+  const addButton = (
+    <Button onClick={openCreate}>
+      <Plus className="size-4" /> Add storage
+    </Button>
+  );
+
   return (
     <PageContainer>
       {createDialog}
+      <PageHeader
+        title="Storage"
+        description="S3-compatible buckets for backups"
+        actions={addButton}
+      />
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="bg-accent h-40 animate-pulse rounded-lg" />
-          ))}
-        </div>
-      ) : !storages?.length ? (
-        <EmptyState
-          icon={Database}
-          title="No storages yet"
-          description="add an s3-compatible bucket to store backups and assets."
-          action={
-            <Button onClick={openCreate}>
-              <Plus className="size-4" /> New storage
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {storages.map((s) => (
-            <div
-              key={s.id}
-              className="bg-card hover:border-border-bright hover:bg-secondary flex h-full flex-col overflow-hidden rounded-lg border transition-colors"
-            >
-              <div className="flex items-start gap-3 p-4">
-                <span className="border-border-bright bg-secondary text-phosphor grid size-9 shrink-0 place-items-center rounded-md border">
-                  <Database className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-semibold">{s.name}</p>
-                  <p className="text-muted-foreground truncate text-[11px]">{s.bucket}</p>
-                  <p className="text-muted-foreground text-[11px]">{s.region}</p>
-                </div>
-              </div>
-              <div className="bg-secondary mt-auto flex items-center justify-end gap-2 border-t px-4 py-2.5">
+      <DataTable
+        columns={[
+          { key: 'name', header: 'Name', cell: (s) => <span className="font-medium">{s.name}</span> },
+          { key: 'bucket', header: 'Bucket', cell: (s) => <span className="font-mono">{s.bucket}</span> },
+          {
+            key: 'region',
+            header: 'Region',
+            cell: (s) => <span className="text-muted-foreground font-mono">{s.region}</span>,
+          },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            cell: (s) => (
+              <div className="flex items-center justify-end gap-2">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => openEdit(s)}
                   disabled={loadingStorageId === s.id}
                 >
@@ -273,7 +262,7 @@ export default function StoragesPage() {
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => testMut.mutate(s.id)}
                   disabled={testMut.isPending}
                 >
@@ -283,26 +272,28 @@ export default function StoragesPage() {
                   title={`Delete storage "${s.name}"?`}
                   description="Removes this S3 connection from Peon. Existing backups that reference it may fail until reassigned."
                   confirmLabel="Delete"
-                  size="sm"
+                  variant="ghost"
                   disabled={deleteMut.isPending}
                   onConfirm={() => deleteMut.mutate(s.id)}
                 >
                   <Trash2 className="size-4" /> Delete
                 </ConfirmButton>
               </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={openCreate}
-            className="border-border-bright text-muted-foreground hover:text-phosphor hover:border-phosphor-dim grid min-h-40 place-items-center rounded-lg border border-dashed transition-colors"
-          >
-            <span className="flex flex-col items-center gap-2 text-[12.5px]">
-              <Plus className="size-4" /> new storage
-            </span>
-          </button>
-        </div>
-      )}
+            ),
+          },
+        ]}
+        rows={storages ?? []}
+        rowKey={(s) => s.id}
+        isLoading={isLoading}
+        emptyState={
+          <EmptyState
+            icon={Database}
+            title="No storage yet"
+            description="Add an S3-compatible bucket to store backups and assets."
+            action={addButton}
+          />
+        }
+      />
     </PageContainer>
   );
 }

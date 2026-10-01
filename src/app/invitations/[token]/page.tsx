@@ -38,21 +38,21 @@ export default function AcceptInvitationPage({
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-[400px]">
         <CardHeader>
-          <CardTitle>You&apos;ve been invited</CardTitle>
+          <CardTitle className="text-lg font-semibold">You&apos;ve been invited</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isLoading && <p className="text-muted-foreground text-sm">Loading…</p>}
-          {isError && <p className="text-destructive text-sm">This invitation is invalid or expired.</p>}
+          {isLoading && <p className="text-muted-foreground text-base">Loading…</p>}
+          {isError && <p className="text-destructive text-base">This invitation is invalid or expired.</p>}
           {data && (
             <>
-              <p className="text-sm">
+              <p className="text-base">
                 Join <span className="font-medium">{data.target}</span> as{' '}
                 <span className="font-medium">{data.role}</span>.
               </p>
               {data.status !== 'PENDING' ? (
-                <p className="text-muted-foreground text-sm">
+                <p className="text-muted-foreground text-base">
                   This invitation is no longer active ({data.status.toLowerCase()}).
                 </p>
               ) : (

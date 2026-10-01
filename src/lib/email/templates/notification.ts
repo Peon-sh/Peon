@@ -25,7 +25,7 @@ const SEVERITY_LABEL: Record<NotificationEmailSeverity, string> = {
 };
 
 const SEVERITY_PILL: Record<NotificationEmailSeverity, { bg: string; fg: string }> = {
-  success: { bg: '#E8F8F1', fg: '#0C9268' },
+  success: { bg: '#EEF0FB', fg: '#5E6AD2' },
   error: { bg: '#FDECEE', fg: '#C62828' },
   warning: { bg: '#FFF6E5', fg: '#B7791F' },
   info: { bg: '#E8F4FC', fg: '#1565C0' },
@@ -53,15 +53,15 @@ export function notificationEmailTemplate(message: NotificationEmailInput): {
 
   const fieldsHtml = message.fields?.length
     ? `
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 20px; border: 1px solid #E8EAED; border-radius: 8px; overflow: hidden;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 20px; border: 1px solid #E5E5E5; border-radius: 8px; overflow: hidden;">
                 ${message.fields
                   .map(
                     (f, i) => `
                 <tr>
-                  <td style="padding: 10px 14px; font-size: 12px; color: #9AA3AF; width: 28%; background: ${i % 2 === 0 ? '#F8F9FA' : '#FFFFFF'}; border-bottom: 1px solid #E8EAED; vertical-align: top;">
+                  <td style="padding: 10px 14px; font-size: 12px; color: #8A8A8A; width: 28%; background: ${i % 2 === 0 ? '#F4F4F5' : '#FFFFFF'}; border-bottom: 1px solid #E5E5E5; vertical-align: top;">
                     ${escapeHtml(f.label)}
                   </td>
-                  <td style="padding: 10px 14px; font-size: 13px; color: #17211C; background: ${i % 2 === 0 ? '#F8F9FA' : '#FFFFFF'}; border-bottom: 1px solid #E8EAED; word-break: break-word;">
+                  <td style="padding: 10px 14px; font-size: 13px; color: #171717; background: ${i % 2 === 0 ? '#F4F4F5' : '#FFFFFF'}; border-bottom: 1px solid #E5E5E5; word-break: break-word;">
                     ${escapeHtml(f.value)}
                   </td>
                 </tr>`,
@@ -72,11 +72,11 @@ export function notificationEmailTemplate(message: NotificationEmailInput): {
 
   const extraLinksHtml = extraLinks.length
     ? `
-              <p style="font-size: 12px; line-height: 18px; color: #9AA3AF; margin: 20px 0 0;">
+              <p style="font-size: 12px; line-height: 18px; color: #8A8A8A; margin: 20px 0 0;">
                 ${extraLinks
                   .map(
                     (l) =>
-                      `<a href="${escapeHtml(l.url)}" style="color: #0C9268; text-decoration: underline;">${escapeHtml(l.label)}</a>`,
+                      `<a href="${escapeHtml(l.url)}" style="color: #5E6AD2; text-decoration: underline;">${escapeHtml(l.label)}</a>`,
                   )
                   .join('&nbsp;&nbsp;·&nbsp;&nbsp;')}
               </p>`
@@ -86,19 +86,19 @@ export function notificationEmailTemplate(message: NotificationEmailInput): {
               <span style="display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; background: ${pill.bg}; color: ${pill.fg}; margin: 0 0 12px;">
                 ${SEVERITY_LABEL[severity]}
               </span>
-              <p style="font-size: 16px; line-height: 24px; color: #17211C; font-weight: 600; margin: 0 0 8px;">
+              <p style="font-size: 16px; line-height: 24px; color: #171717; font-weight: 600; margin: 0 0 8px;">
                 ${escapeHtml(message.subject)}
               </p>
-              <p style="font-size: 14px; line-height: 22px; color: #4A5568; margin: 0;">
+              <p style="font-size: 14px; line-height: 22px; color: #404040; margin: 0;">
                 ${escapeHtml(message.text)}
               </p>
               ${fieldsHtml}
               ${primary ? emailCtaButton(primary.url, primary.label) : ''}
               ${
                 primary
-                  ? `<p style="font-size: 12px; line-height: 18px; color: #9AA3AF; margin: 24px 0 0;">
+                  ? `<p style="font-size: 12px; line-height: 18px; color: #8A8A8A; margin: 24px 0 0;">
                 Or open this link:
-                <a href="${escapeHtml(primary.url)}" style="color: #0C9268; text-decoration: underline;">${escapeHtml(primary.url)}</a>
+                <a href="${escapeHtml(primary.url)}" style="color: #5E6AD2; text-decoration: underline;">${escapeHtml(primary.url)}</a>
               </p>`
                   : ''
               }

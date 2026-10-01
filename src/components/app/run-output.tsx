@@ -13,24 +13,24 @@ function OutputBlockView({ block }: { block: RunOutputBlock }) {
   const shown = expanded ? block.text : `${block.text.slice(0, COLLAPSE_CHARS).trimEnd()}…`;
 
   return (
-    <div className="overflow-hidden rounded-md border border-border/60 bg-[#0a0f0c]">
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2.5 py-1">
-        <span className="text-muted-foreground font-mono text-[10px] tracking-wide uppercase">
+    <div className="border-border bg-muted overflow-hidden rounded-md border">
+      <div className="border-border flex items-center justify-between gap-2 border-b px-2.5 py-1">
+        <span className="text-muted-foreground font-mono text-xs">
           {block.label}
         </span>
         {long ? (
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-[10px] transition-colors"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-xs transition-colors"
           >
             {expanded ? (
               <>
-                <ChevronDown className="size-3" /> collapse
+                <ChevronDown className="size-3" /> Collapse
               </>
             ) : (
               <>
-                <ChevronRight className="size-3" /> expand
+                <ChevronRight className="size-3" /> Expand
               </>
             )}
           </button>
@@ -38,8 +38,8 @@ function OutputBlockView({ block }: { block: RunOutputBlock }) {
       </div>
       <pre
         className={cn(
-          'max-h-64 overflow-auto px-2.5 py-2 font-mono text-[10.5px] leading-relaxed whitespace-pre-wrap',
-          block.kind === 'json' ? 'text-phosphor/90' : 'text-neutral-300',
+          'max-h-64 overflow-auto px-2.5 py-2 font-mono text-sm leading-relaxed whitespace-pre-wrap',
+          block.kind === 'json' ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         {shown}
@@ -62,11 +62,11 @@ export function RunOutput({
     return (
       <div
         className={cn(
-          'text-muted-foreground rounded-md border border-dashed border-border/50 px-2.5 py-2 text-[10.5px] italic',
+          'text-muted-foreground border-border rounded-md border px-2.5 py-2 text-sm',
           className,
         )}
       >
-        no output
+        No output
       </div>
     );
   }

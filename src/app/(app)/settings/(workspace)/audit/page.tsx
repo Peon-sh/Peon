@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { LoaderCircle } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Panel } from '@/components/app/page';
+import { KeyValueList } from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
 import { EmptyState } from '@/components/app/empty-state';
 import { LocalDateTime } from '@/components/app/local-datetime';
 import {
@@ -25,6 +25,27 @@ import {
   getWorkspaceMembers,
   type AuditLogItem,
 } from '@/services/api/workspace';
+
+const RESOURCE_TYPES = [
+  'workspace',
+  'project',
+  'service',
+  'server',
+  'source',
+  'storage',
+  'private_key',
+  'token',
+  'tag',
+  'shared_variable',
+  'notification',
+  'llm_credential',
+  'deployment',
+] as const;
+
+function resourceTypeLabel(t: string) {
+  const w = t.replace(/_/g, ' ');
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
 
 export default function SettingsAuditPage() {
   const { currentWorkspaceId } = useAuthStore();
@@ -74,189 +95,172 @@ export default function SettingsAuditPage() {
   const items = data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
-    <div className="space-y-4">
-      <Panel contentClassName="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label>Action</Label>
-          <Input
-            value={action}
-            onChange={(e) => setAction(e.target.value)}
-            placeholder="e.g. service.env.upserted"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Actor</Label>
-          <SearchableSelect
-            value={actorUserId || '__all__'}
-            onValueChange={(v) => setActorUserId(v === '__all__' ? '' : v)}
-            placeholder="All actors"
-            options={[
-              { value: '__all__', label: 'All actors' },
-              ...(membersData?.members.map((m) => ({
-                value: m.user.id,
-                label: m.user.name ?? m.user.email,
-              })) ?? []),
-            ]}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Resource type</Label>
-          <SearchableSelect
-            value={resourceType || '__all__'}
-            onValueChange={(v) => setResourceType(v === '__all__' ? '' : v)}
-            placeholder="All types"
-            options={[
-              { value: '__all__', label: 'All types' },
-              { value: 'workspace', label: 'workspace' },
-              { value: 'project', label: 'project' },
-              { value: 'service', label: 'service' },
-              { value: 'server', label: 'server' },
-              { value: 'source', label: 'source' },
-              { value: 'storage', label: 'storage' },
-              { value: 'private_key', label: 'private_key' },
-              { value: 'token', label: 'token' },
-              { value: 'tag', label: 'tag' },
-              { value: 'shared_variable', label: 'shared_variable' },
-              { value: 'notification', label: 'notification' },
-              { value: 'llm_credential', label: 'llm_credential' },
-              { value: 'deployment', label: 'deployment' },
-            ]}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Search</Label>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Summary or name" />
-        </div>
-        <div className="space-y-1.5">
-          <Label>From</Label>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>To</Label>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-      </Panel>
-
-      {isLoading && !items.length ? (
-        <div className="text-muted-foreground flex items-center gap-2 text-[12px]">
-          <LoaderCircle className="size-4 animate-spin" /> Loading audit log…
-        </div>
-      ) : !items.length ? (
-        <EmptyState
-          title="No audit events"
-          description="Mutating actions in this workspace will appear here."
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          aria-label="Search"
+          className="w-full sm:w-56"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search summary or name"
         />
-      ) : (
-        <Panel contentClassName="divide-y overflow-x-auto">
-          <div className="text-muted-foreground grid min-w-[640px] grid-cols-[140px_minmax(0,1.4fr)_minmax(120px,0.8fr)_minmax(160px,1fr)] gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide">
-            <span>When</span>
-            <span>Summary</span>
-            <span>Actor</span>
-            <span>Action</span>
-          </div>
-          {items.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              onClick={() => setSelected(row)}
-              className="hover:bg-secondary grid min-w-[640px] w-full cursor-pointer grid-cols-[140px_minmax(0,1.4fr)_minmax(120px,0.8fr)_minmax(160px,1fr)] gap-3 px-4 py-3 text-left text-[12px] transition-colors"
-            >
-              <span className="text-muted-foreground">
-                <LocalDateTime value={row.createdAt} />
+        <Input
+          aria-label="Action"
+          className="w-full font-mono sm:w-56"
+          value={action}
+          onChange={(e) => setAction(e.target.value)}
+          placeholder="Action, e.g. service.env.upserted"
+        />
+        <SearchableSelect
+          className="w-full sm:w-44"
+          value={actorUserId || '__all__'}
+          onValueChange={(v) => setActorUserId(v === '__all__' ? '' : v)}
+          placeholder="All actors"
+          options={[
+            { value: '__all__', label: 'All actors' },
+            ...(membersData?.members.map((m) => ({
+              value: m.user.id,
+              label: m.user.name ?? m.user.email,
+            })) ?? []),
+          ]}
+        />
+        <SearchableSelect
+          className="w-full sm:w-44"
+          value={resourceType || '__all__'}
+          onValueChange={(v) => setResourceType(v === '__all__' ? '' : v)}
+          placeholder="All types"
+          options={[
+            { value: '__all__', label: 'All types' },
+            ...RESOURCE_TYPES.map((t) => ({ value: t, label: resourceTypeLabel(t) })),
+          ]}
+        />
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label="From"
+            type="date"
+            className="w-36"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+          <span className="text-muted-foreground text-sm">to</span>
+          <Input
+            aria-label="To"
+            type="date"
+            className="w-36"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <DataTable
+        columns={[
+          {
+            key: 'when',
+            header: 'When',
+            className: 'whitespace-nowrap',
+            cell: (row) => <LocalDateTime value={row.createdAt} className="text-muted-foreground" />,
+          },
+          {
+            key: 'actor',
+            header: 'Actor',
+            cell: (row) => (
+              <span className="block max-w-48 truncate">
+                {row.actor?.name ?? row.actor?.email ?? row.actorType}
               </span>
-              <div className="min-w-0">
+            ),
+          },
+          {
+            key: 'action',
+            header: 'Action',
+            cell: (row) => <span className="text-muted-foreground font-mono text-sm break-all">{row.action}</span>,
+          },
+          {
+            key: 'target',
+            header: 'Target',
+            cell: (row) => (
+              <div className="min-w-0 max-w-md">
                 <p className="truncate font-medium">{row.summary}</p>
                 {row.resourceName || row.resourceType ? (
-                  <p className="text-muted-foreground truncate text-[11px]">
+                  <p className="text-muted-foreground truncate text-sm">
                     {row.resourceType}
                     {row.resourceName ? ` · ${row.resourceName}` : ''}
                   </p>
                 ) : null}
               </div>
-              <span className="truncate">
-                {row.actor?.name ?? row.actor?.email ?? row.actorType}
-              </span>
-              <span className="text-muted-foreground font-mono text-[11px] break-all">
-                {row.action}
-              </span>
-            </button>
-          ))}
-        </Panel>
-      )}
+            ),
+          },
+        ]}
+        rows={items}
+        rowKey={(row) => row.id}
+        onRowClick={(row) => setSelected(row)}
+        isLoading={isLoading && !items.length}
+        emptyState={
+          <EmptyState
+            icon={ScrollText}
+            title="No audit events"
+            description="Mutating actions in this workspace will appear here."
+          />
+        }
+      />
 
       {hasNextPage ? (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isFetching}
-          onClick={() => void fetchNextPage()}
-        >
-          Load more
-        </Button>
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            disabled={isFetching}
+            onClick={() => void fetchNextPage()}
+          >
+            Load more
+          </Button>
+        </div>
       ) : null}
 
       <Modal open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <ModalContent>
+        <ModalContent size="lg">
           <ModalHeader>
             <ModalTitle>Audit event</ModalTitle>
+            {selected ? <ModalDescription>{selected.summary}</ModalDescription> : null}
           </ModalHeader>
           <ModalBody className="space-y-4">
             {selected ? (
               <>
-                <ModalDescription>{selected.summary}</ModalDescription>
-                <dl className="grid gap-3 text-[12px] sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                      When
-                    </dt>
-                    <dd>
-                      <LocalDateTime value={selected.createdAt} />
-                    </dd>
-                  </div>
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                      Action
-                    </dt>
-                    <dd className="font-mono break-all">{selected.action}</dd>
-                  </div>
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                      Actor
-                    </dt>
-                    <dd>
-                      {selected.actor?.name ?? selected.actor?.email ?? selected.actorType}
-                      {selected.actorRole ? ` · ${selected.actorRole}` : ''}
-                      {selected.actor?.email && selected.actor?.name
-                        ? ` (${selected.actor.email})`
-                        : ''}
-                    </dd>
-                  </div>
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                      Actor type
-                    </dt>
-                    <dd>{selected.actorType}</dd>
-                  </div>
-                  <div className="space-y-1">
-                    <dt className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                      Resource
-                    </dt>
-                    <dd className="break-all">
-                      {selected.resourceType}
-                      {selected.resourceName ? ` · ${selected.resourceName}` : ''}
-                      {selected.resourceId ? (
-                        <span className="text-muted-foreground block font-mono text-[11px]">
-                          {selected.resourceId}
+                <KeyValueList
+                  items={[
+                    { label: 'When', value: <LocalDateTime value={selected.createdAt} /> },
+                    { label: 'Action', value: <span className="break-all">{selected.action}</span>, mono: true },
+                    {
+                      label: 'Actor',
+                      value: (
+                        <>
+                          {selected.actor?.name ?? selected.actor?.email ?? selected.actorType}
+                          {selected.actorRole ? ` · ${selected.actorRole}` : ''}
+                          {selected.actor?.email && selected.actor?.name
+                            ? ` (${selected.actor.email})`
+                            : ''}
+                        </>
+                      ),
+                    },
+                    { label: 'Actor type', value: selected.actorType },
+                    {
+                      label: 'Resource',
+                      value: (
+                        <span className="break-all">
+                          {selected.resourceType}
+                          {selected.resourceName ? ` · ${selected.resourceName}` : ''}
+                          {selected.resourceId ? (
+                            <span className="text-muted-foreground block font-mono text-sm">
+                              {selected.resourceId}
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="space-y-1.5">
-                  <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">
-                    Metadata
-                  </p>
-                  <pre className="bg-secondary max-h-64 overflow-auto rounded-md border p-3 font-mono text-[11px] whitespace-pre-wrap break-all">
+                      ),
+                    },
+                  ]}
+                />
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-sm font-medium">Metadata</p>
+                  <pre className="bg-secondary max-h-64 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre-wrap break-all">
                     {selected.metadata == null
                       ? '—'
                       : JSON.stringify(selected.metadata, null, 2)}
@@ -272,6 +276,6 @@ export default function SettingsAuditPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </div>
+    </>
   );
 }

@@ -16,7 +16,7 @@ import {
   Rocket,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Panel } from '@/components/app/page';
+import { KeyValueList, PageContainer, PageHeader, Panel } from '@/components/app/page';
 import { StatusBadge } from '@/components/app/status-badge';
 import { ConfirmButton } from '@/components/app/confirm';
 import { cancelDeployment, getDeployment } from '@/services/api/deployment';
@@ -24,6 +24,7 @@ import { deployService, rollbackService } from '@/services/api/service';
 import { invalidateServiceQueries } from '@/lib/queries/service';
 import { buildLogsDownloadFilename, buildLogsDownloadText } from '@/lib/deployment-logs';
 import { LocalDateTime } from '@/components/app/local-datetime';
+import { formatDuration } from '@/lib/datetime';
 
 function downloadBuildLogs(opts: { uuid: string; logs: Parameters<typeof buildLogsDownloadText>[0] }) {
   const blob = new Blob([buildLogsDownloadText(opts.logs)], { type: 'text/plain;charset=utf-8' });
@@ -33,15 +34,6 @@ function downloadBuildLogs(opts: { uuid: string; logs: Parameters<typeof buildLo
   a.download = buildLogsDownloadFilename(opts.uuid);
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function formatDuration(startedAt: string | null, finishedAt: string | null): string | null {
-  if (!startedAt) return null;
-  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const secs = Math.max(0, Math.round((end - new Date(startedAt).getTime()) / 1000));
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m ? `${m}m ${s}s` : `${s}s`;
 }
 
 export default function DeploymentDetailPage({
@@ -115,43 +107,95 @@ export default function DeploymentDetailPage({
 
   if (!d) {
     return (
-      <div className="space-y-4">
+      <PageContainer>
         <div className="bg-accent h-20 animate-pulse rounded-lg" />
         <div className="bg-accent h-96 animate-pulse rounded-lg" />
-      </div>
+      </PageContainer>
     );
   }
 
   const duration = formatDuration(d.startedAt, d.finishedAt);
 
+  const metadata = [
+    ...(d.commitSha
+      ? [
+          {
+            label: 'Commit',
+            mono: true,
+            value: (
+              <span className="inline-flex max-w-full items-center gap-1.5">
+                <GitCommitHorizontal className="size-3.5 shrink-0" />
+                <span className="bg-secondary rounded px-1.5 py-0.5">{d.commitSha.slice(0, 7)}</span>
+                {d.commitMessage && (
+                  <span className="text-foreground min-w-0 truncate font-sans">{d.commitMessage}</span>
+                )}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(d.previewUrl
+      ? [
+          {
+            label: 'Preview URL',
+            mono: true,
+            value: (
+              <a
+                href={d.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary inline-flex max-w-full items-center gap-1.5 hover:underline"
+              >
+                <ExternalLink className="size-3.5 shrink-0" />
+                <span className="truncate">{d.previewUrl.replace(/^https?:\/\//, '')}</span>
+              </a>
+            ),
+          },
+        ]
+      : []),
+    { label: 'Deployment ID', mono: true, value: d.uuid },
+    { label: 'Created', value: <LocalDateTime value={d.createdAt} /> },
+    ...(duration
+      ? [{ label: 'Duration', value: `${running ? 'Running for' : 'Took'} ${duration}` }]
+      : []),
+    ...(d.triggeredBy ? [{ label: 'Triggered by', value: d.triggeredBy }] : []),
+    ...(d.forceRebuild || d.restartOnly
+      ? [
+          {
+            label: 'Options',
+            value: [d.forceRebuild && 'Force rebuild', d.restartOnly && 'Restart only']
+              .filter(Boolean)
+              .join(' · '),
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="w-full space-y-5">
+    <PageContainer>
       <Link
         href={deploymentsUrl}
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-[11.5px] transition-colors"
+        className="text-muted-foreground hover:text-foreground -mb-3 inline-flex items-center gap-1.5 text-sm transition-colors"
       >
         <ArrowLeft className="size-3" /> All deployments
       </Link>
 
-      <Panel
-        title={
-          <span className="inline-flex flex-wrap items-center gap-2">
-            Deployment{' '}
-            <span className="text-muted-foreground font-mono text-base font-normal">
-              {d.uuid.slice(0, 12)}
-            </span>
+      <PageHeader
+        title={`Deployment ${d.uuid.slice(0, 12)}`}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={d.status} />
             {d.isPreview && (
-              <span className="text-muted-foreground text-[11px] font-normal">
-                preview{d.pullRequestId ? ` · PR #${d.pullRequestId}` : ''}
+              <span className="text-muted-foreground text-sm">
+                Preview{d.pullRequestId ? ` · PR #${d.pullRequestId}` : ''}
               </span>
             )}
           </span>
         }
         actions={
-          <div className="flex items-center gap-2">
+          <>
             {d.previewUrl && (
-              <Button asChild size="sm" variant="outline">
+              <Button asChild variant="outline">
                 <a href={d.previewUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="size-3.5" /> Open preview
                 </a>
@@ -164,7 +208,6 @@ export default function DeploymentDetailPage({
                 confirmLabel="Cancel deployment"
                 variant="outline"
                 confirmVariant="default"
-                size="sm"
                 disabled={cancelMut.isPending}
                 onConfirm={() => cancelMut.mutate()}
               >
@@ -178,7 +221,6 @@ export default function DeploymentDetailPage({
                 confirmLabel="Rollback"
                 variant="outline"
                 confirmVariant="default"
-                size="sm"
                 disabled={rollbackMut.isPending}
                 onConfirm={() => rollbackMut.mutate()}
               >
@@ -186,7 +228,6 @@ export default function DeploymentDetailPage({
               </ConfirmButton>
             )}
             <Button
-              size="sm"
               variant="outline"
               onClick={() => redeployMut.mutate({ force: true })}
               disabled={redeployMut.isPending}
@@ -194,78 +235,24 @@ export default function DeploymentDetailPage({
             >
               <RefreshCw className="size-3.5" /> Force rebuild
             </Button>
-            <Button size="sm" onClick={() => redeployMut.mutate({})} disabled={redeployMut.isPending}>
+            <Button onClick={() => redeployMut.mutate({})} disabled={redeployMut.isPending}>
               <Rocket className="size-3.5" /> Redeploy
             </Button>
-          </div>
+          </>
         }
-        contentClassName="grid gap-4 p-4 sm:grid-cols-2"
-      >
-        {d.commitSha && (
-          <div>
-            <p className="text-muted-foreground mb-1 text-[11px]">Commit</p>
-            <span className="inline-flex items-center gap-1.5 font-mono text-[12px]">
-              <GitCommitHorizontal className="size-3.5" />
-              <span className="bg-secondary rounded px-1.5 py-0.5">{d.commitSha.slice(0, 7)}</span>
-              {d.commitMessage && (
-                <span className="text-foreground max-w-96 truncate font-sans">{d.commitMessage}</span>
-              )}
-            </span>
-          </div>
-        )}
-        {d.previewUrl && (
-          <div>
-            <p className="text-muted-foreground mb-1 text-[11px]">Preview URL</p>
-            <a
-              href={d.previewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-phosphor hover:underline inline-flex max-w-full items-center gap-1.5 font-mono text-[12px]"
-            >
-              <ExternalLink className="size-3.5 shrink-0" />
-              <span className="truncate">{d.previewUrl.replace(/^https?:\/\//, '')}</span>
-            </a>
-          </div>
-        )}
-        <div>
-          <p className="text-muted-foreground mb-1 text-[11px]">Created</p>
-          <p className="text-[12.5px]">
-            <LocalDateTime value={d.createdAt} />
-          </p>
-        </div>
-        {duration && (
-          <div>
-            <p className="text-muted-foreground mb-1 text-[11px]">Duration</p>
-            <p className="text-[12.5px]">
-              {running ? 'running for' : 'took'} {duration}
-            </p>
-          </div>
-        )}
-        {d.triggeredBy && (
-          <div>
-            <p className="text-muted-foreground mb-1 text-[11px]">Triggered by</p>
-            <p className="text-[12.5px]">{d.triggeredBy}</p>
-          </div>
-        )}
-        {(d.forceRebuild || d.restartOnly) && (
-          <div>
-            <p className="text-muted-foreground mb-1 text-[11px]">Options</p>
-            <p className="text-[12.5px]">
-              {[d.forceRebuild && 'force rebuild', d.restartOnly && 'restart only']
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
-          </div>
-        )}
+      />
+
+      <Panel title="Details" contentClassName="py-1.5">
+        <KeyValueList items={metadata} />
       </Panel>
 
-      <Panel
-        title="build logs"
-        actions={
+      <div className="border-border bg-card overflow-hidden rounded-lg border">
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <h2 className="text-md font-medium">Build logs</h2>
           <div className="flex items-center gap-2">
             {running && (
-              <span className="text-phosphor inline-flex items-center gap-1.5 text-[11px]">
-                <span className="bg-phosphor size-1.5 animate-pulse rounded-full" /> live
+              <span className="text-success inline-flex items-center gap-1.5 text-sm">
+                <span className="bg-success size-1.5 animate-pulse rounded-full" /> Live
               </span>
             )}
             <Button
@@ -277,12 +264,10 @@ export default function DeploymentDetailPage({
               <Download className="size-3.5" /> Download
             </Button>
           </div>
-        }
-        contentClassName="bg-[#0a0f0c]"
-      >
+        </div>
         <pre
           ref={logRef}
-          className="max-h-[65vh] min-h-64 overflow-y-auto overflow-x-hidden p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-neutral-200"
+          className="text-foreground max-h-[65vh] min-h-64 overflow-x-hidden overflow-y-auto p-4 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap"
         >
           {d.logs.length
             ? d.logs.map((l, i) => (
@@ -292,7 +277,7 @@ export default function DeploymentDetailPage({
                     l.stream === 'stderr'
                       ? 'text-destructive'
                       : l.stream === 'system'
-                        ? 'text-phosphor'
+                        ? 'text-muted-foreground'
                         : ''
                   }
                 >
@@ -301,7 +286,7 @@ export default function DeploymentDetailPage({
               ))
             : 'No logs yet…'}
         </pre>
-      </Panel>
-    </div>
+      </div>
+    </PageContainer>
   );
 }

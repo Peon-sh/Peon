@@ -7,7 +7,6 @@ import {
   CANCEL_REASON_OPTIONS,
   type CancelSubscriptionReason,
 } from '@/schemas/billing.schema';
-import { cn } from '@/lib/utils';
 
 export function CancelReasonPicker({
   reason,
@@ -22,24 +21,19 @@ export function CancelReasonPicker({
 }) {
   return (
     <div className="space-y-3">
-      <p className="text-foreground text-sm font-medium">Why are you canceling?</p>
+      <p className="text-foreground text-base font-medium">Why are you canceling?</p>
       <div className="space-y-1.5">
         {CANCEL_REASON_OPTIONS.map((opt) => {
           const selected = reason === opt.value;
           return (
             <label
               key={opt.value}
-              className={cn(
-                'border-border flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors',
-                selected
-                  ? 'border-phosphor/50 bg-phosphor/10'
-                  : 'hover:border-border-bright hover:bg-secondary/60',
-              )}
+              className="border-border hover:bg-secondary has-[:checked]:border-primary has-[:checked]:bg-primary/5 flex cursor-pointer items-start gap-2.5 rounded-md border p-3 text-base transition-colors"
             >
               <input
                 type="radio"
                 name="cancel-reason"
-                className="border-border text-phosphor mt-0.5 size-3.5"
+                className="accent-primary mt-0.5 size-3.5"
                 checked={selected}
                 onChange={() => onReasonChange(opt.value)}
               />
@@ -49,7 +43,7 @@ export function CancelReasonPicker({
         })}
       </div>
       {reason === 'other' && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <Label htmlFor="cancel-reason-detail">Tell us more (optional)</Label>
           <Input
             id="cancel-reason-detail"

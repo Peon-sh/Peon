@@ -5,9 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Panel, Section } from '@/components/app/page';
+import { FormField, FormSection, Panel } from '@/components/app/page';
 import { useAuthStore } from '@/store/auth';
 import { seedWorkspaceGeneralForm } from '@/lib/workspace-general-form';
 import { listWorkspaces, updateWorkspace, type WorkspaceListItem } from '@/services/api/workspace';
@@ -34,15 +33,15 @@ export default function SettingsGeneralPage() {
   const current = workspaces?.find((w) => w.id === wsId);
 
   return (
-    <Section title="general" description="basic workspace details">
+    <>
       {isLoading || !current ? (
-        <Panel contentClassName="space-y-4 p-4">
-          <p className="text-muted-foreground text-[12px]">Loading workspace…</p>
+        <Panel title="General" description="Basic workspace details">
+          <p className="text-muted-foreground text-sm">Loading workspace…</p>
         </Panel>
       ) : (
         <WorkspaceGeneralForm key={current.id} workspace={current} canEdit={canEdit} />
       )}
-    </Section>
+    </>
   );
 }
 
@@ -81,42 +80,40 @@ function WorkspaceGeneralForm({
   });
 
   return (
-    <Panel
-      contentClassName="space-y-4 p-4"
+    <FormSection
+      title="General"
+      description="Basic workspace details"
       footer={
         canEdit ? (
           <Button
-            size="sm"
             onClick={() => saveMut.mutate()}
             disabled={!name.trim() || saveMut.isPending}
           >
             Save changes
           </Button>
         ) : (
-          <p className="text-muted-foreground w-full text-left text-[11px]">
+          <p className="text-muted-foreground w-full text-left text-sm">
             Only workspace owners and admins can edit these settings.
           </p>
         )
       }
     >
-      <div className="space-y-2">
-        <Label htmlFor="ws-name">Name</Label>
+      <FormField label="Name" htmlFor="ws-name">
         <Input
           id="ws-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={!canEdit}
         />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="ws-desc">Description</Label>
+      </FormField>
+      <FormField label="Description" htmlFor="ws-desc">
         <Textarea
           id="ws-desc"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           disabled={!canEdit}
         />
-      </div>
-    </Panel>
+      </FormField>
+    </FormSection>
   );
 }
