@@ -53,7 +53,7 @@ const PAYMENT_ELEMENT_OPTIONS = {
     billingDetails: {
       name: 'auto' as const,
       email: 'never' as const,
-      phone: 'never' as const,
+      phone: 'auto' as const,
       address: 'auto' as const,
     },
   },
