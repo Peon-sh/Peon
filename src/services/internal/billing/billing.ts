@@ -355,7 +355,7 @@ export const BillingService = {
       ui_mode: 'elements',
       customer: customerId,
       // Card-only keeps the in-app form simple (avoids Link/Cash App/Amazon Pay noise).
-      payment_method_types: ['card'],
+      allowed_payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: input.quantity }],
       allow_promotion_codes: true,
       // Show saved cards + let the customer opt into redisplay on future checkouts.
