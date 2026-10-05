@@ -37,8 +37,8 @@ function LoginForm() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="font-heading text-2xl font-extrabold tracking-tight uppercase">Welcome back</h1>
-        <p className="text-muted-foreground text-sm">Sign in to your account to continue.</p>
+        <h1 className="text-xl font-semibold">Welcome back</h1>
+        <p className="text-muted-foreground text-base">Sign in to your account to continue.</p>
       </div>
 
       <GoogleButton label="Sign in with Google" />
@@ -47,8 +47,8 @@ function LoginForm() {
         <div className="absolute inset-0 flex items-center">
           <span className="w-full border-t" />
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background text-muted-foreground px-2">or</span>
+        <div className="relative flex justify-center text-sm">
+          <span className="bg-card text-muted-foreground px-2">or</span>
         </div>
       </div>
 
@@ -67,7 +67,7 @@ function LoginForm() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
-            <Link href="/forgot-password" className="text-muted-foreground text-xs hover:underline">
+            <Link href="/forgot-password" className="text-muted-foreground text-sm hover:underline">
               Forgot password?
             </Link>
           </div>

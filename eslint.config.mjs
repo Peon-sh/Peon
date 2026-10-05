@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import tsParser from "@typescript-eslint/parser";
+import designTokens from "./eslint-rules/design-tokens.mjs";
 
 /**
  * ESLint 10 + eslint-config-next stopgap until eslint-plugin-react ships
@@ -32,6 +33,11 @@ const eslintConfig = defineConfig([
       },
     },
   },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: { "design-tokens": { rules: { "no-off-scale-classes": designTokens } } },
+    rules: { "design-tokens/no-off-scale-classes": "error" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -39,9 +45,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Generated Prisma client and vendored shadcn UI primitives.
+    // Generated Prisma client.
     "src/lib/prisma/generated/**",
-    "src/components/ui/**",
   ]),
 ]);
 

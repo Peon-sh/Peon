@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatLocalDateTime, parseApiDate } from '@/lib/datetime';
+import { formatDuration, formatLocalDateTime, parseApiDate } from '@/lib/datetime';
 
 describe('parseApiDate', () => {
   it('keeps explicit Z / offsets', () => {
@@ -29,5 +29,16 @@ describe('formatLocalDateTime', () => {
     const label = formatLocalDateTime('2026-07-22T02:46:00.000Z', 'datetime', 'en-GB');
     expect(label).toMatch(/2026/);
     expect(label).toMatch(/22/);
+  });
+});
+
+describe('formatDuration', () => {
+  it('returns null without a start time', () => {
+    expect(formatDuration(null, null)).toBeNull();
+  });
+
+  it('formats seconds and minutes between two timestamps', () => {
+    expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T00:00:42Z')).toBe('42s');
+    expect(formatDuration('2026-01-01T00:00:00Z', '2026-01-01T00:02:05Z')).toBe('2m 5s');
   });
 });

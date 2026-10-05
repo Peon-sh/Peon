@@ -32,15 +32,15 @@ function statusClass(status: Status | undefined): string {
   if (status === 'warn') return 'bg-warning';
   if (status === 'error') return 'bg-destructive';
   if (status === 'running') return 'bg-info animate-status-pulse';
-  return 'bg-faint';
+  return 'bg-muted-foreground';
 }
 
 function ChartPlaceholder({ title }: { title: string }) {
   return (
-    <div className="rounded-md border p-3">
-      <h3 className="mb-3 text-xs font-semibold">{title}</h3>
+    <div className="bg-card border-border rounded-lg border p-4">
+      <h3 className="mb-3 text-sm font-medium">{title}</h3>
       <div
-        className="bg-muted/30 text-muted-foreground flex items-center justify-center rounded text-xs"
+        className="bg-secondary/50 text-muted-foreground flex items-center justify-center rounded-md text-sm"
         style={{ height: CHART_HEIGHT }}
       >
         Preparing chart…
@@ -88,8 +88,8 @@ const ChartBlock = memo(function ChartBlock({ visual }: { visual: ChartVisual })
   const multi = keys.length > 1 || keys[0] !== 'value';
 
   return (
-    <div className="rounded-md border p-3">
-      <h3 className="mb-3 text-xs font-semibold">{visual.title}</h3>
+    <div className="bg-card border-border rounded-lg border p-4">
+      <h3 className="mb-3 text-sm font-medium">{visual.title}</h3>
       <div ref={ref} className="w-full min-w-0 overflow-hidden" style={{ height: CHART_HEIGHT }}>
         {width > 0 && (
           <Chart
@@ -99,9 +99,14 @@ const ChartBlock = memo(function ChartBlock({ visual }: { visual: ChartVisual })
             margin={{ top: 4, right: 8, bottom: multi ? 8 : 4, left: -16 }}
           >
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+              stroke="var(--border)"
+            />
             <YAxis
-              tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+              tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+              stroke="var(--border)"
               allowDecimals={false}
             />
             <Tooltip
@@ -109,11 +114,11 @@ const ChartBlock = memo(function ChartBlock({ visual }: { visual: ChartVisual })
               contentStyle={{
                 background: 'var(--popover)',
                 border: '1px solid var(--border)',
-                borderRadius: 6,
-                fontSize: 11,
+                borderRadius: 8,
+                fontSize: 12,
               }}
             />
-            {multi && <Legend wrapperStyle={{ fontSize: 11 }} />}
+            {multi && <Legend wrapperStyle={{ fontSize: 12 }} />}
             {visual.kind === 'barChart'
               ? keys.map((key, index) => (
                   <Bar
@@ -155,31 +160,31 @@ export const VisualBlock = memo(
   }) {
     if (visual.kind === 'metric') {
       return (
-        <div className="rounded-md border p-3">
-          <p className="text-muted-foreground text-xs">{visual.title}</p>
+        <div className="bg-card border-border rounded-lg border p-4">
+          <p className="text-muted-foreground text-sm">{visual.title}</p>
           <div className="mt-1 flex items-center gap-2">
             <span className={cn('size-2 rounded-full', statusClass(visual.status))} />
-            <span className="text-2xl font-semibold tracking-tight">{visual.value}</span>
+            <span className="text-display font-semibold tabular-nums">{visual.value}</span>
           </div>
-          {visual.hint && <p className="text-muted-foreground mt-1 text-xs">{visual.hint}</p>}
+          {visual.hint && <p className="text-muted-foreground mt-1 text-sm">{visual.hint}</p>}
         </div>
       );
     }
 
     if (visual.kind === 'statusList') {
       return (
-        <div className="overflow-hidden rounded-md border">
-          <h3 className="bg-muted/40 border-b px-3 py-2 text-xs font-semibold">{visual.title}</h3>
-          <div className="divide-y">
+        <div className="bg-card border-border overflow-hidden rounded-lg border">
+          <h3 className="border-border border-b px-4 py-3 text-sm font-medium">{visual.title}</h3>
+          <div className="divide-border divide-y">
             {visual.items.map((item, index) => (
               <div
                 key={`${item.label}-${index}`}
-                className="flex items-center gap-2 px-3 py-2 text-xs"
+                className="flex items-center gap-2 px-4 py-2 text-base"
               >
                 <span className={cn('size-2 rounded-full', statusClass(item.status))} />
                 <span className="font-medium">{item.label}</span>
                 {item.detail && (
-                  <span className="text-muted-foreground ml-auto truncate">{item.detail}</span>
+                  <span className="text-muted-foreground ml-auto truncate text-sm">{item.detail}</span>
                 )}
               </div>
             ))}
@@ -190,8 +195,8 @@ export const VisualBlock = memo(
 
     if (visual.kind === 'timeline') {
       return (
-        <div className="rounded-md border p-3">
-          <h3 className="mb-3 text-xs font-semibold">{visual.title}</h3>
+        <div className="bg-card border-border rounded-lg border p-4">
+          <h3 className="mb-3 text-sm font-medium">{visual.title}</h3>
           <div className="space-y-0">
             {visual.events.map((event, index) => (
               <div key={`${event.at}-${index}`} className="relative flex gap-3 pb-4 last:pb-0">
@@ -204,9 +209,9 @@ export const VisualBlock = memo(
                     statusClass(event.status),
                   )}
                 />
-                <div className="min-w-0 text-xs">
+                <div className="min-w-0 text-base">
                   <p className="font-medium">{event.label}</p>
-                  <p className="text-muted-foreground">{event.at}</p>
+                  <p className="text-muted-foreground text-sm">{event.at}</p>
                 </div>
               </div>
             ))}

@@ -9,7 +9,7 @@ import {
   type UIMessage,
   type UIMessagePart,
 } from 'ai';
-import { Brain, Check, Copy, LoaderCircle, Wrench } from 'lucide-react';
+import { Bot, Brain, Check, Copy, LoaderCircle, User, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApprovalCard } from '@/components/chat/approval-card';
 import { MarkdownMessage } from '@/components/chat/markdown-message';
@@ -86,23 +86,23 @@ function LiveStatus({
 
   return (
     <div
-      className="text-muted-foreground flex items-center gap-2 text-[11px]"
+      className="text-muted-foreground flex items-center gap-2 text-sm"
       aria-live="polite"
       aria-label={label}
     >
-      {icon === 'brain' && <Brain className="text-phosphor size-3.5 animate-pulse" />}
-      {icon === 'tool' && <Wrench className="text-phosphor size-3.5 animate-pulse" />}
-      {icon === 'spin' && <LoaderCircle className="text-phosphor size-3.5 animate-spin" />}
+      {icon === 'brain' && <Brain className="text-primary size-3.5 animate-pulse" />}
+      {icon === 'tool' && <Wrench className="text-primary size-3.5 animate-pulse" />}
+      {icon === 'spin' && <LoaderCircle className="text-primary size-3.5 animate-spin" />}
       <span className={cn(icon === 'tool' && 'font-mono')}>{label}</span>
       {toolParts.length > 0 && (
-        <span className="text-faint tabular-nums">
+        <span className="text-muted-foreground tabular-nums">
           {done}/{toolParts.length}
         </span>
       )}
       <span className="ml-0.5 flex items-center gap-1" aria-hidden>
-        <span className="bg-muted-foreground/60 size-1 animate-bounce rounded-full [animation-delay:-0.3s]" />
-        <span className="bg-muted-foreground/60 size-1 animate-bounce rounded-full [animation-delay:-0.15s]" />
-        <span className="bg-muted-foreground/60 size-1 animate-bounce rounded-full" />
+        <span className="bg-muted-foreground size-1 animate-bounce rounded-full [animation-delay:-0.3s]" />
+        <span className="bg-muted-foreground size-1 animate-bounce rounded-full [animation-delay:-0.15s]" />
+        <span className="bg-muted-foreground size-1 animate-bounce rounded-full" />
       </span>
     </div>
   );
@@ -167,128 +167,126 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <article
       className={cn(
-        'flex w-full flex-col gap-1.5',
-        isUser ? 'items-end' : 'items-start',
+        'grid w-full grid-cols-[28px_1fr] gap-3 py-4',
+        isUser && 'bg-secondary/40 rounded-lg px-4',
       )}
     >
-      <div
-        className={cn(
-          'min-w-0 space-y-2 text-sm leading-relaxed select-text',
-          isUser
-            ? 'bg-primary text-primary-foreground max-w-[80%] rounded-lg px-3 py-2 selection:bg-black/35 selection:text-primary-foreground'
-            : 'w-full max-w-3xl selection:bg-phosphor/40 selection:text-foreground',
-        )}
+      <span
+        className="bg-secondary text-muted-foreground grid size-7 place-items-center rounded-md"
+        aria-hidden
       >
-        {showLiveStatus && !hasAnswer && (
-          <LiveStatus reasoningParts={reasoningParts} toolParts={toolParts} />
-        )}
-
-        {approvalParts.map((part) => (
-          <ApprovalCard
-            key={part.toolCallId}
-            part={part as Extract<AnyToolPart, { state: 'approval-requested' }>}
-            threadId={threadId}
-            addToolApprovalResponse={addToolApprovalResponse}
-          />
-        ))}
-
-        {contentParts.map((part, index) => {
-          const visual = visualFromPart(part as never) as ChatVisual | null;
-          if (visual) {
-            const partId =
-              typeof (part as { id?: unknown }).id === 'string'
-                ? (part as { id: string }).id
-                : `v-${index}`;
-            return (
-              <VisualBlock
-                key={partId}
-                visual={visual}
-                deferHeavy={streaming || !!awaitingFirstToken}
-              />
-            );
-          }
-          if (part.type === 'text') {
-            return <MarkdownMessage key={`t-${index}`}>{part.text}</MarkdownMessage>;
-          }
-          return null;
-        })}
-
-        {showLiveStatus && hasAnswer && (
-          <LiveStatus reasoningParts={reasoningParts} toolParts={toolParts} />
-        )}
-
-        {showBrain && detailsOpen && (
-          <div className="space-y-2 rounded-md border p-2">
-            {reasoningParts.map((part, index) => (
-              <ReasoningPanel
-                key={`r-${index}`}
-                part={part}
-                streaming={false}
-                defaultOpen={index === 0}
-              />
-            ))}
-            {nonApprovalTools.map((part) => (
-              <ToolCard key={part.toolCallId} part={part} compact />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {(showUserTime || showAssistantMeta) && (
-        <div
-          className={cn(
-            'text-faint flex items-center gap-0.5 px-0.5',
-            isUser ? 'flex-row-reverse' : 'flex-row',
+        {isUser ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="text-foreground selection:bg-primary/30 min-w-0 space-y-3 text-base leading-relaxed select-text">
+          {showLiveStatus && !hasAnswer && (
+            <LiveStatus reasoningParts={reasoningParts} toolParts={toolParts} />
           )}
-        >
-          {showAssistantMeta && (
-            <TooltipProvider>
-              {showBrain && (
+  
+          {approvalParts.map((part) => (
+            <ApprovalCard
+              key={part.toolCallId}
+              part={part as Extract<AnyToolPart, { state: 'approval-requested' }>}
+              threadId={threadId}
+              addToolApprovalResponse={addToolApprovalResponse}
+            />
+          ))}
+  
+          {contentParts.map((part, index) => {
+            const visual = visualFromPart(part as never) as ChatVisual | null;
+            if (visual) {
+              const partId =
+                typeof (part as { id?: unknown }).id === 'string'
+                  ? (part as { id: string }).id
+                  : `v-${index}`;
+              return (
+                <VisualBlock
+                  key={partId}
+                  visual={visual}
+                  deferHeavy={streaming || !!awaitingFirstToken}
+                />
+              );
+            }
+            if (part.type === 'text') {
+              return <MarkdownMessage key={`t-${index}`}>{part.text}</MarkdownMessage>;
+            }
+            return null;
+          })}
+  
+          {showLiveStatus && hasAnswer && (
+            <LiveStatus reasoningParts={reasoningParts} toolParts={toolParts} />
+          )}
+  
+          {showBrain && detailsOpen && (
+            <div className="space-y-2">
+              {reasoningParts.map((part, index) => (
+                <ReasoningPanel
+                  key={`r-${index}`}
+                  part={part}
+                  streaming={false}
+                  defaultOpen={index === 0}
+                />
+              ))}
+              {nonApprovalTools.map((part) => (
+                <ToolCard key={part.toolCallId} part={part} compact />
+              ))}
+            </div>
+          )}
+        </div>
+  
+        {(showUserTime || showAssistantMeta) && (
+          <div
+            className="text-muted-foreground -ml-1.5 flex items-center gap-0.5"
+          >
+            {showAssistantMeta && (
+              <TooltipProvider>
+                {showBrain && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className={cn(
+                          'text-muted-foreground hover:text-foreground',
+                          detailsOpen && 'bg-secondary text-foreground',
+                        )}
+                        onClick={() => setDetailsOpen((value) => !value)}
+                        aria-label={detailsOpen ? 'Hide agent details' : 'Show agent details'}
+                      >
+                        <Brain className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {detailsOpen ? 'Hide thinking & tools' : 'Show thinking & tools'}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className={cn(
-                        'text-muted-foreground hover:text-foreground',
-                        detailsOpen && 'bg-muted text-foreground',
-                      )}
-                      onClick={() => setDetailsOpen((value) => !value)}
-                      aria-label={detailsOpen ? 'Hide agent details' : 'Show agent details'}
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => void copyAnswer()}
+                      aria-label={copied ? 'Copied' : 'Copy response'}
                     >
-                      <Brain className="size-3.5" />
+                      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {detailsOpen ? 'Hide thinking & tools' : 'Show thinking & tools'}
-                  </TooltipContent>
+                  <TooltipContent side="bottom">{copied ? 'Copied' : 'Copy'}</TooltipContent>
                 </Tooltip>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => void copyAnswer()}
-                    aria-label={copied ? 'Copied' : 'Copy response'}
-                  >
-                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">{copied ? 'Copied' : 'Copy'}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {(showUserTime || showAssistantTime) && (
-            <time dateTime={meta?.createdAt} className="px-1.5 text-[10px] tabular-nums">
-              {timeLabel}
-            </time>
-          )}
-        </div>
-      )}
+              </TooltipProvider>
+            )}
+            {(showUserTime || showAssistantTime) && (
+              <time dateTime={meta?.createdAt} className="px-1.5 text-xs tabular-nums">
+                {timeLabel}
+              </time>
+            )}
+          </div>
+        )}
+      </div>
     </article>
   );
 }, (prev, next) => {

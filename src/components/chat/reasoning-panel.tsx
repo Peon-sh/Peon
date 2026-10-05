@@ -29,15 +29,15 @@ export function ReasoningPanel({
       onOpenChange={(nextOpen) => {
         if (!isActive) setManuallyOpen(nextOpen);
       }}
-      className="rounded-md border"
+      className="bg-card border-border overflow-hidden rounded-lg border"
     >
-      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 px-3 py-1.5 text-[11px]">
-        <Brain className={cn('size-3', isActive && 'text-phosphor animate-pulse')} />
+      <CollapsibleTrigger className="text-foreground hover:bg-secondary flex w-full items-center gap-2 px-3 py-2 text-sm font-medium transition-colors">
+        <Brain className={cn('text-muted-foreground size-3.5', isActive && 'text-primary animate-pulse')} />
         <span>{isActive ? 'Thinking…' : open ? 'Thinking' : 'Show thinking'}</span>
-        <ChevronDown className={cn('ml-auto size-3 transition-transform', open && 'rotate-180')} />
+        <ChevronDown className={cn('text-muted-foreground ml-auto size-3.5 transition-transform', open && 'rotate-180')} />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="text-muted-foreground max-h-64 overflow-auto border-t px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap">
+        <div className="text-muted-foreground border-border max-h-64 overflow-auto border-t px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
           {part.text}
         </div>
       </CollapsibleContent>

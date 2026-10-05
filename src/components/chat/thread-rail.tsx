@@ -2,6 +2,7 @@
 
 import { MessageSquare, Plus, Trash2 } from 'lucide-react';
 import { ConfirmButton } from '@/components/app/confirm';
+import { ListRow } from '@/components/app/list-row';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ChatThreadListItem } from '@/services/api/chat';
@@ -37,51 +38,42 @@ export function ThreadRail({
   deleting?: boolean;
 }) {
   return (
-    <aside className="bg-card flex min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r">
-      <div className="border-b p-3">
+    <aside className="bg-background border-border flex min-h-0 min-w-0 flex-col overflow-hidden border-r">
+      <div className="border-border border-b p-3">
         <Button className="w-full justify-start" onClick={onNew}>
           <Plus />
           New chat
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1 [&>[data-slot=scroll-area-viewport]>div]:!block [&>[data-slot=scroll-area-viewport]>div]:!min-w-0">
-        <div className="w-full min-w-0 space-y-1 p-2">
+        <div className="w-full min-w-0 space-y-0.5 p-2">
           {threads.map((thread) => {
             const active = thread.id === activeThreadId;
             const title = thread.title || 'New chat';
             return (
               <div
                 key={thread.id}
-                className={cn(
-                  'group relative flex w-full min-w-0 items-center overflow-hidden rounded-md border border-transparent',
-                  active && 'bg-accent border-border',
-                )}
+                className="group relative w-full min-w-0 overflow-hidden rounded-md"
+                title={title}
               >
-                <button
-                  type="button"
+                <ListRow
                   onClick={() => onSelect(thread.id)}
-                  className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-2 py-2 pr-8 text-left"
+                  leading={
+                    <MessageSquare
+                      className={cn('size-3.5', active && 'text-foreground')}
+                    />
+                  }
                   title={title}
-                >
-                  <MessageSquare
-                    className={cn(
-                      'text-muted-foreground size-3.5 shrink-0',
-                      active && 'text-phosphor',
-                    )}
-                  />
-                  <span className="min-w-0 flex-1 overflow-hidden">
-                    <span className="block truncate text-xs font-medium">
-                      {title}
-                    </span>
-                    <span className="text-faint block truncate text-[10px]">
-                      {relativeTime(thread.updatedAt)}
-                    </span>
-                  </span>
-                </button>
+                  subtitle={relativeTime(thread.updatedAt)}
+                  className={cn(
+                    'rounded-md px-2 py-2 pr-9',
+                    active && 'bg-secondary',
+                  )}
+                />
                 <ConfirmButton
-                  size="icon-xs"
-                  variant="destructive"
-                  className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  size="icon-sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   disabled={deleting}
                   title="Delete chat?"
                   description={`“${title}” and its messages will be permanently deleted.`}
@@ -95,7 +87,7 @@ export function ThreadRail({
             );
           })}
           {threads.length === 0 && (
-            <p className="text-muted-foreground px-3 py-8 text-center text-xs">
+            <p className="text-muted-foreground px-3 py-8 text-center text-sm">
               No conversations yet
             </p>
           )}

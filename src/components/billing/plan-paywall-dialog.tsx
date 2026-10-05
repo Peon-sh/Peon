@@ -12,7 +12,7 @@ import {
   ModalDescription,
 } from '@/components/app/modal';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/app/page';
 import { ConfirmButton } from '@/components/app/confirm';
 import { InAppSubscribeForm } from '@/components/billing/in-app-subscribe-form';
 import { SeatChangePreview } from '@/components/billing/seat-change-preview';
@@ -130,8 +130,7 @@ export function PlanPaywallDialog({
         <ModalBody>
           {showSeats && entitled ? (
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="paywall-seats">Total seats</Label>
+              <FormField label="Total seats" htmlFor="paywall-seats" className="lg:grid-cols-1 lg:gap-2">
                 <Input
                   id="paywall-seats"
                   type="number"
@@ -139,10 +138,10 @@ export function PlanPaywallDialog({
                   value={seats}
                   onChange={(e) => setSeats(Math.max(1, Number(e.target.value) || 1))}
                 />
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground mt-2 text-sm">
                   Currently {billing?.projectCount ?? 0} projects / {billing?.seats ?? 0} seats.
                 </p>
-              </div>
+              </FormField>
               <SeatChangePreview preview={seatPreview} isLoading={seatPreviewLoading} />
               <ConfirmButton
                 className="w-full"

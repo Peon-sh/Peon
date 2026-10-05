@@ -96,18 +96,18 @@ export function ConfirmButton({
       </AlertDialogTrigger>
       <AlertDialogContent
         className={cn(
-          'flex max-h-[min(90vh,840px)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md',
+          'flex max-h-[min(90vh,840px)] w-full flex-col gap-0 overflow-hidden rounded-xl p-0 sm:max-w-md',
         )}
       >
         <div
           data-slot="confirm-header"
-          className="flex shrink-0 items-start justify-between gap-3 border-b border-border/70 px-4 py-3"
+          className="flex shrink-0 items-start justify-between gap-3 px-6 pt-6 pb-4 [&_[data-slot=alert-dialog-title]]:text-lg [&_[data-slot=alert-dialog-title]]:font-semibold"
         >
           <AlertDialogHeader className="min-w-0 flex-1 gap-1 place-items-start text-left sm:place-items-start sm:text-left">
             <AlertDialogTitle>{title}</AlertDialogTitle>
           </AlertDialogHeader>
         </div>
-        <div data-slot="confirm-body" className="min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm">
+        <div data-slot="confirm-body" className="text-muted-foreground min-h-0 flex-1 overflow-y-auto px-6 text-base">
           {typeof description === 'string' ? (
             <AlertDialogDescription>{description}</AlertDialogDescription>
           ) : (
@@ -121,17 +121,12 @@ export function ConfirmButton({
         </div>
         <AlertDialogFooter
           data-slot="confirm-footer"
-          className="shrink-0 gap-2 border-t border-border/70 px-4 py-3 sm:justify-end"
+          className="bg-secondary/50 mt-4 shrink-0 gap-2 border-t px-6 py-4 sm:justify-end"
         >
           <AlertDialogCancel disabled={confirmPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             variant={confirmVariant === 'destructive' ? 'destructive' : 'default'}
             disabled={confirmDisabled || confirmPending}
-            className={
-              confirmVariant === 'destructive'
-                ? 'bg-destructive text-white hover:bg-destructive/90 dark:bg-destructive dark:text-white dark:hover:bg-destructive/90'
-                : undefined
-            }
             onClick={(e) => {
               e.preventDefault();
               if (confirmDisabled || confirmPending) return;

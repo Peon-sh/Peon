@@ -5,9 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { PageContainer, Panel, Section } from '@/components/app/page';
+import { FormField, FormSection, PageContainer, PageHeader } from '@/components/app/page';
 import { useAuthStore } from '@/store/auth';
 import {
   getInstanceSettings,
@@ -74,9 +74,12 @@ export default function InstanceSettingsPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed'),
   });
 
+  const header = <PageHeader title="Instance" description="This Peon installation" />;
+
   if (!isOwner) {
     return (
       <PageContainer>
+        {header}
         <p className="text-muted-foreground text-sm">
           Only the Peon instance owner can view global instance settings.
         </p>
@@ -87,112 +90,117 @@ export default function InstanceSettingsPage() {
   if (isPending || !data || !hydrated) {
     return (
       <PageContainer>
-        <div className="space-y-4">
-          <div className="bg-accent h-80 animate-pulse rounded-lg" />
-          <div className="bg-accent h-48 animate-pulse rounded-lg" />
-        </div>
+        {header}
+        <Skeleton className="h-80 rounded-lg" />
+        <Skeleton className="h-48 rounded-lg" />
       </PageContainer>
     );
   }
 
   const saveFooter = (
-    <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+    <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
       Save changes
     </Button>
   );
 
   return (
     <PageContainer>
-      <Section title="general" description="global settings for this Peon installation">
-        <Panel contentClassName="space-y-4 p-4" footer={saveFooter}>
-          <Field label="Instance name">
-            <Input
-              value={settings.instanceName ?? ''}
-              onChange={(e) => set('instanceName', e.target.value)}
-            />
-          </Field>
-          <Field label="FQDN">
-            <Input
-              value={settings.fqdn ?? ''}
-              onChange={(e) => set('fqdn', e.target.value)}
-            />
-          </Field>
-          <Field label="Custom DNS servers">
-            <Input
-              value={settings.customDnsServers ?? ''}
-              onChange={(e) => set('customDnsServers', e.target.value)}
-            />
-          </Field>
-          <Field label="Timezone">
-            <Input
-              value={settings.instanceTimezone ?? ''}
-              onChange={(e) => set('instanceTimezone', e.target.value)}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Public port min">
-              <Input
-                type="number"
-                value={settings.publicPortMin ?? 0}
-                onChange={(e) => set('publicPortMin', Number(e.target.value))}
-              />
-            </Field>
-            <Field label="Public port max">
-              <Input
-                type="number"
-                value={settings.publicPortMax ?? 0}
-                onChange={(e) => set('publicPortMax', Number(e.target.value))}
-              />
-            </Field>
-          </div>
-          <div className="flex items-center justify-between">
-            <Label>Registration enabled</Label>
-            <Switch
-              checked={settings.isRegistrationEnabled ?? false}
-              onCheckedChange={(v) => set('isRegistrationEnabled', v)}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label>API enabled</Label>
-            <Switch
-              checked={settings.isApiEnabled ?? false}
-              onCheckedChange={(v) => set('isApiEnabled', v)}
-            />
-          </div>
-        </Panel>
-      </Section>
+      {header}
 
-      <Section
-        title="google sign-in"
-        description="Uses Google Identity Services with a client ID only — no client secret required."
+      <FormSection
+        title="General"
+        description="Global settings for this Peon installation."
+        footer={saveFooter}
       >
-        <Panel contentClassName="space-y-4 p-4" footer={saveFooter}>
-          <div className="flex items-center justify-between">
-            <Label>Enabled</Label>
-            <Switch checked={oauthEnabled} onCheckedChange={setOauthEnabled} />
-          </div>
-          <Field label="Client ID">
+        <FormField label="Instance name" htmlFor="instance-name">
+          <Input
+            id="instance-name"
+            value={settings.instanceName ?? ''}
+            onChange={(e) => set('instanceName', e.target.value)}
+          />
+        </FormField>
+        <FormField label="FQDN" htmlFor="instance-fqdn">
+          <Input
+            id="instance-fqdn"
+            className="font-mono"
+            value={settings.fqdn ?? ''}
+            onChange={(e) => set('fqdn', e.target.value)}
+          />
+        </FormField>
+        <FormField label="Custom DNS servers" htmlFor="instance-dns">
+          <Input
+            id="instance-dns"
+            className="font-mono"
+            value={settings.customDnsServers ?? ''}
+            onChange={(e) => set('customDnsServers', e.target.value)}
+          />
+        </FormField>
+        <FormField label="Timezone" htmlFor="instance-tz">
+          <Input
+            id="instance-tz"
+            value={settings.instanceTimezone ?? ''}
+            onChange={(e) => set('instanceTimezone', e.target.value)}
+          />
+        </FormField>
+        <FormField label="Public port range" description="Minimum and maximum public ports.">
+          <div className="grid grid-cols-2 gap-2">
             <Input
-              value={oauthClientId}
-              onChange={(e) => setOauthClientId(e.target.value)}
-              placeholder="xxxx.apps.googleusercontent.com"
+              aria-label="Public port min"
+              type="number"
+              value={settings.publicPortMin ?? 0}
+              onChange={(e) => set('publicPortMin', Number(e.target.value))}
             />
-          </Field>
-          <p className="text-muted-foreground text-[12px]">
-            Prefer setting <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in the
-            environment for the sign-in button. Instance client ID is optional metadata.
-          </p>
-        </Panel>
-      </Section>
-    </PageContainer>
-  );
-}
+            <Input
+              aria-label="Public port max"
+              type="number"
+              value={settings.publicPortMax ?? 0}
+              onChange={(e) => set('publicPortMax', Number(e.target.value))}
+            />
+          </div>
+        </FormField>
+        <FormField label="Registration enabled" htmlFor="instance-registration">
+          <Switch
+            id="instance-registration"
+            checked={settings.isRegistrationEnabled ?? false}
+            onCheckedChange={(v) => set('isRegistrationEnabled', v)}
+          />
+        </FormField>
+        <FormField label="API enabled" htmlFor="instance-api">
+          <Switch
+            id="instance-api"
+            checked={settings.isApiEnabled ?? false}
+            onCheckedChange={(v) => set('isApiEnabled', v)}
+          />
+        </FormField>
+      </FormSection>
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      {children}
-    </div>
+      <FormSection
+        title="Google sign-in"
+        description="Uses Google Identity Services with a client ID only. No client secret required."
+        footer={saveFooter}
+      >
+        <FormField label="Enabled" htmlFor="google-enabled">
+          <Switch id="google-enabled" checked={oauthEnabled} onCheckedChange={setOauthEnabled} />
+        </FormField>
+        <FormField
+          label="Client ID"
+          htmlFor="google-client-id"
+          description={
+            <>
+              Prefer setting <code className="font-mono">NEXT_PUBLIC_GOOGLE_CLIENT_ID</code> in the
+              environment for the sign-in button. Instance client ID is optional metadata.
+            </>
+          }
+        >
+          <Input
+            id="google-client-id"
+            className="font-mono"
+            value={oauthClientId}
+            onChange={(e) => setOauthClientId(e.target.value)}
+            placeholder="xxxx.apps.googleusercontent.com"
+          />
+        </FormField>
+      </FormSection>
+    </PageContainer>
   );
 }

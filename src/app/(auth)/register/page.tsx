@@ -60,8 +60,8 @@ export default function RegisterPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="font-heading text-2xl font-extrabold tracking-tight uppercase">Create your account</h1>
-        <p className="text-muted-foreground text-sm">
+        <h1 className="text-xl font-semibold">Create your account</h1>
+        <p className="text-muted-foreground text-base">
           {step === 'details'
             ? 'Start deploying in minutes.'
             : `Enter the 6-digit code sent to ${email}.`}
@@ -75,8 +75,8 @@ export default function RegisterPage() {
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background text-muted-foreground px-2">or</span>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-card text-muted-foreground px-2">or</span>
             </div>
           </div>
           <form onSubmit={startSignup} className="space-y-4">
@@ -103,7 +103,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground text-sm">
                 At least 8 characters, with upper, lower, and a number.
               </p>
             </div>

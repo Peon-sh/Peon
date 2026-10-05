@@ -108,7 +108,7 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
 
           {selected ? (
             <div className="space-y-3">
-              <div className="border-border-bright rounded-lg border p-4">
+              <div className="border-border rounded-lg border p-4">
                 <div className="flex items-start gap-3">
                   {selected.logo ? (
                     // eslint-disable-next-line @next/next/no-img-element -- vendored local SVG/PNG assets
@@ -121,16 +121,16 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                     />
                   ) : null}
                   <div className="min-w-0 flex-1">
-                    <div className="font-heading text-[13px] font-semibold">{selected.name}</div>
-                    <p className="text-muted-foreground mt-1 text-[12px]">{selected.slogan}</p>
+                    <div className="text-md font-medium">{selected.name}</div>
+                    <p className="text-muted-foreground mt-1 text-sm">{selected.slogan}</p>
                     {selected.documentation && (
                       <a
                         href={selected.documentation}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-phosphor mt-2 inline-flex items-center gap-1 text-[11px] hover:underline"
+                        className="text-primary mt-2 inline-flex items-center gap-1 text-sm hover:underline"
                       >
-                        documentation <ExternalLink className="size-3" />
+                        Documentation <ExternalLink className="size-3" />
                       </a>
                     )}
                   </div>
@@ -158,7 +158,7 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                   }))}
                 />
                 {!servers?.length && (
-                  <p className="text-muted-foreground text-[11px]">
+                  <p className="text-muted-foreground text-sm">
                     Add and validate a server before creating deployable services.
                   </p>
                 )}
@@ -168,7 +168,7 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
             <>
               <div className="mb-4 flex gap-2">
                 <Input
-                  placeholder="search services…"
+                  placeholder="Search services…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="min-w-0 flex-1"
@@ -180,7 +180,7 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                     onValueChange={setCategory}
                     placeholder="Select category"
                     options={[
-                      { value: 'all', label: 'all categories' },
+                      { value: 'all', label: 'All categories' },
                       ...(data?.categories ?? []).map((c) => ({ value: c, label: c })),
                     ]}
                   />
@@ -198,8 +198,8 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                         type="button"
                         onClick={() => setSelected(t)}
                         className={cn(
-                          'border-border-bright hover:border-phosphor-dim hover:bg-secondary',
-                          'rounded-lg border p-3 text-left transition-colors',
+                          'border-border hover:bg-secondary',
+                          'rounded-lg border p-4 text-left transition-colors',
                         )}
                       >
                         <div className="flex items-start gap-2.5">
@@ -214,22 +214,22 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                               loading="lazy"
                             />
                           ) : (
-                            <div className="bg-secondary text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold">
+                            <div className="bg-secondary text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold">
                               {t.name.charAt(0)}
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-heading truncate text-[12.5px] font-semibold">
+                              <span className="text-md truncate font-medium">
                                 {t.name}
                               </span>
                               {t.category && (
-                                <span className="text-muted-foreground shrink-0 text-[10px]">
+                                <span className="text-muted-foreground shrink-0 text-xs">
                                   {t.category}
                                 </span>
                               )}
                             </div>
-                            <p className="text-muted-foreground mt-1 line-clamp-2 text-[11px]">
+                            <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
                               {t.slogan}
                             </p>
                           </div>
@@ -237,8 +237,8 @@ export function TemplateMarketplaceDialog({ projectId }: { projectId: string }) 
                       </button>
                     ))}
                     {filtered.length === 0 && (
-                      <p className="text-muted-foreground col-span-2 py-10 text-center text-[12px]">
-                        no templates match “{search}”
+                      <p className="text-muted-foreground col-span-2 py-10 text-center text-sm">
+                        No templates match “{search}”
                       </p>
                     )}
                   </div>

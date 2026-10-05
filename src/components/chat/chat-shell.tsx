@@ -93,7 +93,7 @@ export function ChatShell() {
   const gateBusy = statusLoading || !workspaceId;
 
   return (
-    <div className="flex h-[calc(100svh-6rem)] min-h-0 overflow-hidden rounded-lg border">
+    <div className="border-border grid h-[calc(100svh-6rem)] min-h-0 grid-cols-[260px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-lg border">
       <ThreadRail
         threads={threads}
         activeThreadId={threadId}
@@ -121,8 +121,10 @@ export function ChatShell() {
       ) : (
         <section className="bg-background flex min-h-0 min-w-0 flex-1 flex-col">
           {startingChat ? (
-            <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-6 sm:px-8">
-              <LoadingBubble />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-[720px] px-6 py-6">
+                <LoadingBubble />
+              </div>
             </div>
           ) : (
             <EmptyState

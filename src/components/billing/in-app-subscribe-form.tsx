@@ -11,8 +11,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Modal,
   ModalBody,
@@ -37,11 +37,15 @@ import {
   yearlyDiscountPercent,
 } from '@/lib/billing/pricing';
 import { DiscountBadge } from '@/components/billing/discount-badge';
+import { FormField } from '@/components/app/page';
 import { cn } from '@/lib/utils';
 
 const stripePromise = publicEnv.stripePublishableKey
   ? loadStripe(publicEnv.stripePublishableKey)
   : null;
+
+/** Stacked label-over-control layout: this form renders in modals and narrow panels. */
+const STACKED_FIELD = 'lg:grid-cols-1 lg:gap-2';
 
 const PAYMENT_ELEMENT_OPTIONS = {
   layout: 'tabs' as const,
@@ -177,12 +181,11 @@ function PayForm({ onSuccess }: { onSuccess: () => void }) {
     <>
       <ModalBody>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="promo-code">Coupon code</Label>
+          <FormField label="Coupon code" htmlFor="promo-code" className={STACKED_FIELD}>
             {appliedPromo ? (
-              <div className="bg-phosphor/10 border-phosphor/30 flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+              <div className="bg-primary/5 border-primary/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-base">
                 <span>
-                  Applied <span className="font-semibold">{appliedPromo}</span>
+                  Applied <span className="font-medium">{appliedPromo}</span>
                   {checkout.total.discount.amount !== '0' &&
                   checkout.total.discount.minorUnitsAmount !== 0 ? (
                     <span className="text-muted-foreground">
@@ -226,44 +229,49 @@ function PayForm({ onSuccess }: { onSuccess: () => void }) {
                 </Button>
               </div>
             )}
-          </div>
+          </FormField>
 
-          <div className="relative min-h-[140px]">
-            {!paymentElementReady && !error ? (
-              <p className="text-muted-foreground absolute inset-0 flex items-center gap-2 text-sm">
-                <Loader2 className="size-4 animate-spin" />
-                Loading card form…
-              </p>
-            ) : null}
-            <PaymentElement
-              options={PAYMENT_ELEMENT_OPTIONS}
-              onReady={() => setPaymentElementReady(true)}
-              onLoadError={(event) => {
-                setPaymentElementReady(false);
-                const message =
-                  event.error.message ||
-                  'Could not load the payment form. Check your connection and try again.';
-                setError(message);
-                toast.error(message);
-              }}
-            />
-          </div>
-          {checkout.savedPaymentMethods && checkout.savedPaymentMethods.length > 0 ? (
-            <p className="text-muted-foreground text-xs">
-              Saved cards for this workspace are listed above. Choose one or add a new card.
-            </p>
-          ) : null}
+          <FormField
+            label="Payment"
+            className={STACKED_FIELD}
+            description={
+              checkout.savedPaymentMethods && checkout.savedPaymentMethods.length > 0
+                ? 'Saved cards for this workspace are listed below. Choose one or add a new card.'
+                : undefined
+            }
+          >
+            <div className="border-input bg-card relative min-h-[140px] rounded-md border px-3 py-2">
+              {!paymentElementReady && !error ? (
+                <p className="text-muted-foreground absolute inset-0 flex items-center gap-2 px-3 text-sm">
+                  <Loader2 className="size-4 animate-spin" />
+                  Loading card form…
+                </p>
+              ) : null}
+              <PaymentElement
+                options={PAYMENT_ELEMENT_OPTIONS}
+                onReady={() => setPaymentElementReady(true)}
+                onLoadError={(event) => {
+                  setPaymentElementReady(false);
+                  const message =
+                    event.error.message ||
+                    'Could not load the payment form. Check your connection and try again.';
+                  setError(message);
+                  toast.error(message);
+                }}
+              />
+            </div>
+          </FormField>
           {error ? (
-            <p className="text-destructive rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm">
-              {error}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           ) : null}
         </div>
       </ModalBody>
       <ModalFooter className="flex-col gap-3 sm:flex-col">
-        <div className="flex w-full items-baseline justify-between text-sm">
+        <div className="flex w-full items-baseline justify-between text-base">
           <span className="text-muted-foreground">Due now</span>
-          <span className="font-heading text-base font-bold">{checkout.total.total.amount}</span>
+          <span className="text-md font-semibold tabular-nums">{checkout.total.total.amount}</span>
         </div>
         <Button
           className="w-full"
@@ -324,7 +332,7 @@ export function InAppSubscribeForm({
               appearance: {
                 theme: 'night' as const,
                 variables: {
-                  colorPrimary: '#a3e635',
+                  colorPrimary: '#7170FF',
                   borderRadius: '6px',
                 },
               },
@@ -385,10 +393,10 @@ export function InAppSubscribeForm({
 
   if (purchased) {
     return (
-      <div className="flex items-start gap-3 rounded-lg border border-phosphor/40 bg-phosphor/10 px-4 py-3">
-        <CheckCircle2 className="text-phosphor mt-0.5 size-5 shrink-0" />
+      <div className="border-success/30 bg-success/5 flex items-start gap-3 rounded-lg border px-4 py-3">
+        <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
         <div>
-          <p className="font-semibold">Plan purchased</p>
+          <p className="text-base font-medium">Plan purchased</p>
           <p className="text-muted-foreground text-sm">
             Your workspace is on Peon Pro with {quantity} project seat
             {quantity === 1 ? '' : 's'}. You can manage seats anytime in subscription settings.
@@ -400,51 +408,58 @@ export function InAppSubscribeForm({
 
   return (
     <>
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setInterval('month')}
             className={cn(
-              'rounded-lg border p-3 text-left transition-colors',
-              interval === 'month' ? 'border-phosphor bg-secondary' : 'border-border hover:bg-accent',
+              'rounded-md border p-3 text-left transition-colors',
+              interval === 'month' ? 'border-primary bg-primary/5' : 'border-border hover:bg-secondary',
             )}
           >
-            <div className="text-xs font-semibold tracking-wide uppercase">Monthly</div>
-            <div className="font-heading mt-1 text-lg font-bold">
+            <div className="text-sm font-medium">Monthly</div>
+            <div className="mt-1 text-lg font-semibold">
               {formatUsdFromCents(PEON_PRO_MONTHLY_CENTS)}
-              <span className="text-muted-foreground text-xs font-normal"> / project / mo</span>
+              <span className="text-muted-foreground text-sm font-normal"> / project / mo</span>
             </div>
           </button>
           <button
             type="button"
             onClick={() => setInterval('year')}
             className={cn(
-              'rounded-lg border p-3 text-left transition-colors',
-              interval === 'year'
-                ? 'border-phosphor bg-phosphor/10 ring-phosphor/30 ring-1'
-                : 'border-border hover:border-phosphor/40 hover:bg-accent',
+              'rounded-md border p-3 text-left transition-colors',
+              interval === 'year' ? 'border-primary bg-primary/5' : 'border-border hover:bg-secondary',
             )}
           >
             <div className="flex items-center justify-between gap-1">
-              <span className="text-xs font-semibold tracking-wide uppercase">Yearly</span>
+              <span className="text-sm font-medium">Yearly</span>
               <DiscountBadge percent={discount} size="sm" />
             </div>
-            <div className="font-heading mt-1 text-lg font-bold">
+            <div className="mt-1 text-lg font-semibold">
               {formatUsdFromCents(PEON_PRO_YEARLY_CENTS)}
-              <span className="text-muted-foreground text-xs font-normal"> / project / yr</span>
+              <span className="text-muted-foreground text-sm font-normal"> / project / yr</span>
             </div>
-            <p className="text-muted-foreground mt-1 text-[11px]">
+            <p className="text-muted-foreground mt-1 text-xs">
               {formatUsdFromCents(PEON_PRO_YEARLY_EFFECTIVE_MONTHLY_CENTS)}/mo effective
               <span className="mx-1">·</span>
               <span className="line-through">{formatUsdFromCents(PEON_PRO_MONTHLY_CENTS * 12)}</span>
-              <span className="text-phosphor ml-1.5 font-semibold">~{discount}% off</span>
+              <span className="text-primary ml-1.5 font-medium">~{discount}% off</span>
             </p>
           </button>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="seat-qty">Project seats</Label>
+        <FormField
+          label="Project seats"
+          htmlFor="seat-qty"
+          className={STACKED_FIELD}
+          description={
+            <>
+              Total due today:{' '}
+              <span className="text-foreground font-medium">{formatUsdFromCents(totalCents)}</span>
+            </>
+          }
+        >
           <Input
             id="seat-qty"
             type="number"
@@ -453,11 +468,7 @@ export function InAppSubscribeForm({
             value={quantity}
             onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
           />
-          <p className="text-muted-foreground text-xs">
-            Total due today:{' '}
-            <strong className="text-foreground">{formatUsdFromCents(totalCents)}</strong>
-          </p>
-        </div>
+        </FormField>
 
         <Button className="w-full" onClick={() => startMut.mutate()} disabled={startMut.isPending}>
           {startMut.isPending ? (

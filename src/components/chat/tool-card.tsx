@@ -49,26 +49,44 @@ export function ToolCard({
   const failed = part.state === 'output-error' || part.state === 'output-denied';
   const name = getToolName(part);
 
+  const stateLabel = part.state.replaceAll('-', ' ');
+  const stateText = stateLabel.charAt(0).toUpperCase() + stateLabel.slice(1);
+
   if (compact) {
     return (
-      <div className="bg-muted/30 overflow-hidden rounded border text-[11px]">
+      <div className="bg-card border-border overflow-hidden rounded-lg border">
         <button
           type="button"
-          className="hover:bg-muted/50 flex w-full items-center gap-2 px-2 py-1.5 text-left"
+          className="hover:bg-secondary flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium transition-colors"
           onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
         >
-          <Wrench className={cn('size-3', failed ? 'text-destructive' : 'text-muted-foreground')} />
-          <span className="font-mono">{name}</span>
-          <span className="text-faint ml-auto">{part.state.replaceAll('-', ' ')}</span>
-          <ChevronDown className={cn('size-3 transition-transform', expanded && 'rotate-180')} />
+          <Wrench
+            className={cn('size-3.5 shrink-0', failed ? 'text-destructive' : 'text-muted-foreground')}
+          />
+          <span className="truncate font-mono">{name}</span>
+          <span
+            className={cn(
+              'ml-auto shrink-0 text-xs font-normal',
+              failed ? 'text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {stateText}
+          </span>
+          <ChevronDown
+            className={cn(
+              'text-muted-foreground size-3.5 shrink-0 transition-transform',
+              expanded && 'rotate-180',
+            )}
+          />
         </button>
         {expanded && (
-          <div className="space-y-1 border-t px-2 py-1.5">
+          <div className="border-border space-y-2 border-t px-3 py-2 text-sm">
             {'input' in part && part.input !== undefined && (
               <p className="text-muted-foreground truncate">{summarize(part.input)}</p>
             )}
             {output !== undefined && (
-              <pre className="max-h-48 overflow-auto font-mono text-[10px] leading-relaxed">
+              <pre className="bg-secondary max-h-48 overflow-auto rounded-md p-3 font-mono text-xs leading-relaxed">
                 {JSON.stringify(redact(output), null, 2)}
               </pre>
             )}
@@ -79,21 +97,23 @@ export function ToolCard({
   }
 
   return (
-    <div className="bg-muted/40 overflow-hidden rounded-md border text-xs">
-      <div className="flex items-center gap-2 px-3 py-2">
-        <Wrench className={cn('size-3.5', failed ? 'text-destructive' : 'text-muted-foreground')} />
-        <span className="font-mono font-medium">{name}</span>
+    <div className="bg-card border-border overflow-hidden rounded-lg border">
+      <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium">
+        <Wrench
+          className={cn('size-3.5 shrink-0', failed ? 'text-destructive' : 'text-muted-foreground')}
+        />
+        <span className="truncate font-mono">{name}</span>
         <span
           className={cn(
-            'ml-auto rounded-full px-1.5 py-0.5 text-[10px]',
-            failed ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground',
+            'ml-auto shrink-0 rounded-md px-1.5 py-0.5 text-xs font-normal',
+            failed ? 'bg-destructive/10 text-destructive' : 'bg-secondary text-muted-foreground',
           )}
         >
-          {part.state.replaceAll('-', ' ')}
+          {stateText}
         </span>
       </div>
       {'input' in part && part.input !== undefined && (
-        <div className="text-muted-foreground truncate border-t px-3 py-2">
+        <div className="text-muted-foreground border-border truncate border-t px-3 py-2 text-sm">
           {summarize(part.input)}
         </div>
       )}
@@ -101,14 +121,16 @@ export function ToolCard({
         <>
           <Button
             variant="ghost"
-            className="h-7 w-full justify-start rounded-none border-t px-3"
+            size="sm"
+            className="border-border w-full justify-start rounded-none border-t px-3"
             onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
           >
-            <ChevronDown className={cn('size-3 transition-transform', expanded && 'rotate-180')} />
+            <ChevronDown className={cn('size-3.5 transition-transform', expanded && 'rotate-180')} />
             {expanded ? 'Hide output' : 'Show output'}
           </Button>
           {expanded && (
-            <pre className="max-h-72 overflow-auto border-t p-3 font-mono text-[11px] leading-relaxed">
+            <pre className="bg-secondary border-border max-h-72 overflow-auto border-t p-3 font-mono text-xs leading-relaxed">
               {JSON.stringify(redact(output), null, 2)}
             </pre>
           )}

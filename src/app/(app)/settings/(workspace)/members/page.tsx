@@ -6,7 +6,6 @@ import { Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Modal,
   ModalBody,
@@ -16,7 +15,8 @@ import {
   ModalTitle,
 } from '@/components/app/modal';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Section, Panel } from '@/components/app/page';
+import { FormField, Panel } from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
 import { EmptyState } from '@/components/app/empty-state';
 import { RolePill } from '@/components/app/kind-chip';
 import { ConfirmButton } from '@/components/app/confirm';
@@ -30,6 +30,12 @@ import {
 } from '@/services/api/workspace';
 
 const ROLES = ['ADMIN', 'BILLING_ADMIN', 'MEMBER'] as const;
+const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
+  ADMIN: 'Admin',
+  BILLING_ADMIN: 'Billing admin',
+  MEMBER: 'Member',
+};
+const ROLE_OPTIONS = ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
 
 export default function MembersPage() {
   const { currentWorkspaceId, user } = useAuthStore();
@@ -93,8 +99,7 @@ export default function MembersPage() {
         </ModalHeader>
         <ModalBody>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+            <FormField label="Email" htmlFor="email" className="lg:grid-cols-1 lg:gap-2">
               <Input
                 id="email"
                 type="email"
@@ -102,16 +107,15 @@ export default function MembersPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="teammate@example.com"
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
+            </FormField>
+            <FormField label="Role" className="lg:grid-cols-1 lg:gap-2">
               <SearchableSelect
                 value={role}
                 onValueChange={setRole}
                 placeholder="Select role"
-                options={ROLES.map((r) => ({ value: r, label: r }))}
+                options={ROLE_OPTIONS}
               />
-            </div>
+            </FormField>
           </div>
         </ModalBody>
         <ModalFooter>
@@ -126,105 +130,90 @@ export default function MembersPage() {
     </Modal>
   );
 
+  const inviteButton = canManage ? (
+    <Button onClick={() => setOpen(true)}>
+      <Plus className="size-4" /> Invite member
+    </Button>
+  ) : undefined;
+
   return (
     <>
       {inviteDialog}
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-accent h-36 animate-pulse rounded-lg" />
-          ))}
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-md font-medium">Members</h2>
+          <p className="text-muted-foreground mt-0.5 text-sm">People with access to this workspace</p>
         </div>
-      ) : !data?.members.length ? (
-        <EmptyState
-          icon={Users}
-          title="No members yet"
-          description="invite teammates to collaborate in this workspace."
-          action={
-            canManage ? (
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="size-4" /> Invite member
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {data.members.map((m) => (
-            <div
-              key={m.id}
-              className="bg-card hover:border-border-bright hover:bg-secondary flex h-full flex-col overflow-hidden rounded-lg border transition-colors"
-            >
-              <div className="flex items-start gap-3 p-4">
-                <span className="border-border-bright bg-secondary text-phosphor grid size-9 shrink-0 place-items-center rounded-md border text-[11px] font-bold">
-                  {(m.user.name ?? m.user.email)[0].toUpperCase()}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12.5px] font-semibold">
-                    {m.user.name ?? m.user.email}
-                  </p>
-                  <p className="text-muted-foreground truncate text-[11px]">{m.user.email}</p>
-                  <div className="mt-2">
-                    <RolePill role={m.role} />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-secondary mt-auto flex flex-wrap items-center gap-2 border-t px-4 py-2.5">
-                <div className="min-w-0 flex-1">
-                  {m.role === 'OWNER' ? (
-                    <p className="text-muted-foreground text-[11px]">
-                      Owner — transfer ownership from the Danger tab
-                    </p>
-                  ) : (
-                    <SearchableSelect
-                      value={m.role}
-                      onValueChange={(r) => roleMut.mutate({ userId: m.user.id, role: r })}
-                      placeholder="Select role"
+        {inviteButton}
+      </div>
+
+      <DataTable
+        columns={[
+          {
+            key: 'name',
+            header: 'Name',
+            cell: (m) => <span className="font-medium">{m.user.name ?? m.user.email}</span>,
+          },
+          {
+            key: 'email',
+            header: 'Email',
+            cell: (m) => <span className="text-muted-foreground font-mono">{m.user.email}</span>,
+          },
+          { key: 'role', header: 'Role', cell: (m) => <RolePill role={m.role} /> },
+          {
+            key: 'actions',
+            header: 'Actions',
+            align: 'right',
+            cell: (m) =>
+              m.role === 'OWNER' ? (
+                <span className="text-muted-foreground text-sm">Transfer ownership in Danger zone</span>
+              ) : (
+                <div className="flex items-center justify-end gap-2">
+                  <SearchableSelect
+                    value={m.role}
+                    onValueChange={(r) => roleMut.mutate({ userId: m.user.id, role: r })}
+                    placeholder="Select role"
+                    size="sm"
+                    className="w-36"
+                    disabled={!canManage || roleMut.isPending}
+                    options={ROLE_OPTIONS}
+                  />
+                  {canManage && m.user.id !== user?.id && (
+                    <ConfirmButton
+                      title={`Remove ${m.user.name ?? m.user.email}?`}
+                      description="They will lose access to this workspace and its projects."
+                      confirmLabel="Remove"
                       size="sm"
-                      disabled={!canManage || roleMut.isPending}
-                      options={ROLES.map((r) => ({ value: r, label: r }))}
-                    />
+                      disabled={removeMut.isPending}
+                      onConfirm={() => removeMut.mutate(m.user.id)}
+                    >
+                      <Trash2 className="size-4" /> Remove
+                    </ConfirmButton>
                   )}
                 </div>
-                {canManage && m.user.id !== user?.id && m.role !== 'OWNER' && (
-                  <ConfirmButton
-                    title={`Remove ${m.user.name ?? m.user.email}?`}
-                    description="They will lose access to this workspace and its projects."
-                    confirmLabel="Remove"
-                    size="sm"
-                    disabled={removeMut.isPending}
-                    onConfirm={() => removeMut.mutate(m.user.id)}
-                  >
-                    <Trash2 className="size-4" /> Remove
-                  </ConfirmButton>
-                )}
-              </div>
-            </div>
-          ))}
-          {canManage && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="border-border-bright text-muted-foreground hover:text-phosphor hover:border-phosphor-dim grid min-h-36 place-items-center rounded-lg border border-dashed transition-colors"
-            >
-              <span className="flex flex-col items-center gap-2 text-[12.5px]">
-                <Plus className="size-4" /> invite member
-              </span>
-            </button>
-          )}
-        </div>
-      )}
+              ),
+          },
+        ]}
+        rows={data?.members ?? []}
+        rowKey={(m) => m.id}
+        isLoading={isLoading}
+        emptyState={
+          <EmptyState
+            icon={Users}
+            title="No members yet"
+            description="Invite teammates to collaborate in this workspace."
+            action={inviteButton}
+          />
+        }
+      />
 
       {!!data?.invitations.length && (
-        <Section title="pending invitations">
-          <Panel contentClassName="divide-y">
+        <Panel title="Pending invitations" padded={false}>
+          <div className="divide-y">
             {data.invitations.map((inv) => (
-              <div
-                key={inv.id}
-                className="hover:bg-secondary flex items-center justify-between gap-4 px-4 py-3 transition-colors"
-              >
-                <div className="text-[12.5px] font-semibold">{inv.email}</div>
+              <div key={inv.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="min-w-0 truncate font-mono text-base">{inv.email}</div>
                 <div className="flex items-center gap-2">
                   <RolePill role={inv.role} />
                   {canManage && (
@@ -242,8 +231,8 @@ export default function MembersPage() {
                 </div>
               </div>
             ))}
-          </Panel>
-        </Section>
+          </div>
+        </Panel>
       )}
     </>
   );

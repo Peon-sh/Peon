@@ -1,7 +1,6 @@
-<svg width="500" height="500" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Light-theme logo: same self-contained tile (reads on light backgrounds) -->
-  <rect width="64" height="64" rx="14" fill="#050807"/>
-  <rect x="1" y="1" width="62" height="62" rx="13" stroke="#1B2822" stroke-width="2"/>
-  <path d="M18 22 L30 32 L18 42" stroke="#3ECF8E" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="34" y="39" width="14" height="5" rx="2.5" fill="#3ECF8E"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Light-theme logo (same self-contained tile; reads on light backgrounds)
+  <!-- Peon mark: layered lowercase "p" (cyan, pink, indigo) on a rounded near-black tile -->
+  <rect width="64" height="64" rx="14" fill="#0A0A0A"/>
+  <g transform="translate(32 32) scale(1) translate(-32 -32) translate(17.90 8.55) scale(1.1)"><g transform="translate(3.6363636363636362 3.6363636363636362)" fill="none" stroke="#22D3EE" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M0 0 V39"/><circle cx="11" cy="11" r="11"/></g><g transform="translate(1.8181818181818181 1.8181818181818181)" fill="none" stroke="#F472B6" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M0 0 V39"/><circle cx="11" cy="11" r="11"/></g><g transform="translate(0 0)" fill="none" stroke="#7170FF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M0 0 V39"/><circle cx="11" cy="11" r="11"/></g></g>
 </svg>

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LogoMark } from '@/components/logo';
+import { Panel } from '@/components/app/page';
 import { useAuthStore } from '@/store/auth';
 import { completeOnboarding } from '@/services/api/auth';
 import { updateWorkspace } from '@/services/api/workspace';
@@ -101,27 +102,24 @@ export default function OnboardingPage() {
   if (!user || !workspace) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground animate-pulse text-sm">Loading…</div>
+        <div className="text-muted-foreground animate-pulse text-base">Loading…</div>
       </div>
     );
   }
 
   return (
     <div className="bg-background min-h-screen">
-      <div className="mx-auto flex max-w-xl flex-col gap-8 px-4 py-10 sm:py-16">
+      <div className="mx-auto flex max-w-[560px] flex-col gap-6 px-4 py-10 sm:py-16">
         <div className="space-y-4 text-center">
-          <div className="inline-flex items-center justify-center gap-2.5 font-semibold">
-            <LogoMark size={32} />
-            <span className="font-heading text-lg font-bold tracking-tight uppercase">Peon</span>
+          <div className="inline-flex items-center justify-center">
+            <LogoMark size={40} />
           </div>
           <div className="space-y-1">
-            <p className="text-phosphor font-mono text-xs uppercase tracking-widest">
-              Welcome to Peon
-            </p>
-            <h1 className="font-heading text-2xl font-extrabold tracking-tight uppercase">
-              Let&apos;s get you deploying
-            </h1>
             <p className="text-muted-foreground text-sm">
+              Step {stepIndex + 1} of {steps.length}
+            </p>
+            <h1 className="text-xl font-semibold">Let&apos;s get you deploying</h1>
+            <p className="text-muted-foreground text-base">
               Name your workspace
               {billingOn ? ', optionally start Peon Pro,' : ''} then create your first project.
             </p>
@@ -137,11 +135,11 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   onClick={() => i <= stepIndex && setStep(s.id)}
-                  className={`flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-2 text-[11px] transition-colors ${
+                  className={`flex w-full flex-col items-center gap-1.5 rounded-md px-1 py-2 text-xs transition-colors ${
                     state === 'current'
                       ? 'text-foreground'
                       : state === 'done'
-                        ? 'text-phosphor'
+                        ? 'text-primary'
                         : 'text-muted-foreground'
                   }`}
                 >
@@ -150,7 +148,7 @@ export default function OnboardingPage() {
                       state === 'current'
                         ? 'border-foreground'
                         : state === 'done'
-                          ? 'border-phosphor-dim bg-secondary'
+                          ? 'border-primary/30 bg-secondary'
                           : 'border-border'
                     }`}
                   >
@@ -164,7 +162,7 @@ export default function OnboardingPage() {
           })}
         </ol>
 
-        <div className="bg-card rounded-lg border p-6">
+        <Panel>
           {step === 'workspace' && (
             <WorkspaceStep
               workspaceId={wsId}
@@ -230,7 +228,7 @@ export default function OnboardingPage() {
               onSkip={() => finish({ projectOutcome: 'skipped' })}
             />
           )}
-        </div>
+        </Panel>
       </div>
     </div>
   );
@@ -240,7 +238,7 @@ function StepHeading({ title, description }: { title: string; description: strin
   return (
     <div className="mb-5 space-y-1 text-center">
       <h2 className="text-base font-semibold">{title}</h2>
-      <p className="text-muted-foreground text-sm text-balance">{description}</p>
+      <p className="text-muted-foreground text-base text-balance">{description}</p>
     </div>
   );
 }

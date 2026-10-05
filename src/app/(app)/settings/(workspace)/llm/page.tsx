@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Brain, Check, KeyRound, Trash2 } from 'lucide-react';
+import { Check, KeyRound, Trash2 } from 'lucide-react';
 import { ConfirmButton } from '@/components/app/confirm';
-import { Panel, Section } from '@/components/app/page';
+import { FormField, FormSection } from '@/components/app/page';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   useDeleteLlmCredential,
   useLlmCredentials,
@@ -77,129 +78,115 @@ export default function LlmSettingsPage() {
   }
 
   return (
-    <Section
-        title="LLMs"
-        description="Workspace API keys for chat. Members can use configured providers; only owners and admins can change keys."
-      >
-        {!canManage && (
-          <Panel contentClassName="text-muted-foreground p-4 text-sm">
+    <>
+      <p className="text-muted-foreground text-sm">
+        Workspace API keys for chat. Members can use configured providers; only owners and admins can change keys.
+      </p>
+
+      {!canManage && (
+        <Alert variant="info">
+          <AlertDescription>
             You can view configuration status. Ask a workspace admin to add or update API keys.
-          </Panel>
-        )}
+          </AlertDescription>
+        </Alert>
+      )}
 
-        <div className="space-y-4">
-          {PROVIDERS.map((provider) => {
-            const status = statusByProvider[provider.id];
-            const providerModels = models.filter((model) => model.provider === provider.id);
-            return (
-              <Panel
-                key={provider.id}
-                contentClassName="space-y-4 p-4"
-                footer={
-                  canManage ? (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => void save(provider.id)}
-                        disabled={upsert.isPending || !draftKeys[provider.id]?.trim()}
-                      >
-                        <Check className="size-3.5" />
-                        Save
-                      </Button>
-                      {status?.configured ? (
-                        <ConfirmButton
-                          title="Remove?"
-                          description={`${provider.label} chat will stop working until a key is added again.`}
-                          confirmLabel="Remove"
-                          disabled={remove.isPending}
-                          onConfirm={() => void clear(provider.id)}
-                        >
-                          <Trash2 className="size-3.5" />
-                          Remove
-                        </ConfirmButton>
-                      ) : null}
-                    </>
-                  ) : undefined
-                }
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="flex items-center gap-2 text-sm font-semibold">
-                      <Brain className="text-phosphor size-4" />
-                      {provider.label}
-                    </h2>
-                    <p className="text-muted-foreground mt-1 text-xs">{provider.hint}</p>
-                  </div>
-                  <span
-                    className={
-                      status?.configured
-                        ? 'text-phosphor bg-phosphor/10 rounded-full px-2 py-0.5 text-[10px] font-medium'
-                        : 'text-muted-foreground bg-muted rounded-full px-2 py-0.5 text-[10px] font-medium'
-                    }
+      {PROVIDERS.map((provider) => {
+        const status = statusByProvider[provider.id];
+        const providerModels = models.filter((model) => model.provider === provider.id);
+        return (
+          <FormSection
+            key={provider.id}
+            title={provider.label}
+            description={provider.hint}
+            footer={
+              canManage ? (
+                <>
+                  {status?.configured ? (
+                    <ConfirmButton
+                      title={`Remove ${provider.label} key?`}
+                      description={`${provider.label} chat will stop working until a key is added again.`}
+                      confirmLabel="Remove"
+                      disabled={remove.isPending}
+                      onConfirm={() => void clear(provider.id)}
+                    >
+                      <Trash2 className="size-4" />
+                      Remove
+                    </ConfirmButton>
+                  ) : null}
+                  <Button
+                    onClick={() => void save(provider.id)}
+                    disabled={upsert.isPending || !draftKeys[provider.id]?.trim()}
                   >
-                    {loadingCreds
-                      ? '…'
-                      : status?.configured
-                        ? `Configured ${status.keyHint ?? ''}`.trim()
-                        : 'Not configured'}
-                  </span>
-                </div>
+                    <Check className="size-4" />
+                    Save
+                  </Button>
+                </>
+              ) : undefined
+            }
+          >
+            <FormField label="Status">
+              {loadingCreds ? (
+                <span className="text-muted-foreground text-base">…</span>
+              ) : (
+                <Badge variant={status?.configured ? 'default' : 'secondary'}>
+                  {status?.configured
+                    ? `Configured ${status.keyHint ?? ''}`.trim()
+                    : 'Not configured'}
+                </Badge>
+              )}
+            </FormField>
 
-                <div>
-                  <p className="text-muted-foreground mb-2 text-[11px] font-medium tracking-wide uppercase">
-                    Supported models
-                  </p>
-                  {loadingModels ? (
-                    <p className="text-muted-foreground text-xs">Loading models…</p>
-                  ) : providerModels.length === 0 ? (
-                    <p className="text-muted-foreground text-xs">No models seeded for this provider.</p>
-                  ) : (
-                    <ul className="flex flex-wrap gap-1.5">
-                      {providerModels.map((model) => (
-                        <li
-                          key={`${model.provider}-${model.modelId}`}
-                          className="bg-muted rounded-md px-2 py-1 text-[11px]"
-                          title={model.modelId}
-                        >
-                          {model.displayName}
-                          {model.supportsReasoning ? ' · reasoning' : ''}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+            <FormField label="Supported models">
+              {loadingModels ? (
+                <p className="text-muted-foreground text-sm">Loading models…</p>
+              ) : providerModels.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No models seeded for this provider.</p>
+              ) : (
+                <ul className="flex flex-wrap gap-1.5">
+                  {providerModels.map((model) => (
+                    <li
+                      key={`${model.provider}-${model.modelId}`}
+                      className="bg-secondary rounded-md px-2 py-0.5 text-xs"
+                      title={model.modelId}
+                    >
+                      {model.displayName}
+                      {model.supportsReasoning ? ' · reasoning' : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </FormField>
 
-                {canManage && (
-                  <div className="space-y-2">
-                    <Label htmlFor={`key-${provider.id}`}>API key</Label>
-                    <Input
-                      id={`key-${provider.id}`}
-                      type="password"
-                      autoComplete="off"
-                      placeholder={
-                        status?.configured
-                          ? 'Enter a new key to replace the saved one'
-                          : 'sk-…'
-                      }
-                      value={draftKeys[provider.id]}
-                      onChange={(event) =>
-                        setDraftKeys((prev) => ({
-                          ...prev,
-                          [provider.id]: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                )}
-              </Panel>
-            );
-          })}
-        </div>
+            {canManage && (
+              <FormField label="API key" htmlFor={`key-${provider.id}`}>
+                <Input
+                  id={`key-${provider.id}`}
+                  type="password"
+                  autoComplete="off"
+                  placeholder={
+                    status?.configured
+                      ? 'Enter a new key to replace the saved one'
+                      : 'sk-…'
+                  }
+                  value={draftKeys[provider.id]}
+                  onChange={(event) =>
+                    setDraftKeys((prev) => ({
+                      ...prev,
+                      [provider.id]: event.target.value,
+                    }))
+                  }
+                />
+              </FormField>
+            )}
+          </FormSection>
+        );
+      })}
 
-        <Panel contentClassName="text-muted-foreground flex items-start gap-2 p-4 text-xs">
-          <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-          Keys are encrypted at rest for this workspace only.
-        </Panel>
-      </Section>
+      <p className="text-muted-foreground flex items-center gap-2 text-sm">
+        <KeyRound className="size-3.5 shrink-0" />
+        Keys are encrypted at rest for this workspace only.
+      </p>
+    </>
   );
 }

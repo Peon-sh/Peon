@@ -51,3 +51,13 @@ export function formatLocalDateTime(
   if (!date) return '—';
   return new Intl.DateTimeFormat(locale, STYLE_OPTIONS[style]).format(date);
 }
+
+/** Elapsed time between two API timestamps ("2m 5s"); open-ended runs count up to now. */
+export function formatDuration(startedAt: string | null, finishedAt: string | null): string | null {
+  if (!startedAt) return null;
+  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+  const secs = Math.max(0, Math.round((end - new Date(startedAt).getTime()) / 1000));
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m ? `${m}m ${s}s` : `${s}s`;
+}

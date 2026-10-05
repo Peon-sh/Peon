@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Crown, Lock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { PlanPaywallDialog } from '@/components/billing/plan-paywall-dialog';
 import {
   accessBlockMessage,
@@ -41,47 +42,33 @@ export function AccessGateBanner({
 
   return (
     <>
-      <div
-        role="status"
-        className={cn(
-          'border-border bg-secondary/40 relative flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between',
-          className,
-        )}
-      >
+      <Alert variant="warning" role="status" className={cn('pr-10', className)}>
+        {billingRelated ? <Crown /> : <Lock />}
+        <AlertTitle>{heading}</AlertTitle>
+        <AlertDescription>
+          <span className="block">{accessBlockMessage(reason)}</span>
+          <div className="mt-2 flex items-center gap-2">
+            {billingRelated && workspaceId ? (
+              <Button size="sm" onClick={() => setPaywallOpen(true)}>
+                {reason === 'over_limit' ? 'Add capacity' : 'Upgrade'}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
+              Dismiss
+            </Button>
+          </div>
+        </AlertDescription>
         <Button
           type="button"
           size="icon-sm"
           variant="ghost"
-          className="absolute top-2 right-2"
+          className="text-muted-foreground absolute top-1.5 right-1.5"
           aria-label="Dismiss"
           onClick={() => setDismissed(true)}
         >
           <X className="size-3.5" />
         </Button>
-        <div className="flex min-w-0 items-start gap-3 pr-8">
-          {billingRelated ? (
-            <Crown className="text-phosphor mt-0.5 size-4 shrink-0" />
-          ) : (
-            <Lock className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-          )}
-          <div className="min-w-0 space-y-0.5">
-            <p className="text-sm font-semibold">{heading}</p>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              {accessBlockMessage(reason)}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
-          {billingRelated && workspaceId ? (
-            <Button size="sm" onClick={() => setPaywallOpen(true)}>
-              {reason === 'over_limit' ? 'Add capacity' : 'Upgrade'}
-            </Button>
-          ) : null}
-          <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
-            Dismiss
-          </Button>
-        </div>
-      </div>
+      </Alert>
 
       {workspaceId ? (
         <PlanPaywallDialog

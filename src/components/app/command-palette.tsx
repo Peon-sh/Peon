@@ -35,7 +35,7 @@ const COMMANDS = [
   { label: 'Sources', url: '/sources', icon: GitBranch },
   { label: 'Storages', url: '/storages', icon: Database },
   { label: 'Notifications', url: '/notifications', icon: Bell },
-  { label: 'Keys & Tokens', url: '/keys-and-tokens', icon: KeyRound },
+  { label: 'MCP & SSH Keys', url: '/keys-and-tokens', icon: KeyRound },
   { label: 'Shared variables', url: '/shared-variables', icon: Variable },
   { label: 'Settings', url: '/settings/general', icon: Settings },
   { label: 'Members', url: '/settings/members', icon: Users },
@@ -67,7 +67,7 @@ export function CommandPalette() {
       <CommandInput placeholder="Search or jump to…" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        <CommandGroup heading="Navigation">
+        <CommandGroup heading="Navigation" className="[&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:text-xs">
           {COMMANDS.map((c) => (
             <CommandItem
               key={`${c.label}:${c.url}`}

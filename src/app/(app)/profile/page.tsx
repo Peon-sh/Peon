@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -17,11 +16,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ConfirmButton } from '@/components/app/confirm';
-import { PageContainer, Panel, Section } from '@/components/app/page';
+import { FormField, FormSection, PageContainer, PageHeader, Panel } from '@/components/app/page';
+import { ListRow } from '@/components/app/list-row';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   changePassword,
   confirmAvatar,
@@ -218,19 +218,21 @@ export default function ProfilePage() {
 
   return (
     <PageContainer>
-      <Section title="profile" description="Your display name and photo across Peon.">
-        <Panel
-          contentClassName="space-y-5 p-4"
-          footer={
-            <Button
-              size="sm"
-              onClick={() => void handleSaveName()}
-              disabled={savingName || name.trim() === (user?.name ?? '')}
-            >
-              {savingName ? 'Saving…' : 'Save name'}
-            </Button>
-          }
-        >
+      <PageHeader title="Profile" description="Your account" />
+
+      <FormSection
+        title="Profile"
+        description="Your display name and photo across Peon."
+        footer={
+          <Button
+            onClick={() => void handleSaveName()}
+            disabled={savingName || name.trim() === (user?.name ?? '')}
+          >
+            {savingName ? 'Saving…' : 'Save name'}
+          </Button>
+        }
+      >
+        <FormField label="Photo" description="JPEG, PNG, or WebP under 2MB.">
           <div className="flex items-center gap-4">
             <div className="relative">
               <Avatar className="size-16" size="lg">
@@ -274,96 +276,85 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+        </FormField>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-name">Display name</Label>
-            <Input
-              id="profile-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              placeholder="Your name"
-            />
-          </div>
+        <FormField label="Display name" htmlFor="profile-name">
+          <Input
+            id="profile-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={100}
+            placeholder="Your name"
+          />
+        </FormField>
 
-          <div>
-            <p className="text-muted-foreground text-[11px] uppercase tracking-wide">Email</p>
-            <p className="text-[13.5px] font-semibold">{user?.email}</p>
-          </div>
-        </Panel>
-      </Section>
+        <FormField label="Email">
+          <p className="py-1.5 font-mono text-base">{user?.email}</p>
+        </FormField>
+      </FormSection>
 
-      <Section
-        title="password"
+      <FormSection
+        title="Password"
         description={
           user?.hasPassword
             ? 'Change your password. Other sessions will be signed out.'
             : 'Set a password so you can also sign in with email.'
         }
+        footer={
+          <Button
+            onClick={() => void handlePassword()}
+            disabled={
+              savingPassword ||
+              !newPassword ||
+              !confirmPassword ||
+              (user?.hasPassword && !currentPassword)
+            }
+          >
+            {savingPassword
+              ? 'Saving…'
+              : user?.hasPassword
+                ? 'Update password'
+                : 'Set password'}
+          </Button>
+        }
       >
-        <Panel
-          contentClassName="space-y-3 p-4"
-          footer={
-            <Button
-              size="sm"
-              onClick={() => void handlePassword()}
-              disabled={
-                savingPassword ||
-                !newPassword ||
-                !confirmPassword ||
-                (user?.hasPassword && !currentPassword)
-              }
-            >
-              {savingPassword
-                ? 'Saving…'
-                : user?.hasPassword
-                  ? 'Update password'
-                  : 'Set password'}
-            </Button>
-          }
-        >
-          {user?.hasPassword && (
-            <div className="space-y-1.5">
-              <Label htmlFor="current-password">Current password</Label>
-              <Input
-                id="current-password"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-            </div>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-password">New password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="confirm-password">Confirm password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-          </div>
-        </Panel>
-      </Section>
+        {user?.hasPassword && (
+          <FormField label="Current password" htmlFor="current-password">
+            <Input
+              id="current-password"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+          </FormField>
+        )}
+        <FormField label="New password" htmlFor="new-password">
+          <Input
+            id="new-password"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Confirm password" htmlFor="confirm-password">
+          <Input
+            id="confirm-password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+        </FormField>
+      </FormSection>
 
-      <Section
-        title="sessions"
+      <Panel
+        title="Sessions"
         description="Devices signed into your account. Revoke any you don’t recognize."
+        padded={false}
         actions={
-          <div className="flex flex-wrap gap-2">
+          <>
             <ConfirmButton
               title="Revoke other sessions?"
               description="You will stay signed in on this device."
@@ -380,79 +371,71 @@ export default function ProfilePage() {
             >
               Sign out everywhere
             </ConfirmButton>
-          </div>
+          </>
         }
       >
-        <Panel contentClassName="divide-y">
-          {loadingSessions ? (
-            <div className="text-muted-foreground flex items-center gap-2 p-4 text-xs">
-              <Loader2 className="size-3.5 animate-spin" />
-              Loading sessions…
-            </div>
-          ) : sessions.length === 0 ? (
-            <p className="text-muted-foreground p-4 text-xs">No active sessions.</p>
-          ) : (
-            sessions.map((session) => (
-              <div
+        {loadingSessions ? (
+          <div className="text-muted-foreground flex items-center gap-2 p-4 text-sm">
+            <Loader2 className="size-3.5 animate-spin" />
+            Loading sessions…
+          </div>
+        ) : sessions.length === 0 ? (
+          <p className="text-muted-foreground p-4 text-sm">No active sessions.</p>
+        ) : (
+          <div className="divide-y">
+            {sessions.map((session) => (
+              <ListRow
                 key={session.id}
-                className="flex items-start justify-between gap-3 px-4 py-3"
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  <DeviceIcon type={session.deviceType} />
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-[13px] font-semibold">
-                        {session.browser ?? 'Unknown browser'}
-                        {session.os ? ` · ${session.os}` : ''}
-                      </p>
-                      {session.current && (
-                        <span className="bg-primary/15 text-primary rounded px-1.5 py-0.5 text-[10px] font-medium">
-                          This device
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground mt-0.5 text-[11px]">
-                      {[session.ip, session.country, session.deviceName]
-                        .filter(Boolean)
-                        .join(' · ') || 'Unknown location'}
-                      {' · '}
-                      Last seen {formatRelative(session.lastSeenAt)}
-                    </p>
-                  </div>
-                </div>
-                <ConfirmButton
-                  title={session.current ? 'Sign out this device?' : 'Revoke session?'}
-                  description={
-                    session.current
-                      ? 'You will need to sign in again.'
-                      : 'That device will be signed out immediately.'
-                  }
-                  confirmLabel={session.current ? 'Sign out' : 'Revoke'}
-                  size="xs"
-                  onConfirm={() => void handleRevoke(session.id, session.current)}
-                >
-                  Revoke
-                </ConfirmButton>
-              </div>
-            ))
-          )}
-        </Panel>
-      </Section>
+                leading={<DeviceIcon type={session.deviceType} />}
+                title={
+                  <span className="flex items-center gap-2">
+                    <span className="truncate">
+                      {session.browser ?? 'Unknown browser'}
+                      {session.os ? ` · ${session.os}` : ''}
+                    </span>
+                    {session.current && <Badge variant="default">This device</Badge>}
+                  </span>
+                }
+                subtitle={
+                  <>
+                    {[session.ip, session.country, session.deviceName]
+                      .filter(Boolean)
+                      .join(' · ') || 'Unknown location'}
+                    {' · '}
+                    Last seen {formatRelative(session.lastSeenAt)}
+                  </>
+                }
+                trailing={
+                  <ConfirmButton
+                    title={session.current ? 'Sign out this device?' : 'Revoke session?'}
+                    description={
+                      session.current
+                        ? 'You will need to sign in again.'
+                        : 'That device will be signed out immediately.'
+                    }
+                    confirmLabel={session.current ? 'Sign out' : 'Revoke'}
+                    size="sm"
+                    onConfirm={() => void handleRevoke(session.id, session.current)}
+                  >
+                    Revoke
+                  </ConfirmButton>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </Panel>
 
       {user?.isInstanceOwner && (
-        <Section title="instance">
-          <Panel contentClassName="divide-y">
-            <Link
-              href="/profile/instance"
-              className="hover:bg-secondary flex items-center justify-between gap-4 px-4 py-3 transition-colors"
-            >
-              <span className="flex items-center gap-3 text-[12.5px] font-semibold">
-                <Server className="text-muted-foreground size-4" /> Instance settings
-              </span>
-              <ArrowRight className="text-faint size-4" />
-            </Link>
-          </Panel>
-        </Section>
+        <Panel title="Instance" padded={false}>
+          <ListRow
+            href="/profile/instance"
+            leading={<Server className="size-4" />}
+            title="Instance settings"
+            subtitle="Global settings for this Peon installation"
+            trailing={<ArrowRight className="text-muted-foreground size-4" />}
+          />
+        </Panel>
       )}
     </PageContainer>
   );

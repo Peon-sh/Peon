@@ -1,5 +1,6 @@
 'use client';
 
+import { KeyValueList, Panel } from '@/components/app/page';
 import { formatUsdFromCents } from '@/lib/billing/pricing';
 import type { IntervalChangePreview, QuantityChangePreview } from '@/services/api/billing';
 
@@ -15,27 +16,29 @@ export function ChargePreviewBlock({
   lines?: Array<{ description: string; amountCents: number }>;
 }) {
   return (
-    <div className="bg-secondary/50 space-y-2 rounded-md border px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-foreground text-sm font-medium">{title}</span>
-        <span className="font-heading text-lg font-bold tracking-tight">
-          {formatUsdFromCents(amountCents)}
-        </span>
-      </div>
-      {subtitle ? <p className="text-muted-foreground text-xs leading-snug">{subtitle}</p> : null}
-      {lines && lines.length > 0 ? (
-        <ul className="border-border/60 space-y-1 border-t pt-2">
-          {lines.slice(0, 4).map((line, i) => (
-            <li key={`${line.description}-${i}`} className="flex justify-between gap-3 text-[11px]">
-              <span className="text-muted-foreground line-clamp-2">{line.description}</span>
-              <span className="text-foreground shrink-0 tabular-nums">
+    <Panel contentClassName="space-y-2 px-4 py-2">
+      <KeyValueList
+        items={[
+          {
+            label: <span className="text-foreground font-medium">{title}</span>,
+            value: (
+              <span className="text-foreground text-md font-semibold tabular-nums">
+                {formatUsdFromCents(amountCents)}
+              </span>
+            ),
+          },
+          ...(lines ?? []).slice(0, 4).map((line) => ({
+            label: <span className="line-clamp-2 text-sm">{line.description}</span>,
+            value: (
+              <span className="text-foreground text-sm tabular-nums">
                 {formatUsdFromCents(line.amountCents)}
               </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+            ),
+          })),
+        ]}
+      />
+      {subtitle ? <p className="text-muted-foreground pb-2 text-sm">{subtitle}</p> : null}
+    </Panel>
   );
 }
 

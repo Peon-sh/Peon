@@ -154,16 +154,16 @@ export function ConversationPane({
 
   return (
     <section className="bg-background flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="bg-card/70 flex h-12 shrink-0 items-center gap-3 border-b px-4">
+      <header className="border-border flex h-12 shrink-0 items-center gap-3 border-b px-6">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">{thread?.title || 'New chat'}</h1>
-          <p className="text-faint text-[10px]">Workspace assistant</p>
+          <h1 className="text-md truncate font-medium">{thread?.title || 'New chat'}</h1>
+          <p className="text-muted-foreground text-xs">Workspace assistant</p>
         </div>
       </header>
 
       {isLoading && messages.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
-          <span className="text-muted-foreground animate-pulse text-xs">Loading conversation…</span>
+          <span className="text-muted-foreground animate-pulse text-sm">Loading conversation…</span>
         </div>
       ) : (
         <MessageList
@@ -176,9 +176,11 @@ export function ConversationPane({
       )}
 
       {error && (
-        <div className="text-destructive bg-destructive/10 mx-3 mb-3 flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
-          <AlertCircle className="size-3.5 shrink-0" />
-          <span className="min-w-0 break-words">{error.message}</span>
+        <div className="mx-auto w-full max-w-[720px] px-6">
+          <div className="text-destructive bg-destructive/10 border-destructive/30 mb-3 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <AlertCircle className="size-3.5 shrink-0" />
+            <span className="min-w-0 break-words">{error.message}</span>
+          </div>
         </div>
       )}
       <Composer

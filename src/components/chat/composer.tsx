@@ -39,11 +39,9 @@ export function Composer({
   }
 
   return (
-    <div className="border-t px-3 pt-3 pb-2">
-      {modelPicker && <div className="mb-2 flex items-center gap-2">{modelPicker}</div>}
-
+    <div className="mx-auto w-full max-w-[720px] shrink-0 px-6 pt-2 pb-4">
       {secretWarning && (
-        <div className="text-warning bg-warning/10 mb-2 flex items-center gap-2 rounded-md border border-current/20 px-3 py-2 text-xs">
+        <div className="text-warning bg-warning/10 border-warning/30 mb-2 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <AlertTriangle className="size-3.5 shrink-0" />
           This message may contain a secret. Remove credentials before sending.
         </div>
@@ -51,8 +49,8 @@ export function Composer({
 
       <div
         className={cn(
-          'bg-background relative rounded-xl border border-border/80 shadow-sm transition-colors',
-          'focus-within:border-ring/60 focus-within:ring-1 focus-within:ring-ring/20',
+          'bg-card border-border rounded-lg border transition-colors',
+          'focus-within:border-ring focus-within:ring-ring/30 focus-within:ring-2',
         )}
       >
         <Textarea
@@ -65,36 +63,35 @@ export function Composer({
             }
           }}
           placeholder="Ask about your workspace…"
-          className="max-h-40 min-h-[72px] w-full resize-none border-0 bg-transparent px-3.5 py-3 pr-12 text-sm shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 dark:bg-transparent"
+          className="max-h-40 min-h-16 w-full resize-none border-0 bg-transparent px-3 py-3 text-base focus-visible:ring-0"
           disabled={disabled}
           aria-label="Chat message"
         />
-        <div className="absolute right-2.5 bottom-2.5">
+        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          <div className="flex min-w-0 items-center gap-2">{modelPicker}</div>
           {busy ? (
             <Button
-              size="icon-sm"
+              size="icon"
               variant="outline"
-              className="rounded-full"
               onClick={() => void onStop?.()}
               aria-label="Stop"
             >
-              <Square className="size-2.5 fill-current" />
+              <Square className="size-3 fill-current" />
             </Button>
           ) : (
             <Button
-              size="icon-sm"
-              className="rounded-full"
+              size="icon"
               onClick={() => void submit()}
               disabled={!canSend}
               aria-label="Send message"
             >
-              <ArrowUp className="size-3.5" />
+              <ArrowUp />
             </Button>
           )}
         </div>
       </div>
 
-      <p className="text-muted-foreground/70 mt-1.5 px-0.5 text-[10px]">
+      <p className="text-muted-foreground mt-2 px-1 text-xs">
         Enter to send · Shift+Enter for a new line
       </p>
     </div>

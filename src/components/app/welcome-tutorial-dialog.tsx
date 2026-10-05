@@ -49,7 +49,7 @@ export function WelcomeTutorialDialog() {
             Watch this short walkthrough to see how to connect a server and deploy your first app.
           </ModalDescription>
         </ModalHeader>
-        <ModalBody className="p-0 sm:px-4 sm:pb-2">
+        <ModalBody className="px-6">
           <div className="bg-muted relative aspect-video w-full overflow-hidden rounded-md">
             <iframe
               src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?rel=0`}

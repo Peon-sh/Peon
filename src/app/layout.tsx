@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
-import { Archivo, IBM_Plex_Mono, Inter } from "next/font/google"
+import { Geist, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -11,21 +11,14 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils"
 
-const archivo = Archivo({
+const geistSans = Geist({
   subsets: ["latin"],
-  weight: ["600", "700", "800", "900"],
-  variable: "--font-archivo",
+  variable: "--font-geist-sans",
 })
 
-const plexMono = IBM_Plex_Mono({
+const geistMono = Geist_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-plex-mono",
-})
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-geist-mono",
 })
 
 export const metadata: Metadata = {
@@ -51,7 +44,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", archivo.variable, plexMono.variable, inter.variable)}
+      className={cn("antialiased", geistSans.variable, geistMono.variable)}
     >
       <body>
         <ThemeProvider>

@@ -2,7 +2,6 @@ import * as React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-/** Dashed empty placeholder with a glyph, display-font title, and action. */
 export function EmptyState({
   icon: Icon,
   title,
@@ -17,17 +16,14 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        'border-border-bright text-muted-foreground w-full rounded-lg border border-dashed px-4 py-12 text-center',
-        className,
-      )}
-    >
-      {Icon ? <Icon className="text-faint mx-auto size-6" /> : null}
-      <p className="text-foreground font-heading mt-3 text-sm font-bold">{title}</p>
-      {description ? (
-        <p className="mx-auto mt-1 max-w-sm text-xs">{description}</p>
+    <div className={cn('bg-card border-border w-full rounded-lg border px-4 py-12 text-center', className)}>
+      {Icon ? (
+        <span className="bg-secondary text-muted-foreground mx-auto grid size-10 place-items-center rounded-lg">
+          <Icon className="size-5" />
+        </span>
       ) : null}
+      <p className="text-md mt-4 font-medium">{title}</p>
+      {description ? <p className="text-muted-foreground mx-auto mt-1 max-w-sm text-base">{description}</p> : null}
       {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
     </div>
   );

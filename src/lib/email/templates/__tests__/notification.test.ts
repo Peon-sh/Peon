@@ -19,7 +19,7 @@ describe('notificationEmailTemplate', () => {
     });
 
     expect(rendered.subject).toContain('Deployment failed · demo');
-    expect(rendered.html).toContain('peon.sh/logos/logo-500.png');
+    expect(rendered.html).toContain('peon.sh/logos/brand/peon-horizontal.png');
     expect(rendered.html).toContain('View logs');
     expect(rendered.html).toContain('https://app.peon.sh/logs');
     expect(rendered.html).toContain('Image build failed.');

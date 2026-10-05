@@ -12,10 +12,8 @@ import {
   ModalFooter,
   ModalHeader,
   ModalTitle,
-  ModalTrigger,
 } from '@/components/app/modal';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -25,22 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PageContainer, PageHeader, Panel } from '@/components/app/page';
+import { FormField, PageContainer, PageHeader } from '@/components/app/page';
+import { DataTable } from '@/components/app/data-table';
 import { EmptyState } from '@/components/app/empty-state';
 import { ConfirmButton } from '@/components/app/confirm';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth';
-
-const HEAD_CLASS =
-  'text-faint h-9 px-4 text-[11px] font-medium uppercase tracking-[0.12em]';
 import {
   listSharedVariables,
   createSharedVariable,
@@ -49,6 +36,12 @@ import {
 } from '@/services/api/shared-variables';
 
 const SCOPES: SharedVariableScope[] = ['WORKSPACE', 'PROJECT', 'SERVER'];
+const SCOPE_LABEL: Record<SharedVariableScope, string> = {
+  WORKSPACE: 'Workspace',
+  PROJECT: 'Project',
+  SERVER: 'Server',
+};
+const MODAL_FIELD = 'lg:grid-cols-1 lg:gap-2';
 
 export default function SharedVariablesPage() {
   const { currentWorkspaceId } = useAuthStore();
@@ -109,18 +102,12 @@ export default function SharedVariablesPage() {
 
   const createDialog = (
     <Modal open={open} onOpenChange={setOpen}>
-      <ModalTrigger asChild>
-        <Button>
-          <Plus className="size-4" /> New variable
-        </Button>
-      </ModalTrigger>
       <ModalContent>
         <ModalHeader>
-          <ModalTitle>Create shared variable</ModalTitle>
+          <ModalTitle>Add shared variable</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
-          <div className="space-y-2">
-            <Label>Scope</Label>
+          <FormField label="Scope" className={MODAL_FIELD}>
             <Select value={scope} onValueChange={(v) => setScope(v as SharedVariableScope)}>
               <SelectTrigger>
                 <SelectValue />
@@ -128,122 +115,132 @@ export default function SharedVariablesPage() {
               <SelectContent>
                 {SCOPES.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {s}
+                    {SCOPE_LABEL[s]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FormField>
           {scope === 'PROJECT' && (
-            <div className="space-y-2">
-              <Label htmlFor="sv-project">Project ID</Label>
+            <FormField label="Project ID" htmlFor="sv-project" className={MODAL_FIELD}>
               <Input
                 id="sv-project"
+                className="font-mono"
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
               />
-            </div>
+            </FormField>
           )}
           {scope === 'SERVER' && (
-            <div className="space-y-2">
-              <Label htmlFor="sv-server">Server ID</Label>
+            <FormField label="Server ID" htmlFor="sv-server" className={MODAL_FIELD}>
               <Input
                 id="sv-server"
+                className="font-mono"
                 value={serverId}
                 onChange={(e) => setServerId(e.target.value)}
               />
-            </div>
+            </FormField>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="sv-key">Key</Label>
-            <Input id="sv-key" value={key} onChange={(e) => setKey(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="sv-value">Value</Label>
-            <Textarea id="sv-value" value={value} onChange={(e) => setValue(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="sv-comment">Comment</Label>
+          <FormField label="Key" htmlFor="sv-key" className={MODAL_FIELD}>
+            <Input id="sv-key" className="font-mono" value={key} onChange={(e) => setKey(e.target.value)} />
+          </FormField>
+          <FormField label="Value" htmlFor="sv-value" className={MODAL_FIELD}>
+            <Textarea
+              id="sv-value"
+              className="font-mono"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </FormField>
+          <FormField label="Comment" htmlFor="sv-comment" className={MODAL_FIELD}>
             <Input
               id="sv-comment"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
             />
-          </div>
+          </FormField>
         </ModalBody>
         <ModalFooter>
           <Button
             onClick={() => createMut.mutate()}
             disabled={!key || !value || createMut.isPending}
           >
-            Create
+            Add variable
           </Button>
         </ModalFooter>
       </ModalContent>
     </Modal>
   );
 
+  const addButton = (
+    <Button onClick={() => setOpen(true)}>
+      <Plus className="size-4" /> Add variable
+    </Button>
+  );
+
   return (
     <PageContainer>
-      <PageHeader actions={createDialog} />
+      {createDialog}
+      <PageHeader
+        title="Shared variables"
+        description="Values available to every service in the workspace"
+        actions={addButton}
+      />
 
-      {isLoading ? (
-        <div className="bg-accent h-48 animate-pulse rounded-lg" />
-      ) : !vars?.length ? (
-        <EmptyState
-          icon={KeyRound}
-          title="No shared variables yet"
-          description="create variables to share across your services, projects, or servers."
-          action={createDialog}
-        />
-      ) : (
-        <Panel title="variables">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className={HEAD_CLASS}>key</TableHead>
-                <TableHead className={HEAD_CLASS}>value</TableHead>
-                <TableHead className={HEAD_CLASS}>scope</TableHead>
-                <TableHead className={cn(HEAD_CLASS, 'text-right')}>actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vars.map((v) => (
-                <TableRow key={v.id} className="hover:bg-secondary">
-                  <TableCell className="px-4 py-3">
-                    <div className="text-[12.5px] font-semibold">{v.key}</div>
-                    {v.comment && (
-                      <div className="text-muted-foreground max-w-64 truncate text-[11px]">
-                        {v.comment}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <span className="text-muted-foreground tracking-[0.18em]">••••••••</span>
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <Badge variant="outline" className="text-[11px] lowercase">
-                      {v.scope}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 text-right">
-                    <ConfirmButton
-                      title={`Delete shared variable "${v.key}"?`}
-                      description="Services that inherit this variable will no longer receive it on the next deploy."
-                      confirmLabel="Delete"
-                      size="sm"
-                      disabled={deleteMut.isPending}
-                      onConfirm={() => deleteMut.mutate(v.id)}
-                    >
-                      <Trash2 className="size-4" /> Delete
-                    </ConfirmButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Panel>
-      )}
+      <DataTable
+        columns={[
+          {
+            key: 'key',
+            header: 'Key',
+            cell: (v) => (
+              <div className="min-w-0">
+                <div className="font-mono font-medium">{v.key}</div>
+                {v.comment && (
+                  <div className="text-muted-foreground max-w-64 truncate text-sm">{v.comment}</div>
+                )}
+              </div>
+            ),
+          },
+          {
+            key: 'value',
+            header: 'Value',
+            cell: () => <span className="text-muted-foreground font-mono">••••••••</span>,
+          },
+          {
+            key: 'scope',
+            header: 'Scope',
+            cell: (v) => <Badge variant="outline">{SCOPE_LABEL[v.scope] ?? v.scope}</Badge>,
+          },
+          {
+            key: 'actions',
+            header: '',
+            align: 'right',
+            cell: (v) => (
+              <ConfirmButton
+                title={`Delete shared variable "${v.key}"?`}
+                description="Services that inherit this variable will no longer receive it on the next deploy."
+                confirmLabel="Delete"
+                variant="ghost"
+                disabled={deleteMut.isPending}
+                onConfirm={() => deleteMut.mutate(v.id)}
+              >
+                <Trash2 className="size-4" /> Delete
+              </ConfirmButton>
+            ),
+          },
+        ]}
+        rows={vars ?? []}
+        rowKey={(v) => v.id}
+        isLoading={isLoading}
+        emptyState={
+          <EmptyState
+            icon={KeyRound}
+            title="No shared variables yet"
+            description="Create variables to share across your services, projects, or servers."
+            action={addButton}
+          />
+        }
+      />
     </PageContainer>
   );
 }

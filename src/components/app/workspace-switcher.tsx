@@ -55,17 +55,17 @@ export function WorkspaceSwitcher() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <SidebarMenuButton
-            className="h-9 hover:bg-transparent active:bg-transparent data-[state=open]:bg-transparent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+            className="h-8 rounded-md px-2 text-base font-medium hover:bg-sidebar-accent data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
             tooltip={current?.name ?? 'Workspace'}
           >
-            <span className="border-border-bright bg-secondary text-phosphor grid size-6 shrink-0 place-items-center rounded-md border text-[11px] font-bold">
+            <span className="bg-secondary text-foreground grid size-6 shrink-0 place-items-center rounded-md text-xs font-medium">
               {(current?.name ?? 'W')[0].toUpperCase()}
             </span>
             <div className="grid flex-1 text-left leading-none group-data-[collapsible=icon]:hidden">
-              <span className="font-heading truncate text-[11px] font-extrabold">
+              <span className="truncate text-base font-medium">
                 {current?.name ?? 'Workspace'}
               </span>
-              <span className="text-muted-foreground truncate text-[9px] lowercase tracking-wide">
+              <span className="text-muted-foreground truncate text-xs capitalize">
                 {current?.role?.toLowerCase()}
               </span>
             </div>
@@ -85,7 +85,7 @@ export function WorkspaceSwitcher() {
                 router.refresh();
               }}
             >
-              <span className="border-border-bright bg-secondary text-phosphor grid size-5 shrink-0 place-items-center rounded border text-[10px] font-bold">
+              <span className="bg-secondary text-foreground grid size-5 shrink-0 place-items-center rounded-md text-xs font-medium">
                 {w.name[0].toUpperCase()}
               </span>
               <span className="truncate">{w.name}</span>

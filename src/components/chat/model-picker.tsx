@@ -71,10 +71,10 @@ export function ModelPicker({
         className="items-start py-2"
       >
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-medium text-foreground">
+          <div className="text-foreground truncate text-base font-medium">
             {model.displayName}
           </div>
-          <div className="text-muted-foreground truncate text-[10px]">
+          <div className="text-muted-foreground truncate text-xs">
             {providerLabel(model.provider)}
             {model.supportsReasoning ? ' · Reasoning' : ''}
           </div>
@@ -88,21 +88,21 @@ export function ModelPicker({
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
           role="combobox"
           aria-expanded={open}
           disabled={disabled || models.length === 0}
           className={cn(
-            'h-7 gap-1 rounded-full border-border/70 bg-transparent px-2.5 font-normal text-muted-foreground hover:bg-muted/40 hover:text-foreground',
-            open && 'bg-muted/50 text-foreground',
+            'text-muted-foreground hover:text-foreground gap-1 px-2 font-normal',
+            open && 'bg-secondary text-foreground',
             className,
           )}
         >
-          <span className="max-w-[180px] truncate text-xs">
+          <span className="max-w-[180px] truncate text-sm">
             {selected?.displayName ?? 'Select model'}
           </span>
-          <ChevronDown className="size-3 opacity-60" />
+          <ChevronDown className="size-3.5 opacity-60" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-72 gap-0 p-0">

@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Modal,
   ModalBody,
@@ -18,7 +17,7 @@ import {
   ModalTitle,
   ModalTrigger,
 } from '@/components/app/modal';
-import { Panel, Section } from '@/components/app/page';
+import { FormField, FormSection, Panel } from '@/components/app/page';
 import { deleteProject, updateProject } from '@/services/api/project';
 import { useAuthStore } from '@/store/auth';
 
@@ -76,51 +75,47 @@ export function ProjectSettingsTab({
 
   return (
     <div className="space-y-6">
-      <Section title="general" description="name and description for this project">
-        <Panel
-          contentClassName="space-y-4 p-4"
-          footer={
-            canManage ? (
-              <Button
-                size="sm"
-                onClick={() => saveMut.mutate()}
-                disabled={!name.trim() || saveMut.isPending}
-              >
-                Save changes
-              </Button>
-            ) : (
-              <p className="text-muted-foreground w-full text-left text-[11px]">
-                You need project manage access to edit these settings.
-              </p>
-            )
-          }
-        >
-          <div className="space-y-2">
-            <Label htmlFor="project-name">Name</Label>
-            <Input
-              id="project-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={!canManage}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="project-description">Description</Label>
-            <Input
-              id="project-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={!canManage}
-            />
-          </div>
-        </Panel>
-      </Section>
+      <FormSection
+        title="General"
+        description="Name and description for this project"
+        footer={
+          canManage ? (
+            <Button
+              size="sm"
+              onClick={() => saveMut.mutate()}
+              disabled={!name.trim() || saveMut.isPending}
+            >
+              Save changes
+            </Button>
+          ) : (
+            <p className="text-muted-foreground w-full text-left text-sm">
+              You need project manage access to edit these settings.
+            </p>
+          )
+        }
+      >
+        <FormField label="Name" htmlFor="project-name">
+          <Input
+            id="project-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={!canManage}
+          />
+        </FormField>
+        <FormField label="Description" htmlFor="project-description">
+          <Input
+            id="project-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={!canManage}
+          />
+        </FormField>
+      </FormSection>
 
       {canManage ? (
         <Panel
-          title={<span className="text-destructive">danger zone</span>}
+          title={<span className="text-destructive">Danger zone</span>}
           className="border-destructive/40"
-          contentClassName="space-y-4 p-4"
           footer={
             <Modal
               open={deleteOpen}
@@ -149,8 +144,11 @@ export function ProjectSettingsTab({
                       <ModalDescription>
                         This permanently deletes the project. Type the project name to confirm.
                       </ModalDescription>
-                      <div className="mt-4 space-y-2">
-                        <Label htmlFor="confirm-project-name">Project name</Label>
+                      <FormField
+                        label="Project name"
+                        htmlFor="confirm-project-name"
+                        className="mt-4 lg:grid-cols-1 lg:gap-2"
+                      >
                         <Input
                           id="confirm-project-name"
                           value={confirmName}
@@ -158,7 +156,7 @@ export function ProjectSettingsTab({
                           placeholder={project.name}
                           autoComplete="off"
                         />
-                      </div>
+                      </FormField>
                     </>
                   )}
                 </ModalBody>
@@ -180,13 +178,13 @@ export function ProjectSettingsTab({
           }
         >
           <div className="space-y-2">
-            <p className="text-[12.5px] font-semibold">Delete this project</p>
+            <p className="text-base font-medium">Delete this project</p>
             {hasServices ? (
               <div className="space-y-2">
-                <p className="text-muted-foreground text-[12px]">
+                <p className="text-muted-foreground text-sm">
                   Delete or move these services before you can delete the project:
                 </p>
-                <ul className="text-muted-foreground list-inside list-disc text-[12px]">
+                <ul className="text-muted-foreground list-inside list-disc text-sm">
                   {services.map((s) => (
                     <li key={s.id}>{s.name}</li>
                   ))}
@@ -198,7 +196,7 @@ export function ProjectSettingsTab({
                 </ul>
               </div>
             ) : (
-              <p className="text-muted-foreground text-[12px]">
+              <p className="text-muted-foreground text-sm">
                 Permanently deletes the project. This cannot be undone.
               </p>
             )}

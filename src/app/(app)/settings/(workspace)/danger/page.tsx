@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -117,83 +117,73 @@ export default function SettingsDangerPage() {
   });
 
   return (
-    <div className="space-y-6">
-      {isOwner ? (
-        <Panel
-          title="Transfer ownership"
-          contentClassName="space-y-3 p-4"
-          footer={
-            <Button size="sm" onClick={() => setTransferOpen(true)}>
-              Transfer ownership
-            </Button>
-          }
-        >
-          <p className="text-muted-foreground text-[12px]">
-            Move ownership to another member. You can stay as admin/member or leave.
+    <>
+      <Panel
+        title="Danger zone"
+        description="Actions that change who owns this workspace or remove it."
+        className="border-destructive/40"
+        padded={false}
+      >
+        {!isOwner && !canLeave ? (
+          <p className="text-muted-foreground p-4 text-sm">
+            No danger zone actions are available for your role in this workspace.
           </p>
-        </Panel>
-      ) : null}
+        ) : (
+          <div className="divide-y">
+            {isOwner ? (
+              <DangerRow
+                title="Transfer ownership"
+                description="Move ownership to another member. You can stay as admin or member, or leave."
+                action={
+                  <Button variant="outline" onClick={() => setTransferOpen(true)}>
+                    Transfer ownership
+                  </Button>
+                }
+              />
+            ) : null}
 
-      {canLeave ? (
-        <Panel
-          title="Leave workspace"
-          contentClassName="space-y-3 p-4"
-          footer={
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={leaveMut.isPending}
-              onClick={() => leaveMut.mutate()}
-            >
-              Leave workspace
-            </Button>
-          }
-        >
-          <p className="text-muted-foreground text-[12px]">
-            Remove yourself from this workspace and its projects.
-          </p>
-        </Panel>
-      ) : null}
+            {canLeave ? (
+              <DangerRow
+                title="Leave workspace"
+                description="Remove yourself from this workspace and its projects."
+                action={
+                  <Button
+                    variant="outline"
+                    disabled={leaveMut.isPending}
+                    onClick={() => leaveMut.mutate()}
+                  >
+                    Leave workspace
+                  </Button>
+                }
+              />
+            ) : null}
 
-      {isOwner ? (
-        <Panel
-          title={<span className="text-destructive">Delete workspace</span>}
-          className="border-destructive/40"
-          contentClassName="space-y-3 p-4"
-          footer={
-            workspace?.personal ? undefined : (
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => {
-                  setDeleteOpen(true);
-                  void refetchPreflight();
-                }}
-              >
-                Delete workspace
-              </Button>
-            )
-          }
-        >
-          {workspace?.personal ? (
-            <p className="text-muted-foreground text-[12px]">
-              Personal workspaces cannot be deleted. Create a team workspace (or transfer to one) if
-              you need a deletable workspace.
-            </p>
-          ) : (
-            <p className="text-muted-foreground text-[12px]">
-              Permanently delete this workspace after all projects and services are removed. No
-              remote servers are torn down.
-            </p>
-          )}
-        </Panel>
-      ) : null}
-
-      {!isOwner && !canLeave ? (
-        <p className="text-muted-foreground text-[12px]">
-          No danger-zone actions are available for your role in this workspace.
-        </p>
-      ) : null}
+            {isOwner ? (
+              <DangerRow
+                title="Delete workspace"
+                description={
+                  workspace?.personal
+                    ? 'Personal workspaces cannot be deleted. Create a team workspace (or transfer to one) if you need a deletable workspace.'
+                    : 'Permanently delete this workspace after all projects and services are removed. No remote servers are torn down.'
+                }
+                action={
+                  workspace?.personal ? undefined : (
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        setDeleteOpen(true);
+                        void refetchPreflight();
+                      }}
+                    >
+                      Delete workspace
+                    </Button>
+                  )
+                }
+              />
+            ) : null}
+          </div>
+        )}
+      </Panel>
 
       <Modal open={transferOpen} onOpenChange={setTransferOpen}>
         <ModalContent>
@@ -212,7 +202,7 @@ export default function SettingsDangerPage() {
                 placeholder="Select member"
                 options={transferTargets.map((m) => ({
                   value: m.user.id,
-                  label: `${m.user.name ?? m.user.email} (${m.role})`,
+                  label: `${m.user.name ?? m.user.email} (${roleLabel(m.role)})`,
                 }))}
               />
             </div>
@@ -223,8 +213,8 @@ export default function SettingsDangerPage() {
                 onValueChange={(v) => setDisposition(v as 'ADMIN' | 'MEMBER' | 'LEAVE')}
                 placeholder="Select disposition"
                 options={[
-                  { value: 'ADMIN', label: 'Stay as ADMIN' },
-                  { value: 'MEMBER', label: 'Stay as MEMBER' },
+                  { value: 'ADMIN', label: 'Stay as admin' },
+                  { value: 'MEMBER', label: 'Stay as member' },
                   { value: 'LEAVE', label: 'Leave workspace' },
                 ]}
               />
@@ -262,10 +252,10 @@ export default function SettingsDangerPage() {
                   Remove these projects and services first. Delete is blocked until the workspace is
                   empty.
                 </ModalDescription>
-                <ul className="max-h-48 space-y-2 overflow-y-auto text-[12px]">
+                <ul className="max-h-48 space-y-2 overflow-y-auto text-base">
                   {preflight.projects.map((p) => (
                     <li key={p.id}>
-                      <span className="font-semibold">{p.name}</span>
+                      <span className="font-medium">{p.name}</span>
                       {p.services.length ? (
                         <ul className="text-muted-foreground ml-3 list-disc">
                           {p.services.map((s) => (
@@ -315,6 +305,31 @@ export default function SettingsDangerPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+    </>
+  );
+}
+
+function roleLabel(role: string) {
+  const w = role.toLowerCase().replace(/_/g, ' ');
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
+
+function DangerRow({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="text-base font-medium">{title}</p>
+        <p className="text-muted-foreground mt-0.5 text-sm">{description}</p>
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }

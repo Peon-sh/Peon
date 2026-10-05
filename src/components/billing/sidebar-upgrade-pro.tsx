@@ -63,20 +63,13 @@ export function SidebarUpgradePro() {
   return (
     <>
       <div className="px-2 pb-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-        <div
-          className={cn(
-            'relative',
-            collapsed
-              ? ''
-              : 'aspect-square w-full rounded-xl border border-phosphor/25 bg-gradient-to-br from-phosphor/25 via-phosphor/8 to-secondary',
-          )}
-        >
+        <div className={cn('relative', collapsed ? '' : 'border-border bg-card rounded-lg border p-3')}>
           {!collapsed ? (
             <Button
               type="button"
               size="icon-sm"
               variant="ghost"
-              className="text-muted-foreground hover:text-foreground absolute top-2 right-2 z-10"
+              className="text-muted-foreground hover:text-foreground absolute top-1 right-1 z-10"
               aria-label="Dismiss upgrade card"
               onClick={dismiss}
             >
@@ -84,54 +77,48 @@ export function SidebarUpgradePro() {
             </Button>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            title="Upgrade to Peon Pro"
-            className={cn(
-              'group/upgrade text-left transition-colors',
-              collapsed
-                ? 'mx-auto flex size-8 items-center justify-center rounded-md border border-phosphor/30 bg-phosphor/10 text-phosphor hover:bg-phosphor/20'
-                : 'flex h-full w-full flex-col items-center justify-center gap-2.5 p-3.5 text-center hover:border-phosphor/55',
-            )}
-          >
-            {collapsed ? (
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              title="Upgrade to Peon Pro"
+              className="text-primary hover:bg-secondary mx-auto flex size-8 items-center justify-center rounded-md transition-colors"
+            >
               <Crown className="size-4" />
-            ) : (
-              <>
-                <div className="flex w-full items-center justify-between pr-6">
-                  <span className="bg-phosphor/20 text-phosphor grid size-9 place-items-center rounded-lg">
-                    <Crown className="size-4" />
-                  </span>
-                  <DiscountBadge percent={discount} size="sm" />
-                </div>
-
-                <div className="space-y-0.5">
-                  <p className="text-[13px] font-semibold tracking-tight">Upgrade to Pro</p>
-                  <p className="font-heading text-phosphor text-3xl font-bold tracking-tight">
-                    {formatUsdFromCents(PEON_PRO_MONTHLY_CENTS)}
-                    <span className="text-muted-foreground ml-0.5 text-xs font-medium">/mo</span>
-                  </p>
-                  <p className="text-muted-foreground text-[11px] leading-snug">per project</p>
-                </div>
-
-                <div className="bg-background/40 w-full rounded-md border border-phosphor/15 px-2 py-1.5">
-                  <p className="text-[11px] leading-snug font-medium">
-                    {formatUsdFromCents(PEON_PRO_YEARLY_CENTS)}/yr
-                    <span className="text-muted-foreground font-normal">
-                      {' '}
-                      · {formatUsdFromCents(PEON_PRO_YEARLY_EFFECTIVE_MONTHLY_CENTS)}/mo
-                    </span>
-                  </p>
-                </div>
-
-                <span className="text-phosphor inline-flex items-center gap-1 text-[11px] font-semibold">
-                  Get Pro
-                  <ArrowRight className="size-3.5 transition-transform group-hover/upgrade:translate-x-0.5" />
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 pr-6">
+                <span className="text-primary grid size-7 place-items-center">
+                  <Crown className="size-4" />
                 </span>
-              </>
-            )}
-          </button>
+                <DiscountBadge percent={discount} size="sm" />
+              </div>
+
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Upgrade to Pro</p>
+                <p className="text-foreground text-xl font-semibold">
+                  {formatUsdFromCents(PEON_PRO_MONTHLY_CENTS)}
+                  <span className="text-muted-foreground ml-0.5 text-xs font-normal">/mo</span>
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  per project · {formatUsdFromCents(PEON_PRO_YEARLY_CENTS)}/yr (
+                  {formatUsdFromCents(PEON_PRO_YEARLY_EFFECTIVE_MONTHLY_CENTS)}/mo)
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                className="group/upgrade w-full"
+                title="Upgrade to Peon Pro"
+                onClick={() => setOpen(true)}
+              >
+                Get Pro
+                <ArrowRight className="size-3.5 transition-transform group-hover/upgrade:translate-x-0.5" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
