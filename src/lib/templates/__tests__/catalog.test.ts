@@ -146,6 +146,26 @@ describe('template catalog compose', () => {
     }
   });
 
+  it('matrix synapse postgresql refuses an empty server name and logs to the console', () => {
+    const detail = getTemplate('matrix-synapse-with-postgresql')!;
+    const doc = parse(detail.compose) as {
+      services?: { synapse?: { environment?: string[]; entrypoint?: string[] } };
+    };
+    const env = doc.services?.synapse?.environment ?? [];
+    const entry = doc.services?.synapse?.entrypoint?.[2] ?? '';
+    expect(env.join('\n')).not.toMatch(/SYNAPSE_SERVER_NAME=\$\{SYNAPSE_SERVER_NAME:-/);
+    expect(env).toContain('PUBLIC_BASEURL=${PUBLIC_BASEURL:-${SERVICE_URL_SYNAPSE}}');
+    expect(entry.indexOf('exit 1')).toBeGreaterThan(-1);
+    expect(entry.indexOf('exit 1')).toBeLessThan(entry.indexOf('/start.py generate'));
+    expect(entry).toContain('set SYNAPSE_SERVER_NAME to your domain before first deploy');
+    const logStart = entry.indexOf("<<'LOGEOF'");
+    const logEnd = entry.indexOf('\nLOGEOF', logStart);
+    const logBlock = entry.slice(logStart, logEnd);
+    expect(logBlock).toContain('class: logging.StreamHandler');
+    expect(logBlock).not.toContain('homeserver.log');
+    expect(entry).toContain('public_baseurl: "${PUBLIC_BASEURL:-${SERVICE_URL_SYNAPSE}}/"');
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
       const detail = getTemplate(t.slug)!;
