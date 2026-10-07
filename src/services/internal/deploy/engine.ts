@@ -20,6 +20,7 @@ import {
 } from '@/lib/docker/image-cleanup';
 import { mergeDockerRunIntoService } from '@/lib/docker/run-options';
 import { dockerExecShellCommand, shellSingleQuote } from '@/lib/shell/quote';
+import { archiveContainerLogs } from '@/services/internal/service/container-logs';
 import { stringify, parse as parseYaml } from 'yaml';
 import { engineSpec, resolveDatabaseDataPath } from '@/lib/docker/databases';
 import {
@@ -247,6 +248,7 @@ async function stopPreviousServiceContainers(
   serviceId: string,
   keepContainer: string,
   log: (m: string) => void,
+  opts?: { deploymentId?: string; alreadyArchived?: Set<string> },
 ): Promise<void> {
   const list = await sshPool.exec(
     target,
@@ -268,6 +270,16 @@ async function stopPreviousServiceContainers(
     const name = nameRes.stdout.trim().replace(/^\//, '');
     if (!name || name === keepContainer) continue;
     log(`Stopping previous container ${name}…`);
+    if (!opts?.alreadyArchived?.has(name)) {
+      await archiveContainerLogs({
+        target,
+        serviceId,
+        containerName: name,
+        deploymentId: opts?.deploymentId,
+        reason: 'rolling',
+      });
+      opts?.alreadyArchived?.add(name);
+    }
     await sshPool.exec(
       target,
       `docker stop ${shellSingleQuote(name)} >/dev/null 2>&1 || true; docker rm -f ${shellSingleQuote(name)} >/dev/null 2>&1 || true`,
@@ -781,6 +793,30 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     });
     if (serviceBeforeCompose && isSuspended(serviceBeforeCompose)) throw new DeploymentSuspendedError();
 
+    // `compose up` recreates a stable container name and deletes its log file
+    // with it. Rolling updates keep the old container until the swap below.
+    const archivedContainers = new Set<string>();
+    if (!useRolling) {
+      let existing = isPreview ? name : svc.activeContainerName?.trim() || name;
+      if (
+        !isPreview &&
+        svc.kind === 'COMPOSE' &&
+        svc.settings?.isRawComposeDeploymentEnabled &&
+        composePrimaryKey
+      ) {
+        const resolved = await resolveComposeRuntimeContainer(target, dir, composePrimaryKey);
+        if (resolved) existing = resolved;
+      }
+      await archiveContainerLogs({
+        target,
+        serviceId: svc.id,
+        containerName: existing,
+        deploymentId,
+        reason: 'deploy',
+      });
+      archivedContainers.add(existing);
+    }
+
     if (previewProject && deployment.pullRequestId != null) {
       // A preview from before projects were scoped per service still holds the
       // container name this deploy is about to claim, and Docker refuses
@@ -856,20 +892,36 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     if (useRolling) {
       if (previousContainer && previousContainer !== runtimeContainer) {
         // Prefer label-based cleanup; also stop the known previous name if still up.
-        await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log);
+        await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log, {
+          deploymentId,
+          alreadyArchived: archivedContainers,
+        });
         const still = await sshPool.exec(
           target,
           `docker inspect --format='{{.State.Running}}' ${shellSingleQuote(previousContainer)} 2>/dev/null || true`,
         );
         if (still.stdout.trim() === 'true') {
           log(`Stopping previous container ${previousContainer}…`);
+          if (!archivedContainers.has(previousContainer)) {
+            await archiveContainerLogs({
+              target,
+              serviceId: svc.id,
+              containerName: previousContainer,
+              deploymentId,
+              reason: 'rolling',
+            });
+            archivedContainers.add(previousContainer);
+          }
           await sshPool.exec(
             target,
             `docker stop ${shellSingleQuote(previousContainer)} >/dev/null 2>&1 || true; docker rm -f ${shellSingleQuote(previousContainer)} >/dev/null 2>&1 || true`,
           );
         }
       } else {
-        await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log);
+        await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log, {
+          deploymentId,
+          alreadyArchived: archivedContainers,
+        });
       }
       await prisma.service.update({
         where: { id: svc.id },
@@ -879,7 +931,10 @@ export async function runDeployment(deploymentId: string): Promise<void> {
       log(`Rolling update complete — active container is ${runtimeContainer}.`);
     } else if (!isPreview && svc.kind !== 'COMPOSE' && svc.kind !== 'DATABASE') {
       // Recreate path: drop any leftover rolling containers from earlier deploys.
-      await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log);
+      await stopPreviousServiceContainers(target, svc.id, runtimeContainer, log, {
+        deploymentId,
+        alreadyArchived: archivedContainers,
+      });
       await prisma.service.update({
         where: { id: svc.id },
         data: { activeContainerName: runtimeContainer },

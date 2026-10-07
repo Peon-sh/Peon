@@ -16,6 +16,7 @@ import {
 } from '@/lib/scripts/server';
 import { ensureAgentCredentials } from '@/services/internal/server/agent';
 import { AuditService } from '@/services/internal/audit/audit';
+import { archiveStoppedServiceContainers } from '@/services/internal/service/container-logs';
 
 export interface ServerInfo {
   os?: string;
@@ -269,6 +270,7 @@ export const ServerOperations = {
       `Running docker cleanup (volumes=${deleteUnusedVolumes}, networks=${deleteUnusedNetworks}).`,
     );
     const target = await sshTargetForServer(serverId);
+    await archiveStoppedServiceContainers(target);
     await sshPool.execStream(
       target,
       cleanupScript({ deleteUnusedVolumes, deleteUnusedNetworks }),
