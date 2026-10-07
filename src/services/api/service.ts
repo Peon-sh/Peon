@@ -441,6 +441,18 @@ export function getServiceLogs(serviceId: string, tail = 200) {
   );
 }
 
+export interface ServiceLogArchive {
+  id: string;
+  containerName: string;
+  reason: string;
+  capturedAt: string;
+  content: string;
+}
+
+export function getServiceLogArchives(serviceId: string) {
+  return unwrap<ServiceLogArchive[]>(api.get(`/services/${serviceId}/logs/archives`));
+}
+
 export interface ServiceTerminalSession {
   ticket: string;
   wsUrl: string;

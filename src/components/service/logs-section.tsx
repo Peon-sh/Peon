@@ -7,7 +7,8 @@ import { RotateCw, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { getServiceLogs } from '@/services/api/service';
+import { getServiceLogArchives, getServiceLogs } from '@/services/api/service';
+import { combineServiceLogs } from '@/lib/container-log-text';
 
 export function LogsSection({ serviceId }: { serviceId: string }) {
   const [tail, setTail] = useState(200);
@@ -20,16 +21,28 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
     queryFn: () => getServiceLogs(serviceId, tail),
     refetchInterval: follow ? 5000 : false,
   });
+  const archives = useQuery({
+    queryKey: ['service-log-archives', serviceId],
+    queryFn: () => getServiceLogArchives(serviceId),
+    staleTime: 30_000,
+  });
+
+  const logText = combineServiceLogs(archives.data ?? [], data?.lines ?? []);
 
   useEffect(() => {
     if (follow) endRef.current?.scrollIntoView({ block: 'end' });
-  }, [data, follow]);
+  }, [logText, follow]);
 
   const downloadLogs = async () => {
     setDownloading(true);
     try {
-      const full = await getServiceLogs(serviceId, 0);
-      const blob = new Blob([full.lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+      const [full, previous] = await Promise.all([
+        getServiceLogs(serviceId, 0),
+        getServiceLogArchives(serviceId),
+      ]);
+      const blob = new Blob([combineServiceLogs(previous, full.lines)], {
+        type: 'text/plain;charset=utf-8',
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -67,7 +80,15 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
           <Button size="sm" variant="outline" onClick={downloadLogs} disabled={downloading}>
             <Download className="size-3.5" /> Download full logs
           </Button>
-          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void refetch();
+              void archives.refetch();
+            }}
+            disabled={isFetching}
+          >
             <RotateCw className={`size-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>
@@ -89,8 +110,8 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
           >
             {error
               ? `Failed to fetch logs: ${error instanceof Error ? error.message : 'unknown error'}`
-              : data?.lines.length
-                ? data.lines.join('\n')
+              : logText
+                ? logText
                 : isFetching
                   ? 'Loading logs…'
                   : 'No log output. Is the container running?'}

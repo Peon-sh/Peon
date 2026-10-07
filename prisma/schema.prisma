@@ -673,6 +673,7 @@ model Service {
   scheduledBackups ScheduledBackup[]
   webhooks         ServiceWebhook[]
   tags             TagsOnServices[]
+  containerLogs    ServiceContainerLog[]
 
   @@index([projectId])
   @@index([serverId])
@@ -823,9 +824,29 @@ model Deployment {
   leaseUntil  DateTime?
 
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  containerLogs ServiceContainerLog[]
 
   @@index([serviceId])
   @@index([status])
+}
+
+/// Stdout/stderr copied off a container just before that container is removed.
+/// The Logs tab reads `docker logs` for the live container; this keeps the
+/// previous container's output after a deploy, rolling swap, or disk cleanup.
+model ServiceContainerLog {
+  id            String   @id @default(cuid())
+  serviceId     String
+  deploymentId  String?
+  containerName String
+  /// deploy | rolling | cleanup
+  reason        String
+  content       String
+  capturedAt    DateTime @default(now())
+
+  service    Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  deployment Deployment? @relation(fields: [deploymentId], references: [id], onDelete: SetNull)
+
+  @@index([serviceId, capturedAt])
 }
 
 model ServicePreview {

@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { execStream } = vi.hoisted(() => ({
+const { execStream, exec } = vi.hoisted(() => ({
   execStream: vi.fn(
     async (_target: unknown, _script: string, onChunk?: (c: string) => void) => {
       onChunk?.('cleanup done\n');
     },
   ),
+  exec: vi.fn(async () => ({ code: 0, stdout: '', stderr: '' })),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -23,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
 }));
 
 vi.mock('@/lib/ssh', () => ({
-  sshPool: { execStream },
+  sshPool: { execStream, exec },
   sshTargetForServer: vi.fn(async () => ({ host: '1.2.3.4', port: 22, username: 'root' })),
 }));
 
@@ -56,7 +57,9 @@ describe('ServerOperations.cleanup', () => {
       logs.push(m);
     });
 
+    expect(exec).toHaveBeenCalled();
     expect(execStream).toHaveBeenCalledTimes(1);
+    expect(exec.mock.invocationCallOrder[0]).toBeLessThan(execStream.mock.invocationCallOrder[0]!);
     const script = execStream.mock.calls[0]![1] as string;
     expect(script).toContain('docker image prune -af');
     expect(script).toContain('docker volume prune -af');
