@@ -10,14 +10,19 @@ Security reports: see [SECURITY.md](./SECURITY.md).
 
 ## Production: retained container logs
 
-Previous container output is copied to S3 when a deploy, rolling swap, or disk cleanup removes that container. Set this before the release that includes the change, on the services that are about to run it.
+Add this one environment variable on the **web** service and the **worker** before releasing this change:
 
-- Set `S3_BUCKET` on the **web** service and the **worker**. The worker writes the archive during a deploy. The web app reads it when someone opens the Logs tab. Scheduler and socket do not need it.
-- Use one bucket. Archives are private objects under `container-logs/`, in the same bucket as screenshots and avatars. Create that bucket only when production does not already have one, then put its name in `S3_BUCKET`.
-- Credentials stay the existing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, unless `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are set. Those keys need `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on the bucket. This prefix does not need a public-read policy or a CORS change.
-- Deploying the web app runs `prisma migrate deploy` and creates the `ServiceContainerLog` pointer table. No separate migration step.
+```bash
+S3_BUCKET=your-bucket-name
+```
 
-Deploys still succeed when `S3_BUCKET` is empty. Previous container logs are not kept in that case.
+| Variable | Value |
+|----------|--------|
+| `S3_BUCKET` | The S3 bucket name only. Example: `peon-assets`. A URL (`https://…`) or an ARN (`arn:aws:s3:::…`) will not work. |
+
+Use the bucket production already uses for screenshots and avatars. Create one bucket and put that name here when production does not have one yet.
+
+No other new variable. The existing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are used. Scheduler and socket do not need `S3_BUCKET`. The web deploy creates the database table. If this variable is missing, deploys still succeed and previous container logs are not saved.
 
 ## Author
 
