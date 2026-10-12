@@ -830,9 +830,8 @@ model Deployment {
   @@index([status])
 }
 
-/// Stdout/stderr copied off a container just before that container is removed.
-/// The Logs tab reads `docker logs` for the live container; this keeps the
-/// previous container's output after a deploy, rolling swap, or disk cleanup.
+/// Pointer to a container log archive. The text lives in a private S3 object
+/// (`objectKey`); this row only records which service it belongs to.
 model ServiceContainerLog {
   id            String   @id @default(cuid())
   serviceId     String
@@ -840,7 +839,8 @@ model ServiceContainerLog {
   containerName String
   /// deploy | rolling | cleanup
   reason        String
-  content       String
+  /// Private S3 object holding the log text. The row is only the pointer.
+  objectKey     String
   capturedAt    DateTime @default(now())
 
   service    Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)

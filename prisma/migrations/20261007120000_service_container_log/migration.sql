@@ -5,7 +5,7 @@ CREATE TABLE "ServiceContainerLog" (
     "deploymentId" TEXT,
     "containerName" TEXT NOT NULL,
     "reason" TEXT NOT NULL,
-    "content" TEXT NOT NULL,
+    "objectKey" TEXT NOT NULL,
     "capturedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ServiceContainerLog_pkey" PRIMARY KEY ("id")

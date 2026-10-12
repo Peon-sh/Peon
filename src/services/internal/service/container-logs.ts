@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { sshPool, type SshTarget } from '@/lib/ssh';
 import { shellSingleQuote } from '@/lib/shell/quote';
@@ -9,10 +10,18 @@ import {
   parseStoppedContainerInspect,
   type ContainerLogReason,
 } from '@/lib/container-log-text';
+import { PlatformS3Keys } from '@/services/external/s3/keys';
+import {
+  deletePlatformObject,
+  getPlatformObject,
+  isPlatformS3Configured,
+  uploadPlatformObject,
+} from '@/services/external/s3/assets';
 
 /**
- * Copy `docker logs` into Postgres. Failures are swallowed: losing the archive
- * must not fail a deploy or a server cleanup.
+ * Copy `docker logs` to a private S3 object. The database row stores only the
+ * object key. Failures are swallowed: losing the archive must not fail a
+ * deploy or a server cleanup.
  */
 export async function archiveContainerLogs(input: {
   target: SshTarget;
@@ -23,6 +32,10 @@ export async function archiveContainerLogs(input: {
 }): Promise<void> {
   const containerName = input.containerName.trim();
   if (!containerName) return;
+  if (!isPlatformS3Configured()) {
+    console.warn('[container-logs] skipped archive: S3_BUCKET is not configured.');
+    return;
+  }
 
   try {
     const res = await sshPool.exec(
@@ -33,23 +46,34 @@ export async function archiveContainerLogs(input: {
     const content = capContainerLog(res.stdout);
     if (!content) return;
 
+    const id = randomUUID();
+    const objectKey = PlatformS3Keys.containerLog(input.serviceId, id);
+    await uploadPlatformObject({
+      key: objectKey,
+      body: Buffer.from(content, 'utf8'),
+      contentType: 'text/plain; charset=utf-8',
+      cacheControl: 'private, no-store',
+    });
+
     await prisma.serviceContainerLog.create({
       data: {
+        id,
         serviceId: input.serviceId,
         deploymentId: input.deploymentId ?? null,
         containerName,
         reason: input.reason,
-        content,
+        objectKey,
       },
     });
 
     const extras = await prisma.serviceContainerLog.findMany({
       where: { serviceId: input.serviceId },
       orderBy: { capturedAt: 'desc' },
-      select: { id: true },
+      select: { id: true, objectKey: true },
       skip: CONTAINER_LOGS_KEPT,
     });
     if (extras.length) {
+      await Promise.all(extras.map((row) => deletePlatformObject(row.objectKey).catch(() => undefined)));
       await prisma.serviceContainerLog.deleteMany({
         where: { id: { in: extras.map((row) => row.id) } },
       });
@@ -99,8 +123,24 @@ export async function archiveStoppedServiceContainers(target: SshTarget): Promis
   }
 }
 
-export function listContainerLogArchives(serviceId: string) {
-  return prisma.serviceContainerLog.findMany({
+/** Remove archived objects before the service row cascade-deletes the pointers. */
+export async function deleteArchivedContainerLogs(serviceId: string): Promise<void> {
+  try {
+    const rows = await prisma.serviceContainerLog.findMany({
+      where: { serviceId },
+      select: { objectKey: true },
+    });
+    await Promise.all(rows.map((row) => deletePlatformObject(row.objectKey).catch(() => undefined)));
+  } catch (err) {
+    console.error(
+      '[container-logs] delete archives failed:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+export async function listContainerLogArchives(serviceId: string) {
+  const rows = await prisma.serviceContainerLog.findMany({
     where: { serviceId },
     orderBy: { capturedAt: 'desc' },
     select: {
@@ -108,7 +148,27 @@ export function listContainerLogArchives(serviceId: string) {
       containerName: true,
       reason: true,
       capturedAt: true,
-      content: true,
+      objectKey: true,
     },
   });
+
+  const archives = [];
+  for (const row of rows) {
+    try {
+      const body = await getPlatformObject(row.objectKey);
+      archives.push({
+        id: row.id,
+        containerName: row.containerName,
+        reason: row.reason,
+        capturedAt: row.capturedAt,
+        content: body.toString('utf8'),
+      });
+    } catch (err) {
+      console.error(
+        '[container-logs] read archive failed:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return archives;
 }
