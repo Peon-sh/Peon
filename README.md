@@ -8,6 +8,17 @@ Peon is the open alternative to Vercel, Heroku, and managed PaaS: git push to de
 
 Security reports: see [SECURITY.md](./SECURITY.md).
 
+## Production: retained container logs
+
+Previous container output is copied to S3 when a deploy, rolling swap, or disk cleanup removes that container. Set this before the release that includes the change, on the services that are about to run it.
+
+- Set `S3_BUCKET` on the **web** service and the **worker**. The worker writes the archive during a deploy. The web app reads it when someone opens the Logs tab. Scheduler and socket do not need it.
+- Use one bucket. Archives are private objects under `container-logs/`, in the same bucket as screenshots and avatars. Create that bucket only when production does not already have one, then put its name in `S3_BUCKET`.
+- Credentials stay the existing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, unless `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` are set. Those keys need `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on the bucket. This prefix does not need a public-read policy or a CORS change.
+- Deploying the web app runs `prisma migrate deploy` and creates the `ServiceContainerLog` pointer table. No separate migration step.
+
+Deploys still succeed when `S3_BUCKET` is empty. Previous container logs are not kept in that case.
+
 ## Author
 
 **[Hiren Kavad (hironate)](https://github.com/hironate)**
