@@ -270,7 +270,7 @@ export const ServerOperations = {
       `Running docker cleanup (volumes=${deleteUnusedVolumes}, networks=${deleteUnusedNetworks}).`,
     );
     const target = await sshTargetForServer(serverId);
-    await archiveStoppedServiceContainers(target);
+    await archiveStoppedServiceContainers(target, serverId);
     await sshPool.execStream(
       target,
       cleanupScript({ deleteUnusedVolumes, deleteUnusedNetworks }),

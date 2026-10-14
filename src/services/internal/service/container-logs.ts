@@ -55,16 +55,21 @@ export async function archiveContainerLogs(input: {
       cacheControl: 'private, no-store',
     });
 
-    await prisma.serviceContainerLog.create({
-      data: {
-        id,
-        serviceId: input.serviceId,
-        deploymentId: input.deploymentId ?? null,
-        containerName,
-        reason: input.reason,
-        objectKey,
-      },
-    });
+    try {
+      await prisma.serviceContainerLog.create({
+        data: {
+          id,
+          serviceId: input.serviceId,
+          deploymentId: input.deploymentId ?? null,
+          containerName,
+          reason: input.reason,
+          objectKey,
+        },
+      });
+    } catch (err) {
+      await deletePlatformObject(objectKey).catch(() => undefined);
+      throw err;
+    }
 
     const extras = await prisma.serviceContainerLog.findMany({
       where: { serviceId: input.serviceId },
@@ -102,12 +107,30 @@ export function stoppedPeonContainersScript(): string {
   ].join('\n');
 }
 
-/** Archive every stopped Peon container on a server before disk cleanup prunes it. */
-export async function archiveStoppedServiceContainers(target: SshTarget): Promise<void> {
+function asContainerLogReason(value: string): ContainerLogReason {
+  if (value === 'rolling' || value === 'cleanup' || value === 'deploy') return value;
+  return 'deploy';
+}
+
+/**
+ * Archive stopped Peon containers on this server before disk cleanup prunes them.
+ * A container label is not proof of ownership: only services placed on `serverId`
+ * are archived, so a foreign label cannot fill another service's archive slots.
+ */
+export async function archiveStoppedServiceContainers(
+  target: SshTarget,
+  serverId: string,
+): Promise<void> {
   try {
+    const services = await prisma.service.findMany({
+      where: { serverId, deletedAt: null },
+      select: { id: true },
+    });
+    const owned = new Set(services.map((service) => service.id));
     const listed = await sshPool.exec(target, stoppedPeonContainersScript());
     if (listed.code !== 0) return;
     for (const row of parseStoppedContainerInspect(listed.stdout)) {
+      if (!owned.has(row.serviceId)) continue;
       await archiveContainerLogs({
         target,
         serviceId: row.serviceId,
@@ -152,23 +175,25 @@ export async function listContainerLogArchives(serviceId: string) {
     },
   });
 
-  const archives = [];
-  for (const row of rows) {
-    try {
-      const body = await getPlatformObject(row.objectKey);
-      archives.push({
-        id: row.id,
-        containerName: row.containerName,
-        reason: row.reason,
-        capturedAt: row.capturedAt,
-        content: body.toString('utf8'),
-      });
-    } catch (err) {
-      console.error(
-        '[container-logs] read archive failed:',
-        err instanceof Error ? err.message : err,
-      );
-    }
-  }
-  return archives;
+  const loaded = await Promise.all(
+    rows.map(async (row) => {
+      try {
+        const body = await getPlatformObject(row.objectKey);
+        return {
+          id: row.id,
+          containerName: row.containerName,
+          reason: asContainerLogReason(row.reason),
+          capturedAt: row.capturedAt,
+          content: body.toString('utf8'),
+        };
+      } catch (err) {
+        console.error(
+          '[container-logs] read archive failed:',
+          err instanceof Error ? err.message : err,
+        );
+        return null;
+      }
+    }),
+  );
+  return loaded.filter((row) => row !== null);
 }

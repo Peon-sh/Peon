@@ -20,6 +20,7 @@ import {
 } from '@/lib/docker/image-cleanup';
 import { mergeDockerRunIntoService } from '@/lib/docker/run-options';
 import { dockerExecShellCommand, shellSingleQuote } from '@/lib/shell/quote';
+import { shouldArchiveReplacedContainer } from '@/lib/container-log-text';
 import { archiveContainerLogs } from '@/services/internal/service/container-logs';
 import { stringify, parse as parseYaml } from 'yaml';
 import { engineSpec, resolveDatabaseDataPath } from '@/lib/docker/databases';
@@ -796,10 +797,9 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     // `compose up` recreates a stable container name and deletes its log file
     // with it. Rolling updates keep the old container until the swap below.
     const archivedContainers = new Set<string>();
-    if (!useRolling) {
-      let existing = isPreview ? name : svc.activeContainerName?.trim() || name;
+    if (shouldArchiveReplacedContainer({ useRolling, isPreview })) {
+      let existing = svc.activeContainerName?.trim() || name;
       if (
-        !isPreview &&
         svc.kind === 'COMPOSE' &&
         svc.settings?.isRawComposeDeploymentEnabled &&
         composePrimaryKey

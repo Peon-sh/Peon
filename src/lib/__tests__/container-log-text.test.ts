@@ -5,6 +5,7 @@ import {
   CONTAINER_LOG_MAX_BYTES,
   CONTAINER_LOG_MAX_LINES,
   parseStoppedContainerInspect,
+  shouldArchiveReplacedContainer,
 } from '../container-log-text';
 
 describe('capContainerLog', () => {
@@ -24,7 +25,26 @@ describe('capContainerLog', () => {
 
   it('trims a single oversized line to the byte cap', () => {
     const capped = capContainerLog('x'.repeat(CONTAINER_LOG_MAX_BYTES + 50));
-    expect(new TextEncoder().encode(capped).length).toBe(CONTAINER_LOG_MAX_BYTES);
+    expect(Buffer.byteLength(capped, 'utf8')).toBe(CONTAINER_LOG_MAX_BYTES);
+  });
+
+  it('trims multi-byte text without splitting a character', () => {
+    const capped = capContainerLog('€'.repeat(CONTAINER_LOG_MAX_BYTES));
+    const bytes = Buffer.byteLength(capped, 'utf8');
+    expect(bytes).toBeLessThanOrEqual(CONTAINER_LOG_MAX_BYTES);
+    expect(bytes).toBeGreaterThan(CONTAINER_LOG_MAX_BYTES - 3);
+    expect(capped.endsWith('€')).toBe(true);
+  });
+});
+
+describe('shouldArchiveReplacedContainer', () => {
+  it('skips preview deploys so they do not replace production archives', () => {
+    expect(shouldArchiveReplacedContainer({ useRolling: false, isPreview: true })).toBe(false);
+  });
+
+  it('archives a normal recreate and leaves rolling swaps until the old container is removed', () => {
+    expect(shouldArchiveReplacedContainer({ useRolling: false, isPreview: false })).toBe(true);
+    expect(shouldArchiveReplacedContainer({ useRolling: true, isPreview: false })).toBe(false);
   });
 });
 
