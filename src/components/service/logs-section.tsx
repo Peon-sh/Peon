@@ -10,11 +10,14 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { getServiceLogArchives, getServiceLogs } from '@/services/api/service';
 import { combineServiceLogs } from '@/lib/container-log-text';
 
+const STICK_TO_BOTTOM_PX = 48;
+
 export function LogsSection({ serviceId }: { serviceId: string }) {
   const [tail, setTail] = useState(200);
   const [follow, setFollow] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
 
   const { data, isFetching, refetch, error } = useQuery({
     queryKey: ['service-logs', serviceId, tail],
@@ -30,8 +33,11 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
   const logText = combineServiceLogs(archives.data ?? [], data?.lines ?? []);
 
   useEffect(() => {
-    if (follow) endRef.current?.scrollIntoView({ block: 'end' });
-  }, [logText, follow]);
+    if (!stickToBottomRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [logText]);
 
   const downloadLogs = async () => {
     setDownloading(true);
@@ -104,7 +110,15 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
             'Logs'
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div
+          ref={containerRef}
+          className="min-h-0 flex-1 overflow-auto p-4"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            stickToBottomRef.current =
+              el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
+          }}
+        >
           <pre
             className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${error ? 'text-destructive' : 'text-foreground'}`}
           >
@@ -116,7 +130,6 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
                   ? 'Loading logs…'
                   : 'No log output. Is the container running?'}
           </pre>
-          <div ref={endRef} />
         </div>
       </div>
     </div>
