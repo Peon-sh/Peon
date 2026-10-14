@@ -1,3 +1,4 @@
+import type { ContainerLogReason } from '@/lib/container-log-text';
 import { api, unwrap } from '@/lib/http/axios';
 
 import type { ServiceControlAction } from '@/lib/service-control';
@@ -444,7 +445,7 @@ export function getServiceLogs(serviceId: string, tail = 200) {
 export interface ServiceLogArchive {
   id: string;
   containerName: string;
-  reason: string;
+  reason: ContainerLogReason;
   capturedAt: string;
   content: string;
 }

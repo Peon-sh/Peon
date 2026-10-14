@@ -87,9 +87,12 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
               void refetch();
               void archives.refetch();
             }}
-            disabled={isFetching}
+            disabled={isFetching || archives.isFetching}
           >
-            <RotateCw className={`size-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
+            <RotateCw
+              className={`size-3.5 ${isFetching || archives.isFetching ? 'animate-spin' : ''}`}
+            />{' '}
+            Refresh
           </Button>
         </div>
       </div>
@@ -112,7 +115,7 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
               ? `Failed to fetch logs: ${error instanceof Error ? error.message : 'unknown error'}`
               : logText
                 ? logText
-                : isFetching
+                : isFetching || archives.isFetching
                   ? 'Loading logs…'
                   : 'No log output. Is the container running?'}
           </pre>

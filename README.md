@@ -8,22 +8,6 @@ Peon is the open alternative to Vercel, Heroku, and managed PaaS: git push to de
 
 Security reports: see [SECURITY.md](./SECURITY.md).
 
-## Production: retained container logs
-
-Add this one environment variable on the **web** service and the **worker** before releasing this change:
-
-```bash
-S3_BUCKET=your-bucket-name
-```
-
-| Variable | Value |
-|----------|--------|
-| `S3_BUCKET` | The S3 bucket name only. Example: `peon-assets`. A URL (`https://…`) or an ARN (`arn:aws:s3:::…`) will not work. |
-
-Use the bucket production already uses for screenshots and avatars. Create one bucket and put that name here when production does not have one yet.
-
-No other new variable. The existing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are used. Scheduler and socket do not need `S3_BUCKET`. The web deploy creates the database table. If this variable is missing, deploys still succeed and previous container logs are not saved.
-
 ## Author
 
 **[Hiren Kavad (hironate)](https://github.com/hironate)**
@@ -114,6 +98,8 @@ docker           Dockerfile and ElasticMQ config
 |--------|---------|
 | `staging` | Integration / pre-production |
 | `main` | Production |
+
+Retained container logs need one environment variable. See [Deployment & operations](./docs/architecture.md#20-deployment--operations).
 
 ### Promote staging → main
 

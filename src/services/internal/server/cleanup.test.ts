@@ -17,6 +17,9 @@ vi.mock('@/lib/prisma', () => ({
     server: {
       findUnique: vi.fn(),
     },
+    service: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     workspaceAuditLog: {
       create: vi.fn(),
     },
