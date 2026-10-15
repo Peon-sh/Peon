@@ -9,12 +9,14 @@ import { Switch } from '@/components/ui/switch';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { getServiceLogArchives, getServiceLogs } from '@/services/api/service';
 import { combineServiceLogs } from '@/lib/container-log-text';
+import { isStuckToBottom } from '@/components/service/log-scroll';
 
 export function LogsSection({ serviceId }: { serviceId: string }) {
   const [tail, setTail] = useState(200);
   const [follow, setFollow] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
 
   const { data, isFetching, refetch, error } = useQuery({
     queryKey: ['service-logs', serviceId, tail],
@@ -30,8 +32,19 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
   const logText = combineServiceLogs(archives.data ?? [], data?.lines ?? []);
 
   useEffect(() => {
-    if (follow) endRef.current?.scrollIntoView({ block: 'end' });
-  }, [logText, follow]);
+    if (!stickToBottomRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [logText, tail]);
+
+  const onFollowChange = (next: boolean) => {
+    setFollow(next);
+    stickToBottomRef.current = next;
+    if (!next) return;
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
 
   const downloadLogs = async () => {
     setDownloading(true);
@@ -63,7 +76,10 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
           <div className="w-44">
             <SearchableSelect
               value={String(tail)}
-              onValueChange={(v) => setTail(Number(v))}
+              onValueChange={(v) => {
+                stickToBottomRef.current = true;
+                setTail(Number(v));
+              }}
               placeholder="Select log lines"
               size="sm"
               options={[100, 200, 500, 1000, 2000].map((n) => ({
@@ -73,7 +89,7 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
             />
           </div>
           <label className="text-muted-foreground flex items-center gap-2 text-sm">
-            <Switch checked={follow} onCheckedChange={setFollow} /> Auto-refresh
+            <Switch checked={follow} onCheckedChange={onFollowChange} /> Auto-refresh
           </label>
         </div>
         <div className="flex items-center gap-2">
@@ -107,7 +123,18 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
             'Logs'
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div
+          ref={containerRef}
+          className="min-h-0 flex-1 overflow-auto p-4"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            stickToBottomRef.current = isStuckToBottom(
+              el.scrollHeight,
+              el.scrollTop,
+              el.clientHeight,
+            );
+          }}
+        >
           <pre
             className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${error ? 'text-destructive' : 'text-foreground'}`}
           >
@@ -119,7 +146,6 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
                   ? 'Loading logs…'
                   : 'No log output. Is the container running?'}
           </pre>
-          <div ref={endRef} />
         </div>
       </div>
     </div>
