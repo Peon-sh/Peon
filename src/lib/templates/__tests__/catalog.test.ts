@@ -197,6 +197,20 @@ describe('template catalog compose', () => {
     expect(s3.services?.['minio-init']?.image).toBe(image);
   });
 
+  it('lets Plane override its public URL and allows that origin in CORS', () => {
+    const compose = getTemplate('plane')!.compose;
+    expect(compose).toContain("APP_DOMAIN: '${APP_DOMAIN:-${SERVICE_URL_PLANE}}'");
+    expect(compose).toContain('APP_DOMAIN=${APP_DOMAIN:-${SERVICE_URL_PLANE}}');
+    expect(compose).toContain("WEB_URL: '${WEB_URL:-${SERVICE_URL_PLANE}}'");
+    expect(compose).toContain(
+      "CORS_ALLOWED_ORIGINS: '${CORS_ALLOWED_ORIGINS:-${SERVICE_URL_PLANE}}'",
+    );
+    expect(compose).not.toContain('CORS_ALLOWED_ORIGINS:-http://localhost');
+    expect(compose).not.toContain("APP_DOMAIN: '${SERVICE_URL_PLANE}'");
+    expect(compose).not.toContain('APP_DOMAIN=${SERVICE_URL_PLANE}');
+    expect(compose).not.toContain("WEB_URL: '${SERVICE_URL_PLANE}'");
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
       const detail = getTemplate(t.slug)!;
