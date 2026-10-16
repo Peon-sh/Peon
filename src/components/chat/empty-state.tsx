@@ -25,11 +25,11 @@ export function EmptyState({
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
         <AppEmptyState
           icon={Brain}
-          title="Configure an LLM to start chatting"
+          title="Chat is not configured"
           description={
             canConfigureLlms
-              ? 'This workspace needs an OpenAI or Anthropic API key before the assistant can run.'
-              : 'This workspace needs an OpenAI or Anthropic API key before the assistant can run. Ask a workspace owner or admin to add one under Settings → LLMs.'
+              ? 'Set OPENAI_API_KEY on the Peon instance, or add a workspace API key under /settings/llm.'
+              : 'The assistant is not configured on this instance yet. Ask a workspace owner or admin.'
           }
           action={
             canConfigureLlms ? (

@@ -2,6 +2,7 @@ import type { LlmProvider } from '@/lib/prisma';
 import { prisma } from '@/lib/prisma';
 import { decrypt, encrypt } from '@/lib/crypto/encryption';
 import { AppError, NotFoundError } from '@/lib/errors';
+import { platformOpenAiApiKey, serverEnv } from '@/lib/env';
 import type { ChatProviderId } from './providers/types';
 
 export function toPrismaLlmProvider(provider: ChatProviderId): LlmProvider {
@@ -34,6 +35,8 @@ export type SupportedModelDto = {
 
 export type ChatStatusDto = {
   ready: boolean;
+  /** True when OpenAI chat runs on the platform key rather than a workspace key. */
+  platformManaged: boolean;
   providersConfigured: ChatProviderId[];
   models: SupportedModelDto[];
 };
@@ -161,17 +164,18 @@ export class LlmSettingsService {
         },
       },
     });
-    if (!row) {
-      throw new AppError(
-        `${provider} API key is not configured for this workspace`,
-        503,
-        'CHAT_NOT_CONFIGURED',
-      );
-    }
-    return decrypt(row.apiKey);
+    if (row) return decrypt(row.apiKey);
+    const platformKey = provider === 'openai' ? platformOpenAiApiKey() : null;
+    if (platformKey) return platformKey;
+    throw new AppError(
+      `${provider} API key is not configured for this workspace`,
+      503,
+      'CHAT_NOT_CONFIGURED',
+    );
   }
 
   static async assertChatReady(workspaceId: string): Promise<boolean> {
+    if (platformOpenAiApiKey()) return true;
     const count = await prisma.workspaceLlmCredential.count({ where: { workspaceId } });
     return count > 0;
   }
@@ -184,11 +188,27 @@ export class LlmSettingsService {
     const providersConfigured = credentials
       .filter((item) => item.configured)
       .map((item) => item.provider);
+    const platformManaged = !providersConfigured.includes('openai') && !!platformOpenAiApiKey();
+    if (platformManaged) providersConfigured.unshift('openai');
     const configured = new Set(providersConfigured);
-    const models = allModels.filter((model) => configured.has(model.provider));
+
+    let models = allModels.filter((model) => configured.has(model.provider));
+    if (platformManaged) {
+      // The platform key serves one model; fall back to the full OpenAI list if it is unknown.
+      const platformModelId = serverEnv().OPENAI_CHAT_MODEL;
+      const hasPlatformModel = models.some(
+        (model) => model.provider === 'openai' && model.modelId === platformModelId,
+      );
+      if (hasPlatformModel) {
+        models = models.filter(
+          (model) => model.provider !== 'openai' || model.modelId === platformModelId,
+        );
+      }
+    }
 
     return {
       ready: providersConfigured.length > 0,
+      platformManaged,
       providersConfigured,
       models,
     };
@@ -206,7 +226,7 @@ export class LlmSettingsService {
     const status = await this.getChatStatus(workspaceId);
     if (!status.ready || status.models.length === 0) {
       throw new AppError(
-        'Configure an LLM API key in workspace settings before chatting',
+        'Chat is not configured on this instance',
         503,
         'CHAT_NOT_CONFIGURED',
       );
