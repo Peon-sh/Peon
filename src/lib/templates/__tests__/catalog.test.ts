@@ -270,6 +270,44 @@ describe('template catalog compose', () => {
     expect(svc?.healthcheck?.test ?? []).not.toContain('--version');
   });
 
+  it('lets Yamtrack override its public URLs and uses stack-specific Redis', () => {
+    const urls = 'URLS=${URLS:-${SERVICE_URL_YAMTRACK}}';
+    const redisUrl = 'REDIS_URL=redis://yamtrack-redis:6379';
+    for (const slug of ['yamtrack', 'yamtrack-with-postgresql']) {
+      const doc = parse(getTemplate(slug)!.compose) as {
+        services?: Record<
+          string,
+          { environment?: string[]; depends_on?: Record<string, { condition?: string }> }
+        >;
+      };
+      const env = doc.services?.yamtrack?.environment ?? [];
+      expect(env, slug).toContain(urls);
+      expect(env.join('\n'), slug).not.toContain('URLS=${SERVICE_URL_YAMTRACK}');
+      expect(env, slug).toContain(redisUrl);
+      expect(doc.services?.['yamtrack-redis'], slug).toBeTruthy();
+      expect(doc.services?.redis, slug).toBeUndefined();
+      expect(doc.services?.yamtrack?.depends_on?.['yamtrack-redis']?.condition, slug).toBe(
+        'service_healthy',
+      );
+    }
+
+    const pg = parse(getTemplate('yamtrack-with-postgresql')!.compose) as {
+      services?: Record<
+        string,
+        {
+          environment?: string[];
+          depends_on?: Record<string, { condition?: string }>;
+        }
+      >;
+    };
+    expect(pg.services?.yamtrack?.environment).toContain('DB_HOST=yamtrack-postgres');
+    expect(pg.services?.yamtrack?.depends_on?.['yamtrack-postgres']?.condition).toBe(
+      'service_healthy',
+    );
+    expect(pg.services?.['yamtrack-postgres']).toBeTruthy();
+    expect(pg.services).not.toHaveProperty('postgres');
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
       if (t.slug === 'cloudflared') continue;
