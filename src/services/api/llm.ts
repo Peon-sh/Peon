@@ -18,6 +18,7 @@ export type SupportedChatModel = {
 
 export type ChatStatus = {
   ready: boolean;
+  platformManaged: boolean;
   providersConfigured: LlmProviderId[];
   models: SupportedChatModel[];
 };

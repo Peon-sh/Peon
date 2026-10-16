@@ -24,7 +24,7 @@ export function resolveLanguageModel(config: ChatModelConfig): {
 } {
   if (!config.apiKey?.trim()) {
     throw new AppError(
-      'Configure an LLM API key in workspace settings before chatting',
+      'Chat is not configured on this instance',
       503,
       'CHAT_NOT_CONFIGURED',
     );

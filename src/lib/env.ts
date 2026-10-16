@@ -66,6 +66,11 @@ const serverSchema = z.object({
 
   SENTRY_DSN: z.string().optional(),
 
+  /** Platform-managed OpenAI key for workspace chat (lets every workspace chat without its own key). */
+  OPENAI_API_KEY: z.string().optional(),
+  /** Model served by the platform key; must match a `ChatSupportedModel.modelId`. */
+  OPENAI_CHAT_MODEL: z.string().default('gpt-5.6-sol'),
+
   /** Stripe Billing (optional — absent key disables paywalls for self-host). */
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
@@ -108,6 +113,13 @@ export function isPlatformGithubConfigured(env?: ServerEnv): boolean {
     e.GITHUB_APP_WEBHOOK_SECRET?.trim() &&
     e.GITHUB_APP_PRIVATE_KEY?.trim()
   );
+}
+
+/** Platform OpenAI key, or null when workspaces must bring their own. */
+export function platformOpenAiApiKey(env?: ServerEnv): string | null {
+  const e = env ?? serverEnv();
+  const key = e.OPENAI_API_KEY?.trim();
+  return key ? key : null;
 }
 
 /** True when Stripe secret is configured (Cloud billing / paywalls on). */
