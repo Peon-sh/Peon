@@ -21,6 +21,9 @@ describe('PlatformS3Keys', () => {
     expect(PlatformS3Keys.deploymentPreview('svc-uuid', 'dep-id')).toBe(
       'deployments/svc-uuid/dep-id/preview.png',
     );
+    expect(PlatformS3Keys.containerLog('svc-id', 'archive-id')).toBe(
+      'container-logs/svc-id/archive-id.log',
+    );
   });
 });
 

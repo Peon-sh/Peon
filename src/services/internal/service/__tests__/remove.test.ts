@@ -10,18 +10,24 @@ vi.mock('@/services/internal/deploy/engine', () => ({
   teardownService: vi.fn(),
 }));
 
+vi.mock('../container-logs', () => ({
+  deleteArchivedContainerLogs: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/services/internal/audit/audit', () => ({
   AuditService: { record: vi.fn() },
 }));
 
 import { prisma } from '@/lib/prisma';
 import { teardownService } from '@/services/internal/deploy/engine';
+import { deleteArchivedContainerLogs } from '../container-logs';
 import { AuditService } from '@/services/internal/audit/audit';
 import { remove } from '../lifecycle';
 
 const findUnique = vi.mocked(prisma.service.findUnique);
 const serviceDelete = vi.mocked(prisma.service.delete);
 const teardown = vi.mocked(teardownService);
+const deleteArchives = vi.mocked(deleteArchivedContainerLogs);
 const record = vi.mocked(AuditService.record);
 
 const svc = {
@@ -43,8 +49,12 @@ describe('service.remove', () => {
     await remove('svc1');
 
     expect(teardown.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteArchives.mock.invocationCallOrder[0]!,
+    );
+    expect(deleteArchives.mock.invocationCallOrder[0]).toBeLessThan(
       serviceDelete.mock.invocationCallOrder[0]!,
     );
+    expect(deleteArchives).toHaveBeenCalledWith('svc1');
     expect(teardown).toHaveBeenCalledWith('svc1');
     expect(serviceDelete).toHaveBeenCalledWith({ where: { id: 'svc1' } });
     expect(record).toHaveBeenCalledWith(

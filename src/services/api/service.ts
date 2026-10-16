@@ -1,3 +1,4 @@
+import type { ContainerLogReason } from '@/lib/container-log-text';
 import { api, unwrap } from '@/lib/http/axios';
 
 import type { ServiceControlAction } from '@/lib/service-control';
@@ -439,6 +440,18 @@ export function getServiceLogs(serviceId: string, tail = 200) {
   return unwrap<{ container: string; lines: string[] }>(
     api.get(`/services/${serviceId}/logs`, { params }),
   );
+}
+
+export interface ServiceLogArchive {
+  id: string;
+  containerName: string;
+  reason: ContainerLogReason;
+  capturedAt: string;
+  content: string;
+}
+
+export function getServiceLogArchives(serviceId: string) {
+  return unwrap<ServiceLogArchive[]>(api.get(`/services/${serviceId}/logs/archives`));
 }
 
 export interface ServiceTerminalSession {

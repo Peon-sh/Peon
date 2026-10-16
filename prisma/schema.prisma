@@ -673,6 +673,7 @@ model Service {
   scheduledBackups ScheduledBackup[]
   webhooks         ServiceWebhook[]
   tags             TagsOnServices[]
+  containerLogs    ServiceContainerLog[]
 
   @@index([projectId])
   @@index([serverId])
@@ -823,9 +824,29 @@ model Deployment {
   leaseUntil  DateTime?
 
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  containerLogs ServiceContainerLog[]
 
   @@index([serviceId])
   @@index([status])
+}
+
+/// Pointer to a container log archive. The text lives in a private S3 object
+/// (`objectKey`); this row only records which service it belongs to.
+model ServiceContainerLog {
+  id            String   @id @default(cuid())
+  serviceId     String
+  deploymentId  String?
+  containerName String
+  /// deploy | rolling | cleanup
+  reason        String
+  /// Private S3 object holding the log text. The row is only the pointer.
+  objectKey     String
+  capturedAt    DateTime @default(now())
+
+  service    Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  deployment Deployment? @relation(fields: [deploymentId], references: [id], onDelete: SetNull)
+
+  @@index([serviceId, capturedAt])
 }
 
 model ServicePreview {

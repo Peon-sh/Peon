@@ -699,6 +699,22 @@ Processes to run in production:
 3. 1 × schedule
 4. 1 × socket (if terminals enabled)
 
+### Retained container logs
+
+Previous container output is copied to S3 when a deploy, rolling swap, or disk cleanup removes that container. Add this one environment variable on the **web** service and the **worker** before releasing that change:
+
+```bash
+S3_BUCKET=your-bucket-name
+```
+
+| Variable | Value |
+|----------|--------|
+| `S3_BUCKET` | The S3 bucket name only. Example: `peon-assets`. A URL (`https://…`) or an ARN (`arn:aws:s3:::…`) will not work. |
+
+Use the bucket production already uses for screenshots and avatars. Create one bucket and put that name here when production does not have one yet.
+
+No other new variable. The existing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are used. Scheduler and socket do not need `S3_BUCKET`. The web deploy creates the database table. If this variable is missing, deploys still succeed and previous container logs are not saved.
+
 ---
 
 ## 21. Invariants & conventions

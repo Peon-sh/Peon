@@ -99,6 +99,8 @@ docker           Dockerfile and ElasticMQ config
 | `staging` | Integration / pre-production |
 | `main` | Production |
 
+Retained container logs need one environment variable. See [Deployment & operations](./docs/architecture.md#20-deployment--operations).
+
 ### Promote staging → main
 
 ```bash

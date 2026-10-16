@@ -26,6 +26,7 @@ import { AuditService } from '@/services/internal/audit/audit';
 import { recordServiceAudit } from '@/services/internal/audit/service-audit';
 import { ServiceRuntime } from './runtime';
 import { teardownService } from '@/services/internal/deploy/engine';
+import { deleteArchivedContainerLogs } from './container-logs';
 
 const SERVICE_SETTING_FIELDS = [
   'isAutoDeployEnabled',
@@ -591,6 +592,7 @@ export async function remove(serviceId: string) {
       err instanceof Error ? err.message : err,
     );
   }
+  await deleteArchivedContainerLogs(serviceId);
   await prisma.service.delete({ where: { id: serviceId } });
   if (svc) {
     await AuditService.record({

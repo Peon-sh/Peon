@@ -5,11 +5,15 @@ import { awsRegion } from '@/lib/aws/credentials';
  * Platform S3 key layout for app-owned assets (not workspace backup storages).
  *
  *   deployments/{serviceUuid}/{deploymentId}/preview.png
+ *   container-logs/{serviceId}/{archiveId}.log
  *   users/{userId}/avatar.{ext}
  */
 export const PlatformS3Keys = {
   deploymentPreview: (serviceUuid: string, deploymentId: string) =>
     `deployments/${serviceUuid}/${deploymentId}/preview.png`,
+  /** Private log archive. Not public-read; the Logs API reads it server-side. */
+  containerLog: (serviceId: string, archiveId: string) =>
+    `container-logs/${serviceId}/${archiveId}.log`,
   userAvatar: (userId: string, ext: string) => {
     const safe = ext.replace(/^\./, '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
     return `users/${userId}/avatar.${safe}`;

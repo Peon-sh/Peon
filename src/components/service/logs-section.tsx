@@ -7,29 +7,55 @@ import { RotateCw, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { getServiceLogs } from '@/services/api/service';
+import { getServiceLogArchives, getServiceLogs } from '@/services/api/service';
+import { combineServiceLogs } from '@/lib/container-log-text';
+import { isStuckToBottom } from '@/components/service/log-scroll';
 
 export function LogsSection({ serviceId }: { serviceId: string }) {
   const [tail, setTail] = useState(200);
   const [follow, setFollow] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
 
   const { data, isFetching, refetch, error } = useQuery({
     queryKey: ['service-logs', serviceId, tail],
     queryFn: () => getServiceLogs(serviceId, tail),
     refetchInterval: follow ? 5000 : false,
   });
+  const archives = useQuery({
+    queryKey: ['service-log-archives', serviceId],
+    queryFn: () => getServiceLogArchives(serviceId),
+    staleTime: 30_000,
+  });
+
+  const logText = combineServiceLogs(archives.data ?? [], data?.lines ?? []);
 
   useEffect(() => {
-    if (follow) endRef.current?.scrollIntoView({ block: 'end' });
-  }, [data, follow]);
+    if (!stickToBottomRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [logText, tail]);
+
+  const onFollowChange = (next: boolean) => {
+    setFollow(next);
+    stickToBottomRef.current = next;
+    if (!next) return;
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
 
   const downloadLogs = async () => {
     setDownloading(true);
     try {
-      const full = await getServiceLogs(serviceId, 0);
-      const blob = new Blob([full.lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+      const [full, previous] = await Promise.all([
+        getServiceLogs(serviceId, 0),
+        getServiceLogArchives(serviceId),
+      ]);
+      const blob = new Blob([combineServiceLogs(previous, full.lines)], {
+        type: 'text/plain;charset=utf-8',
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -50,7 +76,10 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
           <div className="w-44">
             <SearchableSelect
               value={String(tail)}
-              onValueChange={(v) => setTail(Number(v))}
+              onValueChange={(v) => {
+                stickToBottomRef.current = true;
+                setTail(Number(v));
+              }}
               placeholder="Select log lines"
               size="sm"
               options={[100, 200, 500, 1000, 2000].map((n) => ({
@@ -60,15 +89,26 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
             />
           </div>
           <label className="text-muted-foreground flex items-center gap-2 text-sm">
-            <Switch checked={follow} onCheckedChange={setFollow} /> Auto-refresh
+            <Switch checked={follow} onCheckedChange={onFollowChange} /> Auto-refresh
           </label>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={downloadLogs} disabled={downloading}>
             <Download className="size-3.5" /> Download full logs
           </Button>
-          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-            <RotateCw className={`size-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              void refetch();
+              void archives.refetch();
+            }}
+            disabled={isFetching || archives.isFetching}
+          >
+            <RotateCw
+              className={`size-3.5 ${isFetching || archives.isFetching ? 'animate-spin' : ''}`}
+            />{' '}
+            Refresh
           </Button>
         </div>
       </div>
@@ -83,19 +123,29 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
             'Logs'
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div
+          ref={containerRef}
+          className="min-h-0 flex-1 overflow-auto p-4"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            stickToBottomRef.current = isStuckToBottom(
+              el.scrollHeight,
+              el.scrollTop,
+              el.clientHeight,
+            );
+          }}
+        >
           <pre
             className={`font-mono text-sm leading-relaxed whitespace-pre-wrap ${error ? 'text-destructive' : 'text-foreground'}`}
           >
             {error
               ? `Failed to fetch logs: ${error instanceof Error ? error.message : 'unknown error'}`
-              : data?.lines.length
-                ? data.lines.join('\n')
-                : isFetching
+              : logText
+                ? logText
+                : isFetching || archives.isFetching
                   ? 'Loading logs…'
                   : 'No log output. Is the container running?'}
           </pre>
-          <div ref={endRef} />
         </div>
       </div>
     </div>
