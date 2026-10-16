@@ -240,6 +240,43 @@ describe('template catalog compose', () => {
     expect(env.join('\n')).not.toContain('VIKUNJA_SERVICE_JWTSECRET');
   });
 
+  it('lets PostgreSQL Vikunja write its files dir and override its public URL', () => {
+    const doc = parse(getTemplate('vikunja-with-postgresql')!.compose) as {
+      services?: {
+        vikunja?: {
+          environment?: string[];
+          volumes?: string[];
+          depends_on?: {
+            init?: { condition?: string };
+            postgresql?: { condition?: string };
+          };
+        };
+        init?: { volumes?: string[]; command?: string[] };
+        postgresql?: { volumes?: string[] };
+      };
+    };
+    const files = 'vikunja-files:/app/vikunja/files';
+    expect(doc.services?.vikunja?.volumes).toContain(files);
+    expect(doc.services?.init?.volumes).toContain(files);
+    expect(doc.services?.vikunja?.volumes ?? []).not.toContain('vikunja-data:/app/vikunja/');
+    expect(doc.services?.vikunja?.depends_on?.init?.condition).toBe(
+      'service_completed_successfully',
+    );
+    expect(doc.services?.vikunja?.depends_on?.postgresql?.condition).toBe('service_healthy');
+    const chown = doc.services?.init?.command?.join(' ') ?? '';
+    expect(chown).toContain('chown -R 1000 /app/vikunja/files');
+    expect(chown).not.toContain('/db');
+    const env = doc.services?.vikunja?.environment ?? [];
+    expect(env).toContain(
+      'VIKUNJA_SERVICE_PUBLICURL=${VIKUNJA_SERVICE_PUBLICURL:-${SERVICE_URL_VIKUNJA}}',
+    );
+    expect(env).toContain('VIKUNJA_SERVICE_SECRET=$SERVICE_PASSWORD_64_SECRET');
+    expect(env.join('\n')).not.toContain('VIKUNJA_SERVICE_JWTSECRET');
+    expect(doc.services?.postgresql?.volumes).toContain(
+      'vikunja-postgresql-data:/var/lib/postgresql/data',
+    );
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
       const detail = getTemplate(t.slug)!;
