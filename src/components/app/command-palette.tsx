@@ -13,7 +13,6 @@ import {
   Users,
   Settings,
   MessageSquare,
-  Brain,
   BookOpen,
   Variable,
 } from 'lucide-react';
@@ -39,7 +38,6 @@ const COMMANDS = [
   { label: 'Shared variables', url: '/shared-variables', icon: Variable },
   { label: 'Settings', url: '/settings/general', icon: Settings },
   { label: 'Members', url: '/settings/members', icon: Users },
-  { label: 'LLM settings', url: '/settings/llm', icon: Brain },
 ];
 
 export function CommandPalette() {

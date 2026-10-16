@@ -134,14 +134,14 @@ Ask Chat questions like “How do I add a domain?” Chat calls `lookup_user_man
 
 **Common errors:** Cannot invite as OWNER — transfer ownership from Danger instead.
 
-### Settings → LLMs
+### LLM keys (hidden page)
 
-**Where:** **Settings → LLMs** (`/settings/llm`)
+**Where:** `/settings/llm` (not in the settings nav).
 
-- Add or remove **OpenAI** and/or **Anthropic** API keys.
-- After keys are saved, Chat can list models from that provider.
+- Chat normally runs on the instance's platform OpenAI key (`OPENAI_API_KEY`, model `OPENAI_CHAT_MODEL`), so workspaces need no key of their own.
+- This page lets a workspace bring its own **OpenAI** and/or **Anthropic** key instead; a workspace OpenAI key replaces the platform key and unlocks the full OpenAI model list.
 
-**Who:** OWNER or ADMIN. Without keys, Chat shows a gate linking here.
+**Who:** OWNER or ADMIN.
 
 ### Settings → Audit
 
@@ -965,7 +965,7 @@ Enable the channel, select events, save, then **Test**.
 ### Basics
 
 - Thread rail: create, select, delete threads.
-- Model picker from workspace LLM credentials (**Settings → LLMs**).
+- Model picker: the platform model by default, or the workspace's own models when it has added keys at `/settings/llm`.
 - Streaming replies; empty-state example prompts.
 
 ### Capabilities
@@ -978,7 +978,7 @@ Enable the channel, select events, save, then **Test**.
 
 ### Gate
 
-If no LLM key is configured, Chat prompts OWNER/ADMIN to add keys under Settings → LLMs.
+If the instance has no `OPENAI_API_KEY` and the workspace has no key of its own, Chat shows a gate; OWNER/ADMIN can add a workspace key at `/settings/llm`.
 
 ---
 
@@ -1068,7 +1068,7 @@ If no LLM key is configured, Chat prompts OWNER/ADMIN to add keys under Settings
 
 ### Chat has no models
 
-- Settings → LLMs: add OpenAI or Anthropic key (OWNER/ADMIN).
+- Set `OPENAI_API_KEY` on the instance, or add a workspace key at `/settings/llm` (OWNER/ADMIN).
 - Pick a model in the Chat header after keys save.
 
 ### Still stuck

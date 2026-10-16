@@ -52,7 +52,7 @@ describe('chat provider factory', () => {
         modelId: 'gpt-5.6-sol',
         apiKey: '',
       }),
-    ).toThrow(/Configure an LLM API key/);
+    ).toThrow(/Chat is not configured/);
   });
 
   it('fails closed for unknown provider', () => {
