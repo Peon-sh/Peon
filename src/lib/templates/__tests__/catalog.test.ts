@@ -166,6 +166,51 @@ describe('template catalog compose', () => {
     expect(entry).toContain('public_baseurl: "${PUBLIC_BASEURL:-${SERVICE_URL_SYNAPSE}}/"');
   });
 
+  it('does not pull removed Docker Hub MinIO images', () => {
+    const removed = /(^|\/)minio\/(minio|mc)(:|$)/;
+    for (const t of templates) {
+      const detail = getTemplate(t.slug)!;
+      const doc = parse(detail.compose) as {
+        services?: Record<string, { image?: unknown }>;
+      };
+      for (const [key, svc] of Object.entries(doc.services ?? {})) {
+        const image = typeof svc.image === 'string' ? svc.image : '';
+        expect(image, `${t.slug}/${key}`).not.toMatch(removed);
+      }
+    }
+  });
+
+  it('lets Penpot override its public URI and buckets S3 with the bundled client', () => {
+    const image = 'ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z';
+    const uri = 'PENPOT_PUBLIC_URI=${PENPOT_PUBLIC_URI:-${SERVICE_URL_FRONTEND_8080}}';
+    for (const slug of ['penpot', 'penpot-with-s3']) {
+      const doc = parse(getTemplate(slug)!.compose) as {
+        services?: Record<string, { environment?: string[] }>;
+      };
+      for (const svc of ['penpot-backend', 'penpot-exporter']) {
+        expect(doc.services?.[svc]?.environment ?? [], `${slug}/${svc}`).toContain(uri);
+      }
+    }
+    const s3 = parse(getTemplate('penpot-with-s3')!.compose) as {
+      services?: { 'minio-init'?: { image?: string } };
+    };
+    expect(s3.services?.['minio-init']?.image).toBe(image);
+  });
+
+  it('lets Plane override its public URL and allows that origin in CORS', () => {
+    const compose = getTemplate('plane')!.compose;
+    expect(compose).toContain("APP_DOMAIN: '${APP_DOMAIN:-${SERVICE_URL_PLANE}}'");
+    expect(compose).toContain('APP_DOMAIN=${APP_DOMAIN:-${SERVICE_URL_PLANE}}');
+    expect(compose).toContain("WEB_URL: '${WEB_URL:-${SERVICE_URL_PLANE}}'");
+    expect(compose).toContain(
+      "CORS_ALLOWED_ORIGINS: '${CORS_ALLOWED_ORIGINS:-${SERVICE_URL_PLANE}}'",
+    );
+    expect(compose).not.toContain('CORS_ALLOWED_ORIGINS:-http://localhost');
+    expect(compose).not.toContain("APP_DOMAIN: '${SERVICE_URL_PLANE}'");
+    expect(compose).not.toContain('APP_DOMAIN=${SERVICE_URL_PLANE}');
+    expect(compose).not.toContain("WEB_URL: '${SERVICE_URL_PLANE}'");
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
       const detail = getTemplate(t.slug)!;
