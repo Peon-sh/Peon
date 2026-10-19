@@ -43,16 +43,25 @@ export interface ConfigSection {
  * override are appended after. To support a new app, add an entry here.
  */
 export const TEMPLATE_CONFIG_OVERRIDES: Record<string, ConfigSection[]> = {
-  // Example: curate labels for a template whose env keys are cryptic.
-  // 'documenso': [
-  //   {
-  //     id: 'documenso',
-  //     title: 'Documenso',
-  //     fields: [
-  //       { key: 'SERVICE_USER_POSTGRES', label: 'PostgreSQL User', source: 'env', required: true },
-  //     ],
-  //   },
-  // ],
+  // The tunnel token is created in the user's Cloudflare account, so it cannot
+  // be generated like SERVICE_PASSWORD_* fields.
+  cloudflared: [
+    {
+      id: 'cloudflared',
+      title: 'Cloudflared',
+      fields: [
+        {
+          key: 'CLOUDFLARE_TUNNEL_TOKEN',
+          label: 'Tunnel token',
+          source: 'env',
+          isPassword: true,
+          required: true,
+          helper:
+            'Cloudflare Zero Trust → Networks → Tunnels → Install connector. Paste the token after --token.',
+        },
+      ],
+    },
+  ],
 };
 
 const MAGIC_FIELD_COMMANDS: Record<string, { label: string; isPassword: boolean }> = {

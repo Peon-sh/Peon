@@ -240,8 +240,39 @@ describe('template catalog compose', () => {
     expect(env.join('\n')).not.toContain('VIKUNJA_SERVICE_JWTSECRET');
   });
 
+  it('requires a Cloudflared tunnel token and does not pin host networking', () => {
+    const doc = parse(getTemplate('cloudflared')!.compose) as {
+      services?: {
+        cloudflared?: {
+          container_name?: string;
+          network_mode?: string;
+          command?: string;
+          environment?: string[];
+          healthcheck?: { test?: string[] };
+        };
+      };
+    };
+    const svc = doc.services?.cloudflared;
+    expect(svc?.container_name).toBeUndefined();
+    expect(svc?.network_mode).toBeUndefined();
+    expect(svc?.command).toBe('tunnel --no-autoupdate --metrics 0.0.0.0:60123 run');
+    expect(svc?.environment).toContain(
+      'TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN (Cloudflare Zero Trust → Tunnels)}',
+    );
+    expect(svc?.healthcheck?.test).toEqual([
+      'CMD',
+      'cloudflared',
+      'tunnel',
+      '--metrics',
+      '127.0.0.1:60123',
+      'ready',
+    ]);
+    expect(svc?.healthcheck?.test ?? []).not.toContain('--version');
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
+      if (t.slug === 'cloudflared') continue;
       const detail = getTemplate(t.slug)!;
       expect(detail.compose, t.slug).not.toMatch(/\$\{[A-Za-z_][A-Za-z0-9_]*\s*:\?/);
     }
