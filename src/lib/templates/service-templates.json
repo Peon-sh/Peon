@@ -789,7 +789,7 @@
   "cyberchef": {
     "documentation": "https://github.com/gchq/CyberChef",
     "slogan": "The Cyber Swiss Army Knife - a web app for encryption, encoding, compression and data analysis",
-    "compose": "c2VydmljZXM6CiAgY3liZXJjaGVmOgogICAgaW1hZ2U6ICdnaGNyLmlvL2djaHEvY3liZXJjaGVmOmxhdGVzdCcKICAgIHBsYXRmb3JtOiBsaW51eC9hbWQ2NAogICAgZW52aXJvbm1lbnQ6CiAgICAgIC0gU0VSVklDRV9VUkxfQ1lCRVJDSEVGXzgwCiAgICB2b2x1bWVzOgogICAgICAtICdjeWJlcmNoZWYtZGF0YTovYXBwL2RhdGEnCiAgICBoZWFsdGhjaGVjazoKICAgICAgdGVzdDoKICAgICAgICAtIENNRAogICAgICAgIC0gY3VybAogICAgICAgIC0gJy1mJwogICAgICAgIC0gJ2h0dHA6Ly8xMjcuMC4wLjE6ODAnCiAgICAgIGludGVydmFsOiAzMHMKICAgICAgdGltZW91dDogMTBzCiAgICAgIHJldHJpZXM6IDMK",
+    "compose": "c2VydmljZXM6CiAgY3liZXJjaGVmOgogICAgaW1hZ2U6ICdnaGNyLmlvL2djaHEvY3liZXJjaGVmOmxhdGVzdCcKICAgIHBsYXRmb3JtOiBsaW51eC9hbWQ2NAogICAgZW52aXJvbm1lbnQ6CiAgICAgIC0gU0VSVklDRV9VUkxfQ1lCRVJDSEVGXzgwODAKICAgIHZvbHVtZXM6CiAgICAgIC0gJ2N5YmVyY2hlZi1kYXRhOi9hcHAvZGF0YScKICAgIGhlYWx0aGNoZWNrOgogICAgICB0ZXN0OgogICAgICAgIC0gQ01ECiAgICAgICAgLSBjdXJsCiAgICAgICAgLSAnLWYnCiAgICAgICAgLSAnaHR0cDovLzEyNy4wLjAuMTo4MDgwJwogICAgICBpbnRlcnZhbDogMzBzCiAgICAgIHRpbWVvdXQ6IDEwcwogICAgICByZXRyaWVzOiAzCg==",
     "tags": [
       "encryption",
       "encoding",
@@ -801,7 +801,7 @@
     "category": "security",
     "logo": "svgs/cyberchef.jpeg",
     "minversion": "0.0.0",
-    "port": "80"
+    "port": "8080"
   },
   "dashy": {
     "documentation": "https://dashy.to/docs",
