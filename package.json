@@ -119,7 +119,8 @@
       "nanoid": ">=3.3.17",
       "deepmerge-ts": ">=8.0.0",
       "mysql2": ">=3.22.0",
-      "@grpc/grpc-js": ">=1.14.5"
+      "@grpc/grpc-js": ">=1.14.5",
+      "follow-redirects": ">=1.16.1"
     },
     "peerDependencyRules": {
       "allowedVersions": {
