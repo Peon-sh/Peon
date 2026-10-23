@@ -211,8 +211,68 @@ describe('template catalog compose', () => {
     expect(compose).not.toContain("WEB_URL: '${SERVICE_URL_PLANE}'");
   });
 
+  it('lets Vikunja write its files dir and override its public URL', () => {
+    const doc = parse(getTemplate('vikunja')!.compose) as {
+      services?: {
+        vikunja?: {
+          environment?: string[];
+          volumes?: string[];
+          depends_on?: { init?: { condition?: string } };
+        };
+        init?: { volumes?: string[]; command?: string[] };
+      };
+    };
+    const files = 'vikunja-files:/app/vikunja/files';
+    expect(doc.services?.vikunja?.volumes).toContain(files);
+    expect(doc.services?.init?.volumes).toContain(files);
+    expect(doc.services?.vikunja?.volumes ?? []).not.toContain('vikunja-data:/app/vikunja/');
+    expect(doc.services?.vikunja?.depends_on?.init?.condition).toBe(
+      'service_completed_successfully',
+    );
+    expect(doc.services?.init?.command?.join(' ')).toContain(
+      'chown -R 1000 /db /app/vikunja/files',
+    );
+    const env = doc.services?.vikunja?.environment ?? [];
+    expect(env).toContain(
+      'VIKUNJA_SERVICE_PUBLICURL=${VIKUNJA_SERVICE_PUBLICURL:-${SERVICE_URL_VIKUNJA}}',
+    );
+    expect(env).toContain('VIKUNJA_SERVICE_SECRET=$SERVICE_PASSWORD_64_SECRET');
+    expect(env.join('\n')).not.toContain('VIKUNJA_SERVICE_JWTSECRET');
+  });
+
+  it('requires a Cloudflared tunnel token and does not pin host networking', () => {
+    const doc = parse(getTemplate('cloudflared')!.compose) as {
+      services?: {
+        cloudflared?: {
+          container_name?: string;
+          network_mode?: string;
+          command?: string;
+          environment?: string[];
+          healthcheck?: { test?: string[] };
+        };
+      };
+    };
+    const svc = doc.services?.cloudflared;
+    expect(svc?.container_name).toBeUndefined();
+    expect(svc?.network_mode).toBeUndefined();
+    expect(svc?.command).toBe('tunnel --no-autoupdate --metrics 0.0.0.0:60123 run');
+    expect(svc?.environment).toContain(
+      'TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN (Cloudflare Zero Trust → Tunnels)}',
+    );
+    expect(svc?.healthcheck?.test).toEqual([
+      'CMD',
+      'cloudflared',
+      'tunnel',
+      '--metrics',
+      '127.0.0.1:60123',
+      'ready',
+    ]);
+    expect(svc?.healthcheck?.test ?? []).not.toContain('--version');
+  });
+
   it('does not use Compose ${VAR:?} required interpolation', () => {
     for (const t of templates) {
+      if (t.slug === 'cloudflared') continue;
       const detail = getTemplate(t.slug)!;
       expect(detail.compose, t.slug).not.toMatch(/\$\{[A-Za-z_][A-Za-z0-9_]*\s*:\?/);
     }
