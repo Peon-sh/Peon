@@ -240,6 +240,43 @@ describe('template catalog compose', () => {
     expect(env.join('\n')).not.toContain('VIKUNJA_SERVICE_JWTSECRET');
   });
 
+  it('lets PostgreSQL Vikunja write its files dir and override its public URL', () => {
+    const doc = parse(getTemplate('vikunja-with-postgresql')!.compose) as {
+      services?: {
+        vikunja?: {
+          environment?: string[];
+          volumes?: string[];
+          depends_on?: {
+            init?: { condition?: string };
+            postgresql?: { condition?: string };
+          };
+        };
+        init?: { volumes?: string[]; command?: string[] };
+        postgresql?: { volumes?: string[] };
+      };
+    };
+    const files = 'vikunja-files:/app/vikunja/files';
+    expect(doc.services?.vikunja?.volumes).toContain(files);
+    expect(doc.services?.init?.volumes).toContain(files);
+    expect(doc.services?.vikunja?.volumes ?? []).not.toContain('vikunja-data:/app/vikunja/');
+    expect(doc.services?.vikunja?.depends_on?.init?.condition).toBe(
+      'service_completed_successfully',
+    );
+    expect(doc.services?.vikunja?.depends_on?.postgresql?.condition).toBe('service_healthy');
+    const chown = doc.services?.init?.command?.join(' ') ?? '';
+    expect(chown).toContain('chown -R 1000 /app/vikunja/files');
+    expect(chown).not.toContain('/db');
+    const env = doc.services?.vikunja?.environment ?? [];
+    expect(env).toContain(
+      'VIKUNJA_SERVICE_PUBLICURL=${VIKUNJA_SERVICE_PUBLICURL:-${SERVICE_URL_VIKUNJA}}',
+    );
+    expect(env).toContain('VIKUNJA_SERVICE_SECRET=$SERVICE_PASSWORD_64_SECRET');
+    expect(env.join('\n')).not.toContain('VIKUNJA_SERVICE_JWTSECRET');
+    expect(doc.services?.postgresql?.volumes).toContain(
+      'vikunja-postgresql-data:/var/lib/postgresql/data',
+    );
+  });
+
   it('requires a Cloudflared tunnel token and does not pin host networking', () => {
     const doc = parse(getTemplate('cloudflared')!.compose) as {
       services?: {
@@ -268,6 +305,44 @@ describe('template catalog compose', () => {
       'ready',
     ]);
     expect(svc?.healthcheck?.test ?? []).not.toContain('--version');
+  });
+
+  it('lets Yamtrack override its public URLs and uses stack-specific Redis', () => {
+    const urls = 'URLS=${URLS:-${SERVICE_URL_YAMTRACK}}';
+    const redisUrl = 'REDIS_URL=redis://yamtrack-redis:6379';
+    for (const slug of ['yamtrack', 'yamtrack-with-postgresql']) {
+      const doc = parse(getTemplate(slug)!.compose) as {
+        services?: Record<
+          string,
+          { environment?: string[]; depends_on?: Record<string, { condition?: string }> }
+        >;
+      };
+      const env = doc.services?.yamtrack?.environment ?? [];
+      expect(env, slug).toContain(urls);
+      expect(env.join('\n'), slug).not.toContain('URLS=${SERVICE_URL_YAMTRACK}');
+      expect(env, slug).toContain(redisUrl);
+      expect(doc.services?.['yamtrack-redis'], slug).toBeTruthy();
+      expect(doc.services?.redis, slug).toBeUndefined();
+      expect(doc.services?.yamtrack?.depends_on?.['yamtrack-redis']?.condition, slug).toBe(
+        'service_healthy',
+      );
+    }
+
+    const pg = parse(getTemplate('yamtrack-with-postgresql')!.compose) as {
+      services?: Record<
+        string,
+        {
+          environment?: string[];
+          depends_on?: Record<string, { condition?: string }>;
+        }
+      >;
+    };
+    expect(pg.services?.yamtrack?.environment).toContain('DB_HOST=yamtrack-postgres');
+    expect(pg.services?.yamtrack?.depends_on?.['yamtrack-postgres']?.condition).toBe(
+      'service_healthy',
+    );
+    expect(pg.services?.['yamtrack-postgres']).toBeTruthy();
+    expect(pg.services).not.toHaveProperty('postgres');
   });
 
   it('does not use Compose ${VAR:?} required interpolation', () => {
