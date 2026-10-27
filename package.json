@@ -120,7 +120,8 @@
       "deepmerge-ts": ">=8.0.0",
       "mysql2": ">=3.22.0",
       "@grpc/grpc-js": ">=1.14.5",
-      "follow-redirects": ">=1.16.1"
+      "follow-redirects": ">=1.16.1",
+      "body-parser": ">=2.4.0"
     },
     "peerDependencyRules": {
       "allowedVersions": {
