@@ -146,6 +146,18 @@ describe('template catalog compose', () => {
     }
   });
 
+  it('publishes Pi-hole DNS on localhost:5335 and leaves host ports 53, 67, and 123 free', () => {
+    const detail = getTemplate('pi-hole')!;
+    const doc = parse(detail.compose) as {
+      services?: { pihole?: { ports?: string[] } };
+    };
+    expect(doc.services?.pihole?.ports).toEqual([
+      '127.0.0.1:5335:53/tcp',
+      '127.0.0.1:5335:53/udp',
+    ]);
+    expect(detail.compose).not.toMatch(/53:53|67:67|123:123/);
+  });
+
   it('matrix synapse postgresql refuses an empty server name and logs to the console', () => {
     const detail = getTemplate('matrix-synapse-with-postgresql')!;
     const doc = parse(detail.compose) as {
