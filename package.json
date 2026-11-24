@@ -83,9 +83,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.12",
+    "@testing-library/user-event": "^14.6.13",
     "@types/bcryptjs": "^3.0.0",
     "@types/dockerode": "^4.0.2",
     "@types/node": "^26",
@@ -93,11 +93,11 @@
     "@types/react-dom": "^19",
     "@types/ssh2": "^1.15.6",
     "@types/ws": "^8.18.2",
-    "@typescript-eslint/parser": "^8.72.2",
+    "@typescript-eslint/parser": "^8.73.0",
     "eslint": "^10",
     "eslint-config-next": "16.4.6",
     "jsdom": "^31.0.1",
-    "openai": "7.57.0",
+    "openai": "7.62.0",
     "prettier": "^3.10.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "prisma": "^7.10.1",
@@ -105,7 +105,7 @@
     "shadcn": "^4.23.0",
     "tailwindcss": "^4",
     "typescript": "^6",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "pnpm": {
     "overrides": {
