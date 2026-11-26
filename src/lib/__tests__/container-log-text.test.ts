@@ -85,4 +85,35 @@ describe('combineServiceLogs', () => {
     expect(text).toContain('rolling update');
     expect(text.endsWith('live')).toBe(true);
   });
+
+  const archive = (name: string, lines: number) => ({
+    containerName: name,
+    reason: 'deploy' as const,
+    capturedAt: '2026-10-07T09:00:00.000Z',
+    content: Array.from({ length: lines }, (_, i) => `${name}-${i}`).join('\n'),
+  });
+  const logLines = (text: string) => text.split('\n').filter((l) => !l.startsWith('-----'));
+
+  it('drops archives when the live container already fills maxLines', () => {
+    const live = Array.from({ length: 150 }, (_, i) => `live-${i}`);
+    const text = combineServiceLogs([archive('old', 500)], live, 100);
+    expect(logLines(text)).toHaveLength(100);
+    expect(text).not.toContain('previous container');
+    expect(text.startsWith('live-50\n')).toBe(true);
+  });
+
+  it('fills the rest of maxLines from the newest archives', () => {
+    const live = Array.from({ length: 30 }, (_, i) => `live-${i}`);
+    const text = combineServiceLogs([archive('newer', 50), archive('older', 500)], live, 100);
+    const lines = logLines(text);
+    expect(lines).toHaveLength(100);
+    expect(lines[0]).toBe('older-480');
+    expect(text.indexOf('older-499')).toBeLessThan(text.indexOf('newer-0'));
+    expect(text.endsWith('live-29')).toBe(true);
+  });
+
+  it('keeps everything when maxLines is omitted', () => {
+    const text = combineServiceLogs([archive('old', 500)], ['live'], undefined);
+    expect(logLines(text)).toHaveLength(501);
+  });
 });
