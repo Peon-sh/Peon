@@ -651,6 +651,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
               primary,
               DEFAULT_NETWORK,
               svc.settings.customDockerRunOptions,
+              { preview: isPreview },
             );
             composeYaml = stringify(doc, { lineWidth: 0 });
           }
@@ -678,6 +679,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         cpuLimit: svc.settings?.cpuLimit ?? undefined,
         memoryLimit: svc.settings?.memoryLimit ?? undefined,
         customDockerRunOptions: svc.settings?.customDockerRunOptions,
+        isPreview,
       };
       composeYaml = buildCompose({
         services: { [name]: service },
@@ -759,6 +761,7 @@ export async function runDeployment(deploymentId: string): Promise<void> {
         memoryLimit: svc.settings?.memoryLimit ?? undefined,
         stopGracePeriod: svc.settings?.stopGracePeriod ?? undefined,
         customDockerRunOptions: svc.settings?.customDockerRunOptions,
+        isPreview,
       };
       composeYaml = buildCompose({
         services: { [name]: service },

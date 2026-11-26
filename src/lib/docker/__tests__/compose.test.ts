@@ -163,3 +163,19 @@ describe('namedVolumeSource / ensureNamedVolumes', () => {
     expect(doc).toMatchObject({ volumes: { 'app-data': null } });
   });
 });
+
+describe('buildCompose preview isolation', () => {
+  it('does not inherit --privileged for preview services', async () => {
+    const { buildCompose } = await import('../compose');
+    const base = {
+      containerName: 'canary-pr-7',
+      image: 'busybox',
+      customDockerRunOptions: '--privileged --cap-add=SYS_ADMIN',
+    };
+    const prod = buildCompose({ services: { a: base }, network: 'n' });
+    const preview = buildCompose({ services: { a: { ...base, isPreview: true } }, network: 'n' });
+    expect(prod).toContain('privileged: true');
+    expect(preview).not.toContain('privileged');
+    expect(preview).not.toContain('cap_add');
+  });
+});
