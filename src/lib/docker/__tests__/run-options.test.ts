@@ -121,3 +121,31 @@ describe('mergeDockerRunIntoService', () => {
     });
   });
 });
+
+describe('preview mode (untrusted PR code)', () => {
+  const dangerous =
+    '--privileged --device=/dev/sda --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --sysctl net.ipv4.ip_forward=1 --gpus all --ip 10.0.0.5';
+
+  it('drops privilege-widening flags', () => {
+    expect(convertDockerRunToCompose(dangerous, { preview: true })).toEqual({});
+    // Production behaviour is unchanged.
+    expect(convertDockerRunToCompose(dangerous)).toMatchObject({
+      privileged: true,
+      devices: ['/dev/sda'],
+      cap_add: ['SYS_ADMIN'],
+    });
+  });
+
+  it('keeps benign flags', () => {
+    expect(
+      convertDockerRunToCompose(`--privileged --init --shm-size 1g --hostname web`, {
+        preview: true,
+      }),
+    ).toEqual({ init: true, shm_size: '1g', hostname: 'web' });
+  });
+
+  it('mergeDockerRunIntoService does not add privileged or static ips in preview', () => {
+    const out = mergeDockerRunIntoService({ image: 'x' }, 'net', dangerous, { preview: true });
+    expect(out).toEqual({ image: 'x' });
+  });
+});

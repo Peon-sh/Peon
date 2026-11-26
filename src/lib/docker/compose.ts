@@ -25,6 +25,8 @@ export interface ComposeServiceSpec {
   stopGracePeriod?: number;
   /** Extra docker run flags merged into this service. */
   customDockerRunOptions?: string | null;
+  /** Preview of untrusted PR code: only a safe subset of the run options applies. */
+  isPreview?: boolean;
 }
 
 export interface ComposeSpec {
@@ -104,7 +106,9 @@ export function buildCompose(spec: ComposeSpec): string {
         },
       };
     }
-    services[key] = mergeDockerRunIntoService(svc, network, s.customDockerRunOptions);
+    services[key] = mergeDockerRunIntoService(svc, network, s.customDockerRunOptions, {
+      preview: s.isPreview,
+    });
   }
 
   const doc: Record<string, unknown> = {

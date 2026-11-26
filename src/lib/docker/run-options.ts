@@ -32,6 +32,27 @@ const MAPPING: Record<string, string> = {
   '--entrypoint': 'entrypoint',
 };
 
+/**
+ * Compose keys a PR preview may inherit from the service's custom docker run
+ * options. Preview code comes from untrusted PR authors, so anything that widens
+ * container privileges (privileged, devices, capabilities, security-opt, sysctls,
+ * GPUs) is dropped. Static IPs are dropped too: they would collide with the
+ * production container.
+ */
+const PREVIEW_SAFE_KEYS = new Set([
+  'init',
+  'ulimits',
+  'shm_size',
+  'dns',
+  'hostname',
+  'entrypoint',
+]);
+
+export interface DockerRunOptionsMode {
+  /** Preview deployments run untrusted PR code: apply only the safe subset. */
+  preview?: boolean;
+}
+
 type FlagValues = Record<string, string[] | true>;
 
 function parseFlagBag(custom: string): FlagValues {
@@ -108,6 +129,7 @@ function parseUlimits(values: string[]): Record<string, { soft: string; hard?: s
 /** Convert `docker run` flag string into Compose service keys. */
 export function convertDockerRunToCompose(
   customDockerRunOptions?: string | null,
+  mode: DockerRunOptionsMode = {},
 ): Record<string, unknown> {
   if (!customDockerRunOptions?.trim()) return {};
 
@@ -117,6 +139,7 @@ export function convertDockerRunToCompose(
   for (const [option, value] of Object.entries(options)) {
     const key = MAPPING[option];
     if (!key) continue;
+    if (mode.preview && !PREVIEW_SAFE_KEYS.has(key)) continue;
 
     if (option === '--ulimit' && Array.isArray(value)) {
       compose[key] = parseUlimits(value);
@@ -187,8 +210,9 @@ export function mergeDockerRunIntoService(
   service: Record<string, unknown>,
   network: string,
   customDockerRunOptions?: string | null,
+  mode: DockerRunOptionsMode = {},
 ): Record<string, unknown> {
-  const custom = convertDockerRunToCompose(customDockerRunOptions);
+  const custom = convertDockerRunToCompose(customDockerRunOptions, mode);
   if (Object.keys(custom).length === 0) return service;
 
   const ips = Array.isArray(custom.ip) ? (custom.ip as string[]) : [];
