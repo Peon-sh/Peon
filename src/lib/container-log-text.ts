@@ -90,21 +90,45 @@ function capturedAtLabel(value: Date | string): string {
 /**
  * Oldest archive first, then the live tail. With no archives this is just the
  * live lines, so a service that has never been replaced looks the same as before.
+ *
+ * `maxLines` keeps only the newest log lines across all containers: the live
+ * lines first, then older archives fill whatever is left. Separator headers are
+ * not counted. Omit it to keep everything (used by the full download).
  */
 export function combineServiceLogs(
   archivesNewestFirst: ArchivedContainerLog[],
   liveLines: string[],
+  maxLines?: number,
 ): string {
+  let budget = maxLines && maxLines > 0 ? maxLines : Infinity;
+
+  const live = budget < liveLines.length ? liveLines.slice(-budget) : liveLines;
+  budget -= live.length;
+
+  const keptArchivesNewestFirst: { archive: ArchivedContainerLog; content: string }[] = [];
+  for (const archive of archivesNewestFirst) {
+    if (budget <= 0) break;
+    if (budget === Infinity) {
+      keptArchivesNewestFirst.push({ archive, content: archive.content });
+      continue;
+    }
+    const lines = archive.content ? archive.content.split('\n') : [];
+    if (!lines.length) continue;
+    const kept = budget < lines.length ? lines.slice(-budget) : lines;
+    budget -= kept.length;
+    keptArchivesNewestFirst.push({ archive, content: kept.join('\n') });
+  }
+
   const chunks: string[] = [];
-  for (const archive of [...archivesNewestFirst].reverse()) {
+  for (const { archive, content } of keptArchivesNewestFirst.reverse()) {
     chunks.push(
       `----- previous container ${archive.containerName} (${reasonLabel(archive.reason)}, ${capturedAtLabel(archive.capturedAt)}) -----`,
-      archive.content,
+      content,
     );
   }
-  if (liveLines.length) {
+  if (live.length) {
     if (chunks.length) chunks.push('----- current container -----');
-    chunks.push(liveLines.join('\n'));
+    chunks.push(live.join('\n'));
   }
   return chunks.join('\n');
 }

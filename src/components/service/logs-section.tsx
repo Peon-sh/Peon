@@ -29,7 +29,7 @@ export function LogsSection({ serviceId }: { serviceId: string }) {
     staleTime: 30_000,
   });
 
-  const logText = combineServiceLogs(archives.data ?? [], data?.lines ?? []);
+  const logText = combineServiceLogs(archives.data ?? [], data?.lines ?? [], tail);
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
